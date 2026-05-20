@@ -560,6 +560,19 @@ body {
   .mobile-val  { display: inline; }
 }
 
+
+@media (max-width: 768px) {
+  .with-panel { flex-direction: column; }
+  .side-panel {
+    width: 100% !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border);
+    order: -1;
+  }
+  .panel-main { order: 1; }
+  .tx-filters { flex-wrap: wrap; }
+}
+
 </style>
 </head>
 <body>
