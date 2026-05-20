@@ -528,11 +528,14 @@ body {
   .mobile-nav {
     display: flex !important;
     position: fixed; bottom: 0; left: 0; right: 0;
-    background: #fff; border-top: 0.5px solid var(--border);
-    z-index: 200; padding: 8px 0 12px;
+    background: var(--bg2);
+    border-top: 0.5px solid var(--border);
+    z-index: 200;
+    padding: 10px 0 env(safe-area-inset-bottom, 14px);
     justify-content: space-around;
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
   }
-  .main { padding-bottom: 70px !important; }
+  .main { padding-bottom: 80px !important; }
 }
 @media (min-width: 769px) {
   .mobile-nav { display: none !important; }
@@ -544,13 +547,13 @@ body {
   display: none;
 }
 .mob-nav-item {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  cursor: pointer; padding: 0 8px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  cursor: pointer; padding: 0 12px; flex: 1;
 }
-.mob-nav-icon { font-size: 20px; color: var(--text3); }
+.mob-nav-icon { font-size: 22px; color: var(--text3); line-height: 1; }
 .mob-nav-icon.act { color: var(--accent); }
-.mob-nav-label { font-size: 9px; color: var(--text3); font-family: 'Space Grotesk', sans-serif; }
-.mob-nav-label.act { color: var(--accent); }
+.mob-nav-label { font-size: 11px; color: var(--text3); font-family: 'Space Grotesk', sans-serif; }
+.mob-nav-label.act { color: var(--accent); font-weight: 500; }
 
 
 .desktop-val { display: inline; }
@@ -574,6 +577,7 @@ body {
 }
 
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
 <body>
 
