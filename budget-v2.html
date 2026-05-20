@@ -112,7 +112,7 @@ body {
 .qbtn-transfer { background: var(--accent);   color: #fff; }
 
 /* ── KPI ── */
-.kpi-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 10px; margin-bottom: 18px; }
+.kpi-row { display: grid; grid-template-columns: repeat(6,1fr); gap: 10px; margin-bottom: 18px; }
 .kpi {
   background: var(--bg2); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 14px 16px;
@@ -435,12 +435,195 @@ body {
 .tx-tbl th.col-dragging { opacity: 0.4; }
 .tx-tbl th.col-drag-over { border-left: 2px solid var(--accent); }
 
+
+/* ── BALANCE HINT ── */
+.b-hint {
+  font-size:11px; line-height:1.4;
+  padding: 5px 10px;
+  border-left: 3px solid transparent;
+  border-radius: 0 4px 4px 0;
+}
+.b-hint-warn { border-left-color:#DC2626; background:rgba(220,38,38,0.04); color:#B91C1C; }
+.b-hint-ok   { border-left-color:#059669; background:rgba(5,150,105,0.04); color:#047857; }
+.b-hint-info { border-left-color:var(--border2); color:var(--text2); }
+.b-hint-bell { border-left-color:#D97706; background:rgba(217,119,6,0.04); color:#B45309; }
+
+
+/* ── QUICK ADD MODAL ── */
+.quick-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(17,24,39,0.45);
+  display: none; align-items: center; justify-content: center;
+  z-index: 400; backdrop-filter: blur(2px);
+}
+.quick-modal-overlay.open { display: flex; }
+.quick-modal {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 22px 22px 24px;
+  width: 420px; max-width: 95vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  animation: modalIn 0.2s ease;
+}
+.qm-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px; font-weight: 500;
+  color: var(--text); margin-bottom: 14px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.qm-close {
+  background: none; border: none; font-size: 18px;
+  color: var(--text3); cursor: pointer; padding: 0 4px;
+}
+.qm-close:hover { color: var(--text); }
+.qm-types { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 14px; }
+.qm-type {
+  padding: 7px 4px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border); font-size: 11px;
+  font-weight: 500; text-align: center; cursor: pointer;
+  background: var(--bg); color: var(--text2);
+  font-family: 'Space Grotesk', sans-serif;
+  transition: all 0.15s;
+}
+.qm-type.active-inc  { background: var(--income-bg);  border-color: var(--income);  color: var(--income); }
+.qm-type.active-exp  { background: var(--expense-bg); border-color: var(--expense); color: var(--expense); }
+.qm-type.active-tr   { background: #EEF2FF; border-color: var(--accent); color: var(--accent); }
+.qm-type.active-obl  { background: #FFF3E0; border-color: #E65100; color: #E65100; }
+.qm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.qm-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.qm-save {
+  width: 100%; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  padding: 10px; font-size: 13px; font-weight: 500;
+  cursor: pointer; font-family: 'Space Grotesk', sans-serif;
+  margin-top: 4px; transition: all 0.15s;
+}
+.qm-save:hover { background: var(--accent2); }
+.qm-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+
+/* ── MOBILE LAYOUT ── */
+@media (max-width: 768px) {
+  .sidebar { width: 0; overflow: hidden; }
+  .main { margin-left: 0 !important; padding: 12px; }
+  .kpi-row {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 7px !important;
+  }
+  .kpi-val { font-size: 15px !important; }
+  .kpi-val.mobile-fmt::after { content: attr(data-mobile); }
+  .kpi-label { font-size: 8px !important; }
+  .kpi-sub   { font-size: 8px !important; }
+  .kpi { padding: 9px 10px !important; }
+  .g21 { grid-template-columns: 1fr !important; }
+  .g12 { grid-template-columns: 1fr !important; }
+  .g2  { grid-template-columns: 1fr !important; }
+  .page-title { font-size: 15px !important; }
+  .quick-btns { gap: 5px; }
+  .qbtn { font-size: 10px; padding: 6px 8px; }
+  .topbar { flex-direction: column; gap: 8px; align-items: flex-start; }
+
+  /* Bottom nav for mobile */
+  .sidebar { display: none !important; }
+  .mobile-nav {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; border-top: 0.5px solid var(--border);
+    z-index: 200; padding: 8px 0 12px;
+    justify-content: space-around;
+  }
+  .main { padding-bottom: 70px !important; }
+}
+@media (min-width: 769px) {
+  .mobile-nav { display: none !important; }
+  .kpi-val[data-mobile] { font-size: 20px; }
+}
+
+/* Mobile nav styles */
+.mobile-nav {
+  display: none;
+}
+.mob-nav-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  cursor: pointer; padding: 0 8px;
+}
+.mob-nav-icon { font-size: 20px; color: var(--text3); }
+.mob-nav-icon.act { color: var(--accent); }
+.mob-nav-label { font-size: 9px; color: var(--text3); font-family: 'Space Grotesk', sans-serif; }
+.mob-nav-label.act { color: var(--accent); }
+
+
+.desktop-val { display: inline; }
+.mobile-val  { display: none;   }
+@media (max-width: 768px) {
+  .desktop-val { display: none;   }
+  .mobile-val  { display: inline; }
+}
+
 </style>
 </head>
 <body>
 
 <!-- CONFIRM TOAST -->
 <div class="confirm-popup" id="toast"></div>
+
+
+<!-- QUICK ADD MODAL -->
+<div class="quick-modal-overlay" id="quickModal">
+  <div class="quick-modal">
+    <div class="qm-title">
+      <span id="qmTitle">Новая транзакция</span>
+      <button class="qm-close" onclick="closeQuickModal()">✕</button>
+    </div>
+    <div class="qm-types">
+      <div class="qm-type active-exp" id="qmt-expense"  onclick="setQmType('expense')">Расход</div>
+      <div class="qm-type"            id="qmt-income"   onclick="setQmType('income')">Доход</div>
+      <div class="qm-type"            id="qmt-transfer" onclick="setQmType('transfer')">Трансфер</div>
+      <div class="qm-type"            id="qmt-obligation" onclick="setQmType('obligation')">Обязат.</div>
+    </div>
+    <div class="qm-row">
+      <div class="field" style="margin:0">
+        <div class="field-label">Сумма, ₽</div>
+        <input class="field-input" type="number" id="qmAmount" placeholder="0" min="0.01" step="0.01" autofocus>
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Дата</div>
+        <input class="field-input" type="date" id="qmDate">
+      </div>
+    </div>
+    <div class="qm-row" id="qmAccRow">
+      <div class="field" style="margin:0">
+        <div class="field-label">Откуда</div>
+        <select class="field-select" id="qmFrom"></select>
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Куда</div>
+        <select class="field-select" id="qmTo"></select>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:8px" id="qmSubcatRow">
+      <div class="field-label">Подкатегория</div>
+      <select class="field-select" id="qmSubcat" onchange="onQmSubcatChange()">
+        <option value="">— выбери —</option>
+      </select>
+    </div>
+    <div class="qm-row" id="qmCatRow" style="margin-bottom:8px">
+      <div class="field" style="margin:0">
+        <div class="field-label">Категория</div>
+        <div class="field-input field-auto" id="qmCat" style="font-size:11px;color:var(--accent)">—</div>
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Группа</div>
+        <div class="field-input field-auto" id="qmGroup" style="font-size:11px;color:var(--accent)">—</div>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:8px">
+      <div class="field-label">Комментарий</div>
+      <input class="field-input" type="text" id="qmNote" placeholder="необязательно">
+    </div>
+    <button class="qm-save" id="qmSave" onclick="saveQuickTx()">Сохранить</button>
+  </div>
+</div>
 
 <!-- CONFIG MODAL -->
 <div class="modal-overlay open" id="configModal">
@@ -489,6 +672,26 @@ body {
 </nav>
 
 <!-- MAIN -->
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mobile-nav" id="mobileNav">
+  <div class="mob-nav-item" onclick="loadPage('dashboard')">
+    <i class="ti ti-layout-dashboard mob-nav-icon" id="mnav-dashboard" aria-hidden="true"></i>
+    <span class="mob-nav-label" id="mnavl-dashboard">Дашборд</span>
+  </div>
+  <div class="mob-nav-item" onclick="loadPage('transactions')">
+    <i class="ti ti-arrows-exchange mob-nav-icon" id="mnav-transactions" aria-hidden="true"></i>
+    <span class="mob-nav-label" id="mnavl-transactions">Транзакции</span>
+  </div>
+  <div class="mob-nav-item" onclick="loadPage('plan')">
+    <i class="ti ti-calendar-event mob-nav-icon" id="mnav-plan" aria-hidden="true"></i>
+    <span class="mob-nav-label" id="mnavl-plan">План</span>
+  </div>
+  <div class="mob-nav-item" onclick="loadPage('references')">
+    <i class="ti ti-book-2 mob-nav-icon" id="mnav-references" aria-hidden="true"></i>
+    <span class="mob-nav-label" id="mnavl-references">Справочники</span>
+  </div>
+</nav>
+
 <main class="main" id="mainContent">
   <div class="loading"><div class="spinner"></div> Загрузка...</div>
 </main>
@@ -585,6 +788,13 @@ function loadPage(page) {
   document.querySelectorAll('.nav-item[data-page]').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
   });
+  // Sync mobile bottom nav
+  ['dashboard','transactions','plan','references'].forEach(p => {
+    const icon  = document.getElementById('mnav-' + p);
+    const label = document.getElementById('mnavl-' + p);
+    if (icon)  icon.classList.toggle('act',  p === page);
+    if (label) label.classList.toggle('act', p === page);
+  });
   if (page === 'dashboard')     loadDashboard();
   else if (page === 'transactions') loadTransactions(false);
   else if (page === 'plan')         loadTransactions(true);
@@ -595,6 +805,13 @@ function loadPage(page) {
 function fmt(n) {
   if (n == null || isNaN(n)) return '—';
   return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n) + ' ₽';
+}
+function fmtK(n) {
+  if (n == null || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '−' : '';
+  if (abs < 10000) return sign + new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(abs) + ' ₽';
+  return sign + (abs/1000).toFixed(1) + 'к ₽';
 }
 function fmtPct(n) { return n == null || isNaN(n) ? '—' : Math.round(n) + '%'; }
 function fmtDate(d) { if (!d) return '—'; const dt = new Date(d); return dt.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'}); }
@@ -627,16 +844,22 @@ async function loadDashboard() {
     const isYear = month === 0;
     const periodLabel = isYear ? `${year} год` : `${MONTHS[month]} ${year}`;
 
-    // Fetch transactions
+    // Fetch transactions for selected period (for KPIs)
     let q = sb.from('transactions').select('*, categories(*)').eq('year', year);
     if (!isYear) q = q.eq('month', month);
     const { data: txs, error: txErr } = await q.order('date');
     if (txErr) throw txErr;
 
+
     // Fetch plan
+    // Load current month plan for display
     let qp = sb.from('plan').select('*, categories(*)').eq('year', year);
     if (!isYear) qp = qp.eq('month', month);
     const { data: plan } = await qp;
+
+    // Load full year plan for forecast (need future months too)
+    let qpFull = sb.from('plan').select('*, categories(*)').eq('year', year);
+    const { data: planFull } = await qpFull;
 
     // Fetch accounts
     const { data: accs } = await sb.from('account_balance').select('*');
@@ -649,13 +872,17 @@ async function loadDashboard() {
       return a && a.account_type === 'Актив' && !a.include_in_balance;
     }).reduce((s,t) => s + +t.amount, 0);
 
-    const planIncome  = (plan||[]).filter(p => p.account_from === 'Доход').reduce((s,p) => s + +p.amount, 0);
-    const planExpense = (plan||[]).filter(p => p.account_to   === 'Расход').reduce((s,p) => s + +p.amount, 0);
+    const planIncome      = (plan||[]).filter(p => p.account_from === 'Доход').reduce((s,p) => s + +p.amount, 0);
+    const planExpense     = (plan||[]).filter(p => p.account_to   === 'Расход').reduce((s,p) => s + +p.amount, 0);
+    // Obligations: transfers TO Обязательства (debt payments)
+    const obligation      = txs.filter(t => t.account_to === 'Обязательства').reduce((s,t) => s + +t.amount, 0);
+    const planObligation  = (plan||[]).filter(p => p.account_to === 'Обязательства').reduce((s,p) => s + +p.amount, 0);
 
-    const delta = income - expense;
+    const delta = income - expense - obligation;
     const savingsRate = income > 0 ? savings / income * 100 : 0;
-    const deltaIncome  = planIncome  > 0 ? (income  - planIncome)  / planIncome  * 100 : null;
-    const deltaExpense = planExpense > 0 ? (expense - planExpense) / planExpense * 100 : null;
+    const deltaIncome      = planIncome     > 0 ? (income      - planIncome)      / planIncome      * 100 : null;
+    const deltaExpense     = planExpense    > 0 ? (expense     - planExpense)      / planExpense     * 100 : null;
+    const deltaObligation  = planObligation > 0 ? (obligation  - planObligation)  / planObligation  * 100 : null;
 
     // By category
     const byCat = {};
@@ -674,16 +901,18 @@ async function loadDashboard() {
     // By month for chart
     const byMonth = {};
     txs.forEach(t => {
-      if (!byMonth[t.month]) byMonth[t.month] = {inc:0,exp:0,sav:0};
-      if (t.account_from === 'Доход') byMonth[t.month].inc += +t.amount;
-      if (t.account_to   === 'Расход') byMonth[t.month].exp += +t.amount;
+      if (!byMonth[t.month]) byMonth[t.month] = {inc:0,exp:0,obl:0};
+      if (t.account_from === 'Доход')          byMonth[t.month].inc += +t.amount;
+      if (t.account_to   === 'Расход')         byMonth[t.month].exp += +t.amount;
+      if (t.account_to   === 'Обязательства')  byMonth[t.month].obl += +t.amount;
     });
-    const mLabels=[], mInc=[], mExp=[];
+    const mLabels=[], mInc=[], mExp=[], mObl=[];
     for (let m=1; m<=12; m++) {
       if (byMonth[m]) {
         mLabels.push(MONTHS_S[m]);
         mInc.push(byMonth[m].inc);
         mExp.push(byMonth[m].exp);
+        mObl.push(byMonth[m].obl);
       }
     }
 
@@ -701,37 +930,48 @@ async function loadDashboard() {
           <div class="page-sub">${periodLabel}</div>
         </div>
         <div class="quick-btns">
-          <button class="qbtn qbtn-income"   onclick="openTxForm('income',false)">+ Доход</button>
-          <button class="qbtn qbtn-expense"  onclick="openTxForm('expense',false)">+ Расход</button>
-          <button class="qbtn qbtn-transfer" onclick="openTxForm('transfer',false)">+ Трансфер</button>
+          <button class="qbtn qbtn-income"   onclick="openQuickModal('income')">+ Доход</button>
+          <button class="qbtn qbtn-expense"  onclick="openQuickModal('expense')">+ Расход</button>
+          <button class="qbtn qbtn-transfer" onclick="openQuickModal('transfer')">+ Трансфер</button>
         </div>
       </div>
 
       <div class="kpi-row">
         <div class="kpi" style="--kpi-accent:var(--income)">
           <div class="kpi-label">Доходы</div>
-          <div class="kpi-val c-income">${fmt(income)}</div>
+          <div class="kpi-val c-income"><span class="desktop-val">${fmt(income)}</span><span class="mobile-val">${fmtK(income)}</span></div>
           ${deltaIncome!==null?`<div class="kpi-sub">${deltaIncome>=0?'▲':'▼'} ${Math.abs(deltaIncome).toFixed(0)}% от плана</div>`:'<div class="kpi-sub">план: '+fmt(planIncome)+'</div>'}
         </div>
         <div class="kpi" style="--kpi-accent:var(--expense)">
           <div class="kpi-label">Расходы</div>
-          <div class="kpi-val c-expense">${fmt(expense)}</div>
+          <div class="kpi-val c-expense"><span class="desktop-val">${fmt(expense)}</span><span class="mobile-val">${fmtK(expense)}</span></div>
           ${deltaExpense!==null?`<div class="kpi-sub">${deltaExpense>=0?'▲':'▼'} ${Math.abs(deltaExpense).toFixed(0)}% от плана</div>`:'<div class="kpi-sub">план: '+fmt(planExpense)+'</div>'}
+        </div>
+        <div class="kpi" style="--kpi-accent:#E65100">
+          <div class="kpi-label">Обязательства</div>
+          <div class="kpi-val" style="color:#E65100"><span class="desktop-val">${fmt(obligation)}</span><span class="mobile-val">${fmtK(obligation)}</span></div>
+          ${deltaObligation!==null?`<div class="kpi-sub">${deltaObligation>=0?'▲':'▼'} ${Math.abs(deltaObligation).toFixed(0)}% от плана</div>`:'<div class="kpi-sub">план: '+fmt(planObligation)+'</div>'}
         </div>
         <div class="kpi" style="--kpi-accent:${delta>=0?'var(--income)':'var(--expense)'}">
           <div class="kpi-label">Результат</div>
-          <div class="kpi-val" style="color:${delta>=0?'var(--income)':'var(--expense)'}">${delta>=0?'+':''}${fmt(delta)}</div>
+          <div class="kpi-val" style="color:${delta>=0?'var(--income)':'var(--expense)'}"><span class="desktop-val">${delta>=0?'+':''}${fmt(delta)}</span><span class="mobile-val">${fmtK(delta)}</span></div>
           <div class="kpi-sub">${delta>=0?'Профицит':'Дефицит'}</div>
         </div>
         <div class="kpi" style="--kpi-accent:var(--accent)">
           <div class="kpi-label">Сбережения</div>
-          <div class="kpi-val c-accent">${fmt(savings)}</div>
+          <div class="kpi-val c-accent"><span class="desktop-val">${fmt(savings)}</span><span class="mobile-val">${fmtK(savings)}</span></div>
           <div class="kpi-sub">${fmtPct(savingsRate)} от дохода</div>
         </div>
         <div class="kpi" style="--kpi-accent:var(--neutral)">
-          <div class="kpi-label">Баланс (опер.)</div>
-          <div class="kpi-val" style="color:${operativeBalance>=0?'var(--income)':'var(--expense)'}">${fmt(operativeBalance)}</div>
-          <div class="kpi-sub">без сбережений</div>
+          <div class="kpi-label" id="balKpiLabel">Баланс (опер.)</div>
+          <div class="kpi-val" id="balKpiVal" style="color:${operativeBalance>=0?'var(--income)':'var(--expense)'}"><span class="desktop-val">${fmt(operativeBalance)}</span><span class="mobile-val">${fmtK(operativeBalance)}</span></div>
+          <div class="kpi-sub" style="display:flex;align-items:center;gap:6px;margin-top:5px">
+            <label class="toggle" style="transform:scale(0.8);transform-origin:left" title="Включить сбережения и вычесть обязательства">
+              <input type="checkbox" id="balToggle" onchange="toggleBalanceKpi(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <span id="balKpiSub" style="font-size:10px;color:var(--text3)">Баланс (общ.)</span>
+          </div>
         </div>
       </div>
 
@@ -741,14 +981,22 @@ async function loadDashboard() {
             <div class="card-head">
               <span class="card-title">Баланс по дням — ${periodLabel}</span>
               <span class="card-hint" style="display:flex;gap:10px;font-size:10px">
-                <span style="color:var(--income)">▬ Факт</span>
-                <span style="color:var(--accent);opacity:0.6">▬ Прогноз</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:2px;background:#059669;display:inline-block"></span>Факт</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:12px;height:2px;background:rgba(37,99,235,0.6);display:inline-block"></span>Прогноз</span>
               </span>
             </div>
             <div class="card-body"><div class="chart-wrap" style="height:160px"><canvas id="chartLine"></canvas></div></div>
+            <div id="balanceHint" style="padding:6px 16px 10px;display:flex;flex-direction:column;gap:3px"></div>
           </div>
           <div class="card">
-            <div class="card-head"><span class="card-title">Доходы и расходы — план / факт</span><span class="card-hint" style="display:flex;gap:12px;font-size:10px"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:var(--income);display:inline-block;border-radius:2px"></span>Доход факт</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:rgba(5,150,105,0.3);display:inline-block;border-radius:2px"></span>Доход план</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:var(--expense);display:inline-block;border-radius:2px"></span>Расход факт</span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:3px;background:rgba(220,38,38,0.3);display:inline-block;border-radius:2px"></span>Расход план</span></span></div>
+            <div class="card-head"><span class="card-title">Доходы и расходы — план / факт</span><span class="card-hint" style="display:flex;gap:10px;font-size:10px;flex-wrap:wrap">
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(5,150,105,0.8);display:inline-block;border-radius:2px"></span>Доход факт</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(5,150,105,0.22);border:1px solid rgba(5,150,105,0.5);display:inline-block;border-radius:2px"></span>Доход план</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(220,38,38,0.75);display:inline-block;border-radius:2px"></span>Расход факт</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(230,81,0,0.8);display:inline-block;border-radius:2px"></span>Обяз. факт</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(220,38,38,0.2);border:1px solid rgba(220,38,38,0.45);display:inline-block;border-radius:2px"></span>Расход план</span>
+                <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(230,81,0,0.25);border:1px solid rgba(230,81,0,0.5);display:inline-block;border-radius:2px"></span>Обяз. план</span>
+              </span></div>
             <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chartBar"></canvas></div></div>
           </div>
         </div>
@@ -778,113 +1026,151 @@ async function loadDashboard() {
             <span class="card-title">Расходы по категориям</span>
             <span class="card-hint">${fmt(expense)}</span>
           </div>
-          <div class="card-body-sm">
-            <div class="cat-rows">
-              ${sortedCats.map(([cat,amt])=>`
-              <div class="cat-row">
-                <div class="cat-name-wrap">
-                  <div class="cat-dot" style="background:${CAT_COLORS[cat]||'#888'}"></div>
-                  <div class="cat-name">${cat}</div>
-                </div>
-                <div class="cat-track"><div class="cat-fill" style="width:${Math.round(amt/maxCat*100)}%;background:${CAT_COLORS[cat]||'#888'}"></div></div>
-                <div class="cat-amt">${fmt(amt)}</div>
-                <div class="cat-pct">${fmtPct(amt/expense*100)}</div>
-              </div>`).join('')}
+          <div class="card-body" style="display:flex;justify-content:center;padding:16px">
+            <div style="position:relative;width:220px;height:220px">
+              <canvas id="chartDonut"></canvas>
+              <div id="donutCenter" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 20px">
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Итого</div>
+                <div style="font-size:17px;font-weight:600;color:var(--text);font-family:'Space Grotesk',sans-serif">${fmt(expense)}</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:14px">
-          <div class="card">
-            <div class="card-head"><span class="card-title">План vs Факт</span></div>
-            <div class="card-body">
-              <div class="pvf-rows">
-                ${Object.keys({...byCat,...planByCat}).slice(0,6).map(cat=>{
-                  const fact = byCat[cat]||0, pl = planByCat[cat]||0;
-                  const pct = pl>0?Math.min(fact/pl*100,100):fact>0?100:0;
-                  const color = pl>0&&fact>pl?'var(--expense)':pct>80?'#FF8C00':'var(--income)';
-                  return `<div class="pvf-row">
-                    <div class="pvf-meta">
-                      <span class="pvf-name">${cat}</span>
-                      <span class="pvf-nums">${fmt(fact)} / ${pl>0?fmt(pl):'—'}</span>
-                    </div>
-                    <div class="pvf-track"><div class="pvf-fill" style="width:${pct}%;background:${color}"></div></div>
-                  </div>`;
-                }).join('')}
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card-head"><span class="card-title">Сводка</span></div>
-            <div class="card-body-sm">
-              <table class="sum-tbl">
-                <tbody>
-                  <tr><td>Доходы</td><td class="c-income">${fmt(income)}</td></tr>
-                  <tr><td>Расходы</td><td class="c-expense">${fmt(expense)}</td></tr>
-                  <tr><td>Сбережения</td><td class="c-accent">${fmt(savings)}</td></tr>
-                  <tr><td>Норма сбер.</td><td>${fmtPct(savingsRate)}</td></tr>
-                  <tr class="total-row"><td>Результат</td><td style="color:${delta>=0?'var(--income)':'var(--expense)'}">${delta>=0?'+':''}${fmt(delta)}</td></tr>
-                </tbody>
-              </table>
+        <div class="card">
+          <div class="card-head"><span class="card-title">План vs Факт</span></div>
+          <div class="card-body">
+            <div class="pvf-rows">
+              ${Object.keys({...byCat,...planByCat}).slice(0,8).map(cat=>{
+                const fact = byCat[cat]||0, pl = planByCat[cat]||0;
+                const pct = pl>0?Math.min(fact/pl*100,100):fact>0?100:0;
+                const color = pl>0&&fact>pl?'var(--expense)':pct>80?'#FF8C00':'var(--income)';
+                return `<div class="pvf-row">
+                  <div class="pvf-meta">
+                    <span class="pvf-name">${cat}</span>
+                    <span class="pvf-nums">${fmt(fact)} / ${pl>0?fmt(pl):'—'}</span>
+                  </div>
+                  <div class="pvf-track"><div class="pvf-fill" style="width:${pct}%;background:${color}"></div></div>
+                </div>`;
+              }).join('')}
             </div>
           </div>
         </div>
       </div>`;
 
+    // Net Worth = all assets - all liabilities
+    const totalAssets = (accs||[])
+      .filter(a => a.account_type === 'Актив')
+      .reduce((s,a) => s + +a.current_balance, 0);
+    const totalLiabilities = (accs||[])
+      .filter(a => a.account_type === 'Пассив')
+      .reduce((s,a) => s + +a.current_balance, 0);
+    const totalBalance = totalAssets - Math.abs(totalLiabilities);
+
+    // Store both values globally for KPI toggle
+    window._balValues = { operative: operativeBalance, total: totalBalance };
+    window._balMode = window._balMode || 'operative';
+
     // ── Daily balance chart ──
-    // Compute daily balance from transactions + plan
-    const initBal = (accounts_cache||[])
+    const periodStart = month > 0 ? `${year}-${String(month).padStart(2,'0')}-01` : `${year}-01-01`;
+
+    // operAccNames set
+    const operAccNames2 = new Set((accounts_cache||[])
+      .filter(a => a.account_type === 'Актив' && a.include_in_balance)
+      .map(a => a.name));
+
+    const today = new Date(); today.setHours(0,0,0,0);
+
+    // initBal = initial_balance + all fact txs before period + plan txs before period (for future dates)
+    const baseBal = (accounts_cache||[])
       .filter(a => a.account_type === 'Актив' && a.include_in_balance)
       .reduce((s,a) => s + (+a.initial_balance||0), 0);
+
+    // Fetch fact txs before period start
+    const { data: txsBefore } = await sb.from('transactions')
+      .select('date, amount, account_from, account_to')
+      .lt('date', periodStart)
+      .order('date');
+
+    // Fetch plan txs before period start (for dates after today)
+    const { data: planBefore } = await sb.from('plan')
+      .select('date, amount, account_from, account_to')
+      .lt('date', periodStart)
+      .order('date');
+
+    // Combine: fact for past dates, plan for future dates before period
+    const todayStr = today.getFullYear() + '-' +
+      String(today.getMonth()+1).padStart(2,'0') + '-' +
+      String(today.getDate()).padStart(2,'0');
+
+    // All fact txs before period
+    let initBal = (txsBefore||[]).reduce((s,t) => {
+      if (operAccNames2.has(t.account_to))   s += +t.amount;
+      if (operAccNames2.has(t.account_from)) s -= +t.amount;
+      return s;
+    }, baseBal);
+
+    // Add plan txs that are after today but before period start
+    initBal = (planBefore||[])
+      .filter(p => p.date.substring(0,10) > todayStr)
+      .reduce((s,p) => {
+        if (operAccNames2.has(p.account_to))   s += +p.amount;
+        if (operAccNames2.has(p.account_from)) s -= +p.amount;
+        return s;
+      }, initBal);
+
 
     // Build day-by-day map
     const daysInMonth = new Date(year, month||12, 0).getDate();
     const startDay = month > 0 ? 1 : 1;
     const endDay   = month > 0 ? daysInMonth : 31;
 
-    // All txs sorted by date
+    // Txs in selected period sorted by date
     const txsSorted = [...(txs||[])].sort((a,b) => new Date(a.date)-new Date(b.date));
-    const planSorted = [...(plan||[])].sort((a,b) => new Date(a.date)-new Date(b.date));
-    const today = new Date(); today.setHours(0,0,0,0);
+    const planSorted = [...(planFull||plan||[])].sort((a,b) => new Date(a.date)-new Date(b.date));
 
     // Compute running balance per day
     const lineLabels = [], factData = [], planData = [];
     let runBal = initBal;
     let runPlanBal = initBal;
 
-    const operAccNames = new Set((accounts_cache||[])
-      .filter(a => a.account_type === 'Актив' && a.include_in_balance)
-      .map(a => a.name));
+    const operAccNames = operAccNames2;
 
     // Pre-compute fact daily deltas
     const factByDate = {};
     txsSorted.forEach(t => {
-      const d = t.date;
+      // Normalize date string (remove time component if present)
+      const d = t.date.substring(0,10);
       if (!factByDate[d]) factByDate[d] = 0;
       if (operAccNames.has(t.account_to))   factByDate[d] += +t.amount;
       if (operAccNames.has(t.account_from)) factByDate[d] -= +t.amount;
     });
 
-    // Pre-compute plan daily deltas (future only)
+    // Pre-compute plan daily deltas — future only within period (for forecast line)
     const planByDate = {};
     planSorted.forEach(p => {
+      const d = p.date.substring(0,10);
+      if (d < periodStart) return; // skip plan before period
       const pd = new Date(p.date); pd.setHours(0,0,0,0);
       if (pd > today) {
-        const d = p.date;
         if (!planByDate[d]) planByDate[d] = 0;
         if (operAccNames.has(p.account_to))   planByDate[d] += +p.amount;
         if (operAccNames.has(p.account_from)) planByDate[d] -= +p.amount;
       }
     });
 
+
     // Build series
     const startDate = month > 0 ? new Date(year, month-1, 1) : new Date(year, 0, 1);
-    const endDate   = month > 0 ? new Date(year, month, 0)   : new Date(year, 11, 31);
+    // Show exactly the selected period
+    const endDate = month > 0 ? new Date(year, month, 0) : new Date(year, 11, 31);
 
     let cur = new Date(startDate);
     while (cur <= endDate) {
-      const dateStr = cur.toISOString().split('T')[0];
+      // Use local date to avoid timezone shift
+      const dateStr = cur.getFullYear() + '-' +
+        String(cur.getMonth()+1).padStart(2,'0') + '-' +
+        String(cur.getDate()).padStart(2,'0');
       const isToday = cur.getTime() === today.getTime();
       const isPast  = cur <= today;
       const label   = cur.getDate() + (month===0?'/'+MONTHS_S[cur.getMonth()+1]:'');
@@ -896,6 +1182,10 @@ async function loadDashboard() {
         planData.push(null);
         runPlanBal = runBal;
       } else {
+        // Connect forecast to last fact point (no gap)
+        if (factData[factData.length-1] !== null && planData[planData.length-1] === null) {
+          planData[planData.length-1] = runPlanBal;
+        }
         factData.push(null);
         runPlanBal += (planByDate[dateStr] || 0);
         planData.push(runPlanBal);
@@ -903,19 +1193,34 @@ async function loadDashboard() {
       cur.setDate(cur.getDate()+1);
     }
 
-    // Custom plugin: red zone below 0
+    // Custom plugin: red zone below 0 + bold zero line
     const dangerZonePlugin = {
       id: 'dangerZone',
       beforeDraw(chart) {
+        if (chart.canvas.id !== 'chartLine') return; // only for balance chart
         const {ctx, chartArea, scales} = chart;
         if (!scales.y || !chartArea) return;
         const y0 = scales.y.getPixelForValue(0);
         const bottom = chartArea.bottom;
-        if (y0 >= bottom) return;
-        ctx.save();
-        ctx.fillStyle = 'rgba(220,38,38,0.06)';
-        ctx.fillRect(chartArea.left, y0, chartArea.right - chartArea.left, bottom - y0);
-        ctx.restore();
+        // Red danger zone fill
+        if (y0 < bottom) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(220,38,38,0.08)';
+          ctx.fillRect(chartArea.left, y0, chartArea.right - chartArea.left, bottom - y0);
+          ctx.restore();
+        }
+        // Bold red zero line (always visible if 0 is in range)
+        if (y0 >= chartArea.top && y0 <= bottom) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(chartArea.left, y0);
+          ctx.lineTo(chartArea.right, y0);
+          ctx.strokeStyle = 'rgba(220,38,38,0.7)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     };
     const ctxLine = document.getElementById('chartLine')?.getContext('2d');
@@ -927,6 +1232,18 @@ async function loadDashboard() {
           labels: lineLabels,
           datasets: [
             {
+              label: 'Прогноз',
+              data: planData,
+              borderColor: 'rgba(37,99,235,0.65)',
+              backgroundColor: 'rgba(37,99,235,0.04)',
+              borderWidth: 1.5,
+              borderDash: [5, 4],
+              pointRadius: 0, pointHoverRadius: 4,
+              tension: 0.35, fill: true,
+              spanGaps: true,
+              order: 2,
+            },
+            {
               label: 'Факт',
               data: factData,
               borderColor: '#059669',
@@ -935,18 +1252,8 @@ async function loadDashboard() {
               pointRadius: 0, pointHoverRadius: 4,
               tension: 0.35, fill: true,
               spanGaps: true,
+              order: 1,
             },
-            {
-              label: 'Прогноз',
-              data: planData,
-              borderColor: 'rgba(37,99,235,0.6)',
-              backgroundColor: 'rgba(37,99,235,0.04)',
-              borderWidth: 1.5,
-              borderDash: [5, 4],
-              pointRadius: 0, pointHoverRadius: 4,
-              tension: 0.35, fill: true,
-              spanGaps: true,
-            }
           ]
         },
         options: {
@@ -980,6 +1287,52 @@ async function loadDashboard() {
     }
 
     // ── Horizontal bar: income/expense plan vs fact ──
+    // Build balance hint
+    buildBalanceHint(factData, planData, lineLabels, plan, txs, today, periodLabel);
+
+    // ── Donut chart ──
+    const ctxDonut = document.getElementById('chartDonut')?.getContext('2d');
+    if (ctxDonut && sortedCats.length) {
+      chartDonut = new Chart(ctxDonut, {
+        type: 'doughnut',
+        data: {
+          labels: sortedCats.map(([cat]) => cat),
+          datasets: [{
+            data: sortedCats.map(([,amt]) => amt),
+            backgroundColor: sortedCats.map(([cat]) => CAT_COLORS[cat] || '#888'),
+            borderWidth: 2,
+            borderColor: '#fff',
+            hoverOffset: 6,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { enabled: false }
+          },
+          onHover: (evt, elements) => {
+            const center = document.getElementById('donutCenter');
+            if (!center) return;
+            if (elements.length > 0) {
+              const idx = elements[0].index;
+              const [cat, amt] = sortedCats[idx];
+              const pct = expense > 0 ? (amt/expense*100).toFixed(1) : 0;
+              center.innerHTML = `
+                <div style="font-size:9px;color:var(--text3);text-align:center;padding:0 8px;line-height:1.3">${cat}</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text);font-family:'Space Grotesk',sans-serif">${fmt(amt)}</div>
+                <div style="font-size:11px;color:var(--text3)">${pct}%</div>`;
+            } else {
+              center.innerHTML = `
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Итого</div>
+                <div style="font-size:15px;font-weight:600;color:var(--text);font-family:'Space Grotesk',sans-serif">${fmt(expense)}</div>`;
+            }
+          }
+        }
+      });
+    }
+
     const ctxBar = document.getElementById('chartBar')?.getContext('2d');
     if (ctxBar) {
       const byMonthP = {};
@@ -988,24 +1341,79 @@ async function loadDashboard() {
         if (p.account_from === 'Доход') byMonthP[p.month].inc += +p.amount;
         if (p.account_to   === 'Расход') byMonthP[p.month].exp += +p.amount;
       });
+      // Add obligations to byMonthP
+      (plan||[]).forEach(p => {
+        if (!byMonthP[p.month]) byMonthP[p.month] = {inc:0,exp:0,obl:0};
+        if (p.account_to === 'Обязательства') byMonthP[p.month].obl = (byMonthP[p.month].obl||0) + +p.amount;
+      });
       const allM = [...new Set([...Object.keys(byMonth),...Object.keys(byMonthP)].map(Number))].sort((a,b)=>a-b);
-      const hL=[],hIF=[],hIP=[],hEF=[],hEP=[];
+      const hL=[],hIF=[],hIP=[],hEF=[],hEP=[],hOF=[],hOP=[];
       (isYear ? allM : [month]).forEach(m => {
         hL.push(MONTHS_S[m]||m);
         hIF.push((byMonth[m]||{}).inc||0);
         hIP.push((byMonthP[m]||{}).inc||0);
         hEF.push((byMonth[m]||{}).exp||0);
         hEP.push((byMonthP[m]||{}).exp||0);
+        hOF.push((byMonth[m]||{}).obl||0);
+        hOP.push((byMonthP[m]||{}).obl||0);
       });
+      // 4 rows: income fact, income plan, expense+obl fact stacked, expense+obl plan stacked
       chartBar = new Chart(ctxBar, {
         type: 'bar',
         data: {
-          labels: hL,
+          labels: hL.flatMap(l => [l+' доход', l+' расход']),
           datasets: [
-            {label:'Доход факт',  data:hIF, backgroundColor:'rgba(5,150,105,0.8)',  borderRadius:4, borderSkipped:false},
-            {label:'Доход план',  data:hIP, backgroundColor:'rgba(5,150,105,0.22)', borderRadius:4, borderSkipped:false, borderColor:'rgba(5,150,105,0.5)', borderWidth:1},
-            {label:'Расход факт', data:hEF, backgroundColor:'rgba(220,38,38,0.75)', borderRadius:4, borderSkipped:false},
-            {label:'Расход план', data:hEP, backgroundColor:'rgba(220,38,38,0.2)',  borderRadius:4, borderSkipped:false, borderColor:'rgba(220,38,38,0.45)', borderWidth:1},
+            // Income fact
+            {
+              label: 'Доход факт',
+              data: hL.flatMap((_, i) => [hIF[i], 0]),
+              backgroundColor: 'rgba(5,150,105,0.8)',
+              borderRadius: 4, borderSkipped: false,
+              stack: 'inc_f',
+            },
+            // Income plan
+            {
+              label: 'Доход план',
+              data: hL.flatMap((_, i) => [hIP[i], 0]),
+              backgroundColor: 'rgba(5,150,105,0.22)',
+              borderColor: 'rgba(5,150,105,0.5)', borderWidth: 1,
+              borderRadius: 4, borderSkipped: false,
+              stack: 'inc_p',
+            },
+            // Expense fact (stacked with obligation fact)
+            {
+              label: 'Расход факт',
+              data: hL.flatMap((_, i) => [0, hEF[i]]),
+              backgroundColor: 'rgba(220,38,38,0.75)',
+              borderRadius: 0, borderSkipped: false,
+              stack: 'exp_f',
+            },
+            // Obligation fact (stacked on top of expense fact)
+            {
+              label: 'Обяз. факт',
+              data: hL.flatMap((_, i) => [0, hOF[i]]),
+              backgroundColor: 'rgba(230,81,0,0.8)',
+              borderRadius: 4, borderSkipped: false,
+              stack: 'exp_f',
+            },
+            // Expense plan (stacked with obligation plan)
+            {
+              label: 'Расход план',
+              data: hL.flatMap((_, i) => [0, hEP[i]]),
+              backgroundColor: 'rgba(220,38,38,0.2)',
+              borderColor: 'rgba(220,38,38,0.45)', borderWidth: 1,
+              borderRadius: 0, borderSkipped: false,
+              stack: 'exp_p',
+            },
+            // Obligation plan (stacked on top of expense plan)
+            {
+              label: 'Обяз. план',
+              data: hL.flatMap((_, i) => [0, hOP[i]]),
+              backgroundColor: 'rgba(230,81,0,0.25)',
+              borderColor: 'rgba(230,81,0,0.5)', borderWidth: 1,
+              borderRadius: 4, borderSkipped: false,
+              stack: 'exp_p',
+            },
           ]
         },
         options: {
@@ -1013,11 +1421,22 @@ async function loadDashboard() {
           responsive: true, maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw) } }
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.raw > 0 ? ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw) : null,
+                filter: item => item.raw > 0,
+              }
+            }
           },
           scales: {
-            x: { ticks: { color:'#9CA3AF', font:{size:9,family:'Space Grotesk'}, callback: v=>(v/1000).toFixed(0)+'к' }, grid:{color:'rgba(0,0,0,0.04)'} },
-            y: { ticks: { color:'#6B7280', font:{size:10,family:'Space Grotesk'} }, grid:{display:false} }
+            x: {
+              ticks: { color:'#9CA3AF', font:{size:9,family:'Space Grotesk'}, callback: v=>(v/1000).toFixed(0)+'к' },
+              grid: { color:'rgba(0,0,0,0.04)' }
+            },
+            y: {
+              ticks: { color:'#6B7280', font:{size:10,family:'Space Grotesk'} },
+              grid: { display: false }
+            }
           }
         }
       });
@@ -1794,6 +2213,256 @@ async function saveParticipant(btn) {
 }
 
 function editParticipant(id) { toast('Редактирование участника — скоро'); }
+
+
+function toggleBalanceKpi(checked) {
+  const vals = window._balValues;
+  if (!vals) return;
+  const isTotal = !!checked;
+  const val   = isTotal ? vals.total : vals.operative;
+  const label = document.getElementById('balKpiLabel');
+  const valEl = document.getElementById('balKpiVal');
+  const sub   = document.getElementById('balKpiSub');
+  if (label) label.textContent = isTotal ? 'Баланс (общ.)' : 'Баланс (опер.)';
+  if (valEl) {
+    valEl.textContent = fmt(val);
+    valEl.style.color = val >= 0 ? 'var(--income)' : 'var(--expense)';
+  }
+  if (sub) sub.textContent = isTotal ? 'Баланс (опер.)' : 'Баланс (общ.)';
+}
+
+
+function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, periodLabel) {
+  const container = document.getElementById('balanceHint');
+  if (!container) return;
+
+  const lines = [];
+  const todayStr = today.getFullYear() + '-' +
+    String(today.getMonth()+1).padStart(2,'0') + '-' +
+    String(today.getDate()).padStart(2,'0');
+
+  // ── Check 1: does forecast go negative? ──
+  let minPlanVal = null, minPlanLabel = null;
+  planData.forEach((v, i) => {
+    if (v !== null && v < 0) {
+      if (minPlanVal === null || v < minPlanVal) {
+        minPlanVal = v;
+        minPlanLabel = lineLabels[i];
+      }
+    }
+  });
+  // Also check fact
+  let factNegLabel = null;
+  factData.forEach((v, i) => {
+    if (v !== null && v < 0 && !factNegLabel) factNegLabel = lineLabels[i];
+  });
+
+  // Build full date label helper
+  const monthNames = ['','января','февраля','марта','апреля','мая','июня',
+    'июля','августа','сентября','октября','ноября','декабря'];
+  const curMonth = today.getMonth() + 1;
+
+  if (factNegLabel) {
+    const dayNum = parseInt(factNegLabel);
+    const fullDate = !isNaN(dayNum) ? `${dayNum} ${monthNames[curMonth]}` : factNegLabel;
+    lines.push({cls:'warn', text: `${fullDate} баланс ушёл в минус`});
+  } else if (minPlanLabel) {
+    const dayNum = parseInt(minPlanLabel);
+    const fullDate = !isNaN(dayNum) ? `${dayNum} ${monthNames[curMonth]}` : minPlanLabel;
+    const shortage = Math.abs(Math.round(minPlanVal));
+    lines.push({cls:'warn', text: `Баланс уходит в минус ${fullDate} — не хватает ~${fmt(shortage)}`});
+  }
+
+  // ── Check 2: large planned payment in next 3 days ──
+  const in3days = new Date(today);
+  in3days.setDate(in3days.getDate() + 3);
+  const upcoming = (plan||[])
+    .filter(p => {
+      const d = new Date(p.date); d.setHours(0,0,0,0);
+      return d > today && d <= in3days && +p.amount >= 2000;
+    })
+    .sort((a,b) => new Date(a.date)-new Date(b.date));
+
+  if (upcoming.length > 0) {
+    const p = upcoming[0];
+    const pd = new Date(p.date);
+    const daysLeft = Math.round((new Date(p.date) - today) / 86400000);
+    const when = daysLeft === 1 ? 'Завтра' : `${pd.getDate()} ${monthNames[pd.getMonth()+1]}`;
+    const subcat = p.categories?.subcategory || p.account_to;
+    lines.push({cls:'bell', text: `${when} плановый платёж: ${subcat} ${fmt(p.amount)} — убедись что деньги на счёте`});
+  }
+
+  // ── Check 3: today's spending vs daily limit ──
+  if (lines.length < 2) {
+    const todaySpent = (txs||[])
+      .filter(t => t.date.substring(0,10) === todayStr && t.account_to === 'Расход')
+      .reduce((s,t) => s + +t.amount, 0);
+
+    // Daily limit = plan expenses / days in month
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+    const planExp = (plan||[]).filter(p => p.account_to === 'Расход').reduce((s,p) => s + +p.amount, 0);
+    const dailyLimit = planExp / daysInMonth;
+
+    if (todaySpent === 0) {
+      lines.push({cls:'info', text: 'Сегодня расходов ещё нет'});
+    } else if (dailyLimit > 0 && todaySpent > dailyLimit * 1.5) {
+      lines.push({cls:'warn', text: `Сегодня потрачено ${fmt(todaySpent)} — превышен дневной лимит (~${fmt(dailyLimit)})`});
+    } else if (dailyLimit > 0) {
+      lines.push({cls:'ok', text: `Сегодня потрачено ${fmt(todaySpent)} из ~${fmt(dailyLimit)} дневного лимита`});
+    } else {
+      lines.push({cls:'info', text: `Сегодня потрачено ${fmt(todaySpent)}`});
+    }
+  }
+
+  // ── Check 4: expense overrun ──
+  if (lines.length < 2) {
+    const expFact = (txs||[]).filter(t => t.account_to === 'Расход').reduce((s,t) => s + +t.amount, 0);
+    const expPlan = (plan||[]).filter(p => p.account_to === 'Расход').reduce((s,p) => s + +p.amount, 0);
+    if (expPlan > 0 && expFact > expPlan * 1.2) {
+      const pct = Math.round((expFact - expPlan) / expPlan * 100);
+      lines.push({cls:'warn', text: `Расходы превышают план на ${pct}%`});
+    } else if (expPlan > 0 && lines.length < 2) {
+      lines.push({cls:'ok', text: `Расходы в пределах плана`});
+    }
+  }
+
+  const clsMap = {warn:'b-hint-warn', ok:'b-hint-ok', info:'b-hint-info', bell:'b-hint-bell'};
+  container.innerHTML = lines.slice(0,2).map(l =>
+    `<div class="b-hint ${clsMap[l.cls]||''}">${l.text}</div>`
+  ).join('');
+}
+
+
+// ── QUICK ADD MODAL ──
+let _qmType = 'expense';
+
+function openQuickModal(type) {
+  _qmType = type || 'expense';
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('qmDate').value = today;
+  document.getElementById('qmAmount').value = '';
+  document.getElementById('qmNote').value = '';
+  setQmType(_qmType);
+  document.getElementById('quickModal').classList.add('open');
+  setTimeout(() => document.getElementById('qmAmount')?.focus(), 100);
+}
+
+function closeQuickModal() {
+  document.getElementById('quickModal').classList.remove('open');
+}
+
+function setQmType(type) {
+  _qmType = type;
+  ['expense','income','transfer','obligation'].forEach(t => {
+    const el = document.getElementById('qmt-' + t);
+    if (el) el.className = 'qm-type' + (t === type ? ` active-${t === 'obligation' ? 'obl' : t === 'transfer' ? 'tr' : t === 'income' ? 'inc' : 'exp'}` : '');
+  });
+
+  // Update account selects
+  const realAccs  = accounts_cache.filter(a => a.account_type === 'Актив');
+  const allAccs   = accounts_cache.filter(a => a.account_type !== 'Поток');
+  const fromSel   = document.getElementById('qmFrom');
+  const toSel     = document.getElementById('qmTo');
+
+  const makeOpts = (list) => list.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+
+  if (type === 'income') {
+    fromSel.innerHTML = '<option value="Доход">Доход</option>';
+    toSel.innerHTML   = makeOpts(realAccs);
+  } else if (type === 'expense') {
+    fromSel.innerHTML = makeOpts(realAccs);
+    toSel.innerHTML   = '<option value="Расход">Расход</option>';
+  } else if (type === 'obligation') {
+    fromSel.innerHTML = makeOpts(realAccs);
+    toSel.innerHTML   = '<option value="Обязательства">Обязательства</option>';
+  } else {
+    fromSel.innerHTML = makeOpts(allAccs);
+    toSel.innerHTML   = makeOpts(allAccs);
+  }
+
+  // Update subcategory list
+  const subcatRow = document.getElementById('qmSubcatRow');
+  const subcatSel = document.getElementById('qmSubcat');
+  const catRow = document.getElementById('qmCatRow');
+  if (type === 'transfer') {
+    subcatRow.style.display = 'none';
+    if (catRow) catRow.style.display = 'none';
+  } else {
+    if (catRow) catRow.style.display = '';
+    subcatRow.style.display = '';
+    const filtered = cats.filter(c => {
+      if (type === 'income')     return c.group_name === 'Доходы';
+      if (type === 'expense')    return c.group_name.startsWith('Расходы');
+      if (type === 'obligation') return c.group_name === 'Обязательства' || c.group_name === 'Долги';
+      return false;
+    });
+    subcatSel.innerHTML = '<option value="">— выбери —</option>' +
+      filtered.map(c => `<option value="${c.id}" data-cat="${c.category}">${c.subcategory}</option>`).join('');
+    // Reset cat/group on type change
+    const catEl2   = document.getElementById('qmCat');
+    const groupEl2 = document.getElementById('qmGroup');
+    if (catEl2)   catEl2.textContent   = '—';
+    if (groupEl2) groupEl2.textContent = '—';
+  }
+}
+
+function onQmSubcatChange() {
+  const sel = document.getElementById('qmSubcat');
+  const opt = sel?.options[sel.selectedIndex];
+  const catEl   = document.getElementById('qmCat');
+  const groupEl = document.getElementById('qmGroup');
+  if (opt && opt.value) {
+    const cat = cats.find(c => c.id === parseInt(opt.value));
+    if (catEl)   catEl.textContent   = cat?.category   || '—';
+    if (groupEl) groupEl.textContent = cat?.group_name || '—';
+  } else {
+    if (catEl)   catEl.textContent   = '—';
+    if (groupEl) groupEl.textContent = '—';
+  }
+}
+
+async function saveQuickTx() {
+  const btn = document.getElementById('qmSave');
+  if (btn) btn.disabled = true;
+  try {
+    const amount = parseFloat(document.getElementById('qmAmount')?.value);
+    const date   = document.getElementById('qmDate')?.value;
+    const from   = document.getElementById('qmFrom')?.value;
+    const to     = document.getElementById('qmTo')?.value;
+    const note   = document.getElementById('qmNote')?.value || null;
+    const subcatEl = document.getElementById('qmSubcat');
+    const catId  = subcatEl && subcatEl.value ? parseInt(subcatEl.value) : null;
+
+    if (!amount || amount <= 0 || !date || !from || !to) {
+      toast('Заполни обязательные поля', false);
+      if (btn) btn.disabled = false;
+      return;
+    }
+    if (from === to) {
+      toast('Счёт откуда и куда не могут совпадать', false);
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    const row = { date, amount, account_from: from, account_to: to, note, use_in_forecast: true, source: 'manual' };
+    if (catId) row.category_id = catId;
+
+    const { error } = await sb.from('transactions').insert(row);
+    if (error) throw error;
+
+    closeQuickModal();
+    toast('✓ Сохранено');
+    loadDashboard();
+  } catch(err) {
+    toast('Ошибка: ' + err.message, false);
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Close on overlay click
+document.getElementById('quickModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('quickModal')) closeQuickModal();
+});
 
 // ── INIT ──
 window.onload = async () => {
