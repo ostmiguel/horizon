@@ -2274,47 +2274,31 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
   factData.forEach((v, i) => {
     if (v !== null && v < 0 && !factNegLabel) factNegLabel = lineLabels[i];
   });
-
-  // Check plan goes negative — use lastFactVal as real starting point
-  // planData[lastFactIdx] should equal lastFactVal (connected), then continues
-  let minPlanVal = null, minPlanLabel = null;
-  planData.forEach((v, i) => {
-    if (v !== null && v < 0) {
-      if (minPlanVal === null || v < minPlanVal) {
-        minPlanVal = v;
-        minPlanLabel = lineLabels[i];
+  // Find FIRST future day when plan goes negative (not deepest)
+  let firstNegVal = null, firstNegLabel = null;
+  if (!factNegLabel && lastFactVal !== null) {
+    for (let i = lastFactIdx + 1; i < planData.length; i++) {
+      if (planData[i] !== null && planData[i] < 0 && !firstNegLabel) {
+        firstNegVal = planData[i];
+        firstNegLabel = lineLabels[i];
       }
-    }
-  });
-  // Also warn if today's balance is very low and tomorrow has big planned expense
-  if (!factNegLabel && !minPlanLabel && lastFactVal !== null && lastFactVal < 5000) {
-    // Find next planned expense
-    const nextBigExp = (plan||[])
-      .filter(p => {
-        const d = new Date(p.date); d.setHours(0,0,0,0);
-        return d > today && +p.amount > lastFactVal * 0.5;
-      })
-      .sort((a,b) => new Date(a.date)-new Date(b.date))[0];
-    if (nextBigExp) {
-      minPlanVal = lastFactVal - +nextBigExp.amount;
-      const nd = new Date(nextBigExp.date);
-      minPlanLabel = String(nd.getDate());
     }
   }
 
-  // Build full date label helper
-  const monthNames = ['','января','февраля','марта','апреля','мая','июня',
-    'июля','августа','сентября','октября','ноября','декабря'];
+
   const curMonth = today.getMonth() + 1;
+
+  const monthNames2 = ['','января','февраля','марта','апреля','мая','июня',
+    'июля','августа','сентября','октября','ноября','декабря'];
 
   if (factNegLabel) {
     const dayNum = parseInt(factNegLabel);
-    const fullDate = !isNaN(dayNum) ? `${dayNum} ${monthNames[curMonth]}` : factNegLabel;
+    const fullDate = !isNaN(dayNum) ? `${dayNum} ${monthNames2[curMonth]}` : factNegLabel;
     lines.push({cls:'warn', text: `${fullDate} баланс ушёл в минус`});
-  } else if (minPlanLabel) {
-    const dayNum = parseInt(minPlanLabel);
-    const fullDate = !isNaN(dayNum) ? `${dayNum} ${monthNames[curMonth]}` : minPlanLabel;
-    const shortage = Math.abs(Math.round(minPlanVal));
+  } else if (firstNegLabel) {
+    const dayNum = parseInt(firstNegLabel);
+    const fullDate = !isNaN(dayNum) ? `${dayNum} ${monthNames2[curMonth]}` : firstNegLabel;
+    const shortage = Math.abs(Math.round(firstNegVal));
     lines.push({cls:'warn', text: `Баланс уходит в минус ${fullDate} — не хватает ~${fmt(shortage)}`});
   }
 
@@ -2332,7 +2316,7 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
     const p = upcoming[0];
     const pd = new Date(p.date);
     const daysLeft = Math.round((new Date(p.date) - today) / 86400000);
-    const when = daysLeft === 1 ? 'Завтра' : `${pd.getDate()} ${monthNames[pd.getMonth()+1]}`;
+    const when = daysLeft === 1 ? 'Завтра' : `${pd.getDate()} ${monthNames2[pd.getMonth()+1]}`;
     const subcat = p.categories?.subcategory || p.account_to;
     lines.push({cls:'bell', text: `${when} плановый платёж: ${subcat} ${fmt(p.amount)} — убедись что деньги на счёте`});
   }
