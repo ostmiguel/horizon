@@ -317,6 +317,7 @@ body {
 
 /* ── REFERENCES ── */
 .ref-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ref-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .ref-tbl th { padding: 7px 12px; background: var(--bg3); font-size: 10px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; text-align: left; }
 .ref-tbl td { padding: 7px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
 .ref-tbl tr:last-child td { border-bottom: none; }
@@ -1884,6 +1885,7 @@ async function loadReferences() {
             </tr></thead>
             <tbody id="accBody">${renderAccRows(accs||[])}</tbody>
           </table>
+</table></div>
           <div class="add-row-btn" onclick="openAddAccount()">＋ Добавить счёт</div>
         </div>
 
@@ -1943,7 +1945,7 @@ async function loadReferences() {
 
 function renderAccRows(rows) {
   if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
-  return rows.map(a => `<tr class="draggable-row" draggable="true" data-id="${a.id}"
+  return rows.map((a, idx) => `<tr class="draggable-row" draggable="true" data-id="${a.id}"
     ondragstart="onAccDragStart(event,${a.id})"
     ondragover="onAccDragOver(event)"
     ondragleave="onAccDragLeave(event)"
@@ -1958,7 +1960,11 @@ function renderAccRows(rows) {
         <span class="toggle-slider"></span>
       </label>
     </td>
-    <td><button class="edit-btn" onclick="editAccount(${a.id})">ред.</button></td>
+    <td style="white-space:nowrap">
+      <button class="edit-btn" onclick="editAccount(${a.id})" style="margin-right:3px">ред.</button>
+      <button class="edit-btn" onclick="moveAcc(${idx},-1)" style="padding:2px 5px" ${idx===0?'disabled':''}>↑</button>
+      <button class="edit-btn" onclick="moveAcc(${idx},1)"  style="padding:2px 5px" ${idx===rows.length-1?'disabled':''}>↓</button>
+    </td>
   </tr>`).join('');
 }
 
@@ -2258,7 +2264,19 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
     String(today.getMonth()+1).padStart(2,'0') + '-' +
     String(today.getDate()).padStart(2,'0');
 
-  // ── Check 1: does forecast go negative? ──
+  // ── Check 1: does balance go negative? ──
+  // Find last known fact value (today's balance)
+  let lastFactVal = null, lastFactIdx = -1;
+  factData.forEach((v, i) => { if (v !== null) { lastFactVal = v; lastFactIdx = i; } });
+
+  // Check fact already negative
+  let factNegLabel = null;
+  factData.forEach((v, i) => {
+    if (v !== null && v < 0 && !factNegLabel) factNegLabel = lineLabels[i];
+  });
+
+  // Check plan goes negative — use lastFactVal as real starting point
+  // planData[lastFactIdx] should equal lastFactVal (connected), then continues
   let minPlanVal = null, minPlanLabel = null;
   planData.forEach((v, i) => {
     if (v !== null && v < 0) {
@@ -2268,11 +2286,21 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
       }
     }
   });
-  // Also check fact
-  let factNegLabel = null;
-  factData.forEach((v, i) => {
-    if (v !== null && v < 0 && !factNegLabel) factNegLabel = lineLabels[i];
-  });
+  // Also warn if today's balance is very low and tomorrow has big planned expense
+  if (!factNegLabel && !minPlanLabel && lastFactVal !== null && lastFactVal < 5000) {
+    // Find next planned expense
+    const nextBigExp = (plan||[])
+      .filter(p => {
+        const d = new Date(p.date); d.setHours(0,0,0,0);
+        return d > today && +p.amount > lastFactVal * 0.5;
+      })
+      .sort((a,b) => new Date(a.date)-new Date(b.date))[0];
+    if (nextBigExp) {
+      minPlanVal = lastFactVal - +nextBigExp.amount;
+      const nd = new Date(nextBigExp.date);
+      minPlanLabel = String(nd.getDate());
+    }
+  }
 
   // Build full date label helper
   const monthNames = ['','января','февраля','марта','апреля','мая','июня',
@@ -2480,6 +2508,21 @@ async function saveQuickTx() {
 document.getElementById('quickModal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('quickModal')) closeQuickModal();
 });
+
+
+function moveAcc(idx, dir) {
+  const allAccs = window._allAccs || [];
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= allAccs.length) return;
+  const moved = allAccs.splice(idx, 1)[0];
+  allAccs.splice(newIdx, 0, moved);
+  window._allAccs = allAccs;
+  localStorage.setItem('acc_order', JSON.stringify(allAccs.map(a => a.id)));
+  accounts_cache = [...allAccs];
+  const tbody = document.getElementById('accBody');
+  if (tbody) tbody.innerHTML = renderAccRows(allAccs);
+  toast('✓ Порядок сохранён');
+}
 
 // ── INIT ──
 window.onload = async () => {
