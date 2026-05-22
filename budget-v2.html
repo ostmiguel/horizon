@@ -1874,7 +1874,7 @@ async function loadReferences() {
               <option value="Поток">Потоки</option>
             </select>
           </div>
-          <table class="ref-tbl" id="accTable">
+          <div class="ref-tbl-wrap"><table class="ref-tbl" id="accTable">
             <thead><tr>
               <th style="width:24px"></th>
               <th class="sortable" onclick="sortAccTable(1)">Счёт</th>
@@ -1884,8 +1884,7 @@ async function loadReferences() {
               <th></th>
             </tr></thead>
             <tbody id="accBody">${renderAccRows(accs||[])}</tbody>
-          </table>
-</table></div>
+          </table></div>
           <div class="add-row-btn" onclick="openAddAccount()">＋ Добавить счёт</div>
         </div>
 
