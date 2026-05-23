@@ -608,9 +608,20 @@ body {
 .loan-btn-primary:hover { background:var(--accent2); }
 .loans-extra { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
 .loans-extra-label { font-size:13px; color:var(--text2); white-space:nowrap; }
-.loans-strategy-bar { display:flex; gap:6px; }
-.ls-btn { padding:6px 14px; border-radius:6px; border:0.5px solid var(--border); background:var(--bg); font-size:11px; font-weight:500; cursor:pointer; color:var(--text2); font-family:'Space Grotesk',sans-serif; }
-.ls-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.strat-trigger { display:flex; align-items:center; gap:8px; padding:7px 14px; border-radius:var(--radius-sm); border:0.5px solid var(--border); background:var(--bg2); font-size:12px; font-weight:500; color:var(--text); cursor:pointer; min-width:200px; justify-content:space-between; font-family:'Space Grotesk',sans-serif; transition:border-color 0.15s; }
+.strat-trigger:hover { border-color:var(--border2); }
+.strat-trigger-left { display:flex; align-items:center; gap:7px; }
+.strat-dropdown { position:absolute; top:calc(100% + 6px); right:0; width:300px; background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); box-shadow:0 8px 32px rgba(0,0,0,0.12); z-index:200; overflow:hidden; display:none; }
+.strat-dropdown.open { display:block; }
+.strat-item { padding:12px 14px; cursor:pointer; border-bottom:0.5px solid var(--border); }
+.strat-item:last-child { border-bottom:none; }
+.strat-item:hover { background:var(--bg); }
+.strat-item.sel { background:rgba(45,106,79,0.05); }
+.strat-item-head { display:flex; align-items:center; gap:10px; margin-bottom:5px; }
+.strat-icon { width:30px; height:30px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.strat-item-name { font-size:12px; font-weight:500; color:var(--text); }
+.strat-item-desc { font-size:11px; color:var(--text3); line-height:1.5; padding-left:40px; }
+.strat-item-tag { display:inline-block; font-size:10px; padding:2px 7px; border-radius:20px; font-weight:500; margin-top:4px; margin-left:40px; }
 /* Schedule Modal */
 .schedule-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:500; }
 .schedule-modal-overlay.open { display:flex; }
@@ -761,7 +772,7 @@ body {
     <div class="nav-section">Операции</div>
     <div class="nav-item" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
     <div class="nav-item" data-page="plan"><span class="nav-icon">◷</span>План</div>
-    <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Обязательства</div>
+    <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Кредиты</div>
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
     <div class="nav-item" data-page="references"><span class="nav-icon">◉</span>Справочники</div>
@@ -2468,6 +2479,9 @@ function openQuickModal(type) {
   document.getElementById('qmDate').value = today;
   document.getElementById('qmAmount').value = '';
   document.getElementById('qmNote').value = '';
+  // Reset save button
+  const btn = document.getElementById('qmSave');
+  if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
   setQmType(_qmType);
   document.getElementById('quickModal').classList.add('open');
   setTimeout(() => document.getElementById('qmAmount')?.focus(), 100);
@@ -2824,14 +2838,45 @@ function renderLoansPage() {
 <div style="padding:20px 24px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
     <div>
-      <div class="page-title">Обязательства</div>
+      <div class="page-title">Кредиты</div>
       <div style="font-size:11px;color:var(--text3);margin-top:2px">${loans.length} кредит${loans.length===1?'':'а'} · общий долг ${fmt(totalDebt)}</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <div class="loans-strategy-bar">
-        <button class="ls-btn${_loanStrategy==='snowball'?' active':''}" onclick="setLoanStrategy('snowball')">Снежный ком</button>
-        <button class="ls-btn${_loanStrategy==='avalanche'?' active':''}" onclick="setLoanStrategy('avalanche')">Лавина</button>
-        <button class="ls-btn${_loanStrategy==='none'?' active':''}" onclick="setLoanStrategy('none')">Без стратегии</button>
+      <div style="position:relative" id="stratWrap">
+        <div class="strat-trigger" onclick="toggleStratDropdown()">
+          <div class="strat-trigger-left">
+            <i class="ti ti-target" style="font-size:14px;color:var(--text3)" aria-hidden="true"></i>
+            <span style="color:var(--text2);font-weight:400">Стратегия:</span>
+            <span id="stratActiveName">${_loanStrategy==='snowball'?'Снежный ком':_loanStrategy==='avalanche'?'Лавина':'Без стратегии'}</span>
+          </div>
+          <i class="ti ti-chevron-down" id="stratChevron" style="font-size:13px;color:var(--text3);transition:transform 0.15s" aria-hidden="true"></i>
+        </div>
+        <div class="strat-dropdown" id="stratDropdown">
+          <div class="strat-item${_loanStrategy==='none'?' sel':''}" onclick="pickStrat('none','Без стратегии',this)">
+            <div class="strat-item-head">
+              <div class="strat-icon" style="background:var(--bg3)"><i class="ti ti-minus" style="font-size:14px;color:var(--text3)" aria-hidden="true"></i></div>
+              <div class="strat-item-name">Без стратегии</div>
+            </div>
+            <div class="strat-item-desc">Платишь только минимальные платежи по каждому кредиту. Всё идёт по плану банка.</div>
+            <div class="strat-item-tag" style="background:var(--bg3);color:var(--text3)">стандартный план</div>
+          </div>
+          <div class="strat-item${_loanStrategy==='snowball'?' sel':''}" onclick="pickStrat('snowball','Снежный ком',this)">
+            <div class="strat-item-head">
+              <div class="strat-icon" style="background:#EBF5FF"><i class="ti ti-circle-arrow-up" style="font-size:14px;color:#185FA5" aria-hidden="true"></i></div>
+              <div class="strat-item-name">Снежный ком</div>
+            </div>
+            <div class="strat-item-desc">Направляй все свободные деньги на кредит с наименьшим остатком, остальные плати по минимуму. Быстро увидишь первый результат — это даёт мотивацию двигаться дальше.</div>
+            <div class="strat-item-tag" style="background:#EBF5FF;color:#185FA5">подходит для мотивации</div>
+          </div>
+          <div class="strat-item${_loanStrategy==='avalanche'?' sel':''}" onclick="pickStrat('avalanche','Лавина',this)">
+            <div class="strat-item-head">
+              <div class="strat-icon" style="background:#EAF3DE"><i class="ti ti-trending-down" style="font-size:14px;color:#3B6D11" aria-hidden="true"></i></div>
+              <div class="strat-item-name">Лавина</div>
+            </div>
+            <div class="strat-item-desc">Направляй все свободные деньги на кредит с наибольшей ставкой, остальные плати по минимуму. Платишь банку меньше всего процентов суммарно.</div>
+            <div class="strat-item-tag" style="background:#EAF3DE;color:#3B6D11">подходит для экономии</div>
+          </div>
+        </div>
       </div>
       <button class="btn-primary" onclick="openAddLoan()" style="font-size:12px;padding:7px 14px">+ Добавить кредит</button>
     </div>
@@ -2990,6 +3035,37 @@ function setLoanStrategy(s) {
   _loanStrategy = s;
   renderLoansPage();
 }
+
+function toggleStratDropdown() {
+  const dd = document.getElementById('stratDropdown');
+  const ch = document.getElementById('stratChevron');
+  if (!dd) return;
+  const isOpen = dd.classList.contains('open');
+  dd.classList.toggle('open', !isOpen);
+  if (ch) ch.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+function pickStrat(val, name, el) {
+  _loanStrategy = val;
+  const dd = document.getElementById('stratDropdown');
+  const ch = document.getElementById('stratChevron');
+  const nm = document.getElementById('stratActiveName');
+  if (dd) dd.classList.remove('open');
+  if (ch) ch.style.transform = '';
+  if (nm) nm.textContent = name;
+  document.querySelectorAll('.strat-item').forEach(i => i.classList.remove('sel'));
+  if (el) el.classList.add('sel');
+  renderLoansPage();
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#stratWrap')) {
+    const dd = document.getElementById('stratDropdown');
+    const ch = document.getElementById('stratChevron');
+    if (dd) dd.classList.remove('open');
+    if (ch) ch.style.transform = '';
+  }
+});
 
 function onLoanExtraChange(val) {
   window._loanExtra = parseInt(val) || 0;
@@ -3319,19 +3395,12 @@ async function schedRecalcConfirm() {
 
 // ── Add/Edit Loan ──
 function openAddLoan() {
-  const colors = ['#e24b4a','#ba7517','#059669','#2563eb','#7c3aed','#db2777'];
   document.getElementById('mainContent').innerHTML = `
 <div style="padding:20px 24px;max-width:560px">
   <div class="page-title" style="margin-bottom:18px">Добавить кредит</div>
   <div class="g2" style="gap:12px;margin-bottom:12px">
     <div class="field"><div class="field-label">Название</div><input class="field-input" id="lName" placeholder="Тбанк"></div>
-    <div class="field">
-      <div class="field-label">Цвет</div>
-      <div style="display:flex;gap:8px;padding-top:6px" id="colorPicker">
-        ${colors.map((c,i)=>'<div onclick="selectLoanColor(\''+c+'\')" id="lc-'+i+'" style="width:22px;height:22px;border-radius:50%;background:'+c+';cursor:pointer;border:2px solid transparent;transition:border 0.1s"></div>').join('')}
-      </div>
-      <input type="hidden" id="lColor" value="#e24b4a">
-    </div>
+    <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="lColor" value="#e24b4a"></div>
   </div>
   <div class="field" style="margin-bottom:12px">
     <div class="field-label">Начальная сумма, ₽</div>
@@ -3342,7 +3411,7 @@ function openAddLoan() {
     <div class="field"><div class="field-label">Ежемесячный платёж, ₽</div><input class="field-input" type="number" id="lPayment" placeholder="16360"></div>
   </div>
   <div class="g2" style="gap:12px;margin-bottom:12px">
-    <div class="field"><div class="field-label">Номер следующего платежа</div><input class="field-input" type="number" id="lPayNum" placeholder="24"></div>
+    <div class="field"><div class="field-label">Первый платёж в графике №</div><input class="field-input" type="number" id="lPayNum" placeholder="1"></div>
     <div class="field"><div class="field-label">Всего платежей</div><input class="field-input" type="number" id="lTotalPay" placeholder="48"></div>
   </div>
   <div class="field" style="margin-bottom:16px">
@@ -3357,16 +3426,10 @@ function openAddLoan() {
     <button class="btn-primary" onclick="saveLoan()">Сохранить</button>
   </div>
 </div>`;
-  // Select first color
-  selectLoanColor('#e24b4a');
+
 }
 
-function selectLoanColor(color) {
-  document.getElementById('lColor').value = color;
-  document.querySelectorAll('#colorPicker > div').forEach(el => {
-    el.style.border = el.style.background === color ? '2px solid #333' : '2px solid transparent';
-  });
-}
+
 
 async function saveLoan() {
   const name = document.getElementById('lName').value.trim();
@@ -3402,19 +3465,12 @@ async function saveLoan() {
 function openEditLoan(id) {
   const loan = _loansData.find(l => l.id === id);
   if (!loan) return;
-  const colors = ['#e24b4a','#ba7517','#059669','#2563eb','#7c3aed','#db2777'];
   document.getElementById('mainContent').innerHTML = `
 <div style="padding:20px 24px;max-width:560px">
   <div class="page-title" style="margin-bottom:18px">Редактировать — ${loan.name}</div>
   <div class="g2" style="gap:12px;margin-bottom:12px">
     <div class="field"><div class="field-label">Название</div><input class="field-input" id="eName" value="${loan.name}"></div>
-    <div class="field">
-      <div class="field-label">Цвет</div>
-      <div style="display:flex;gap:8px;padding-top:6px" id="eColorPicker">
-        ${colors.map(c=>'<div onclick="selectEditColor(\''+c+'\')" style="width:22px;height:22px;border-radius:50%;background:'+c+';cursor:pointer;border:'+(c===loan.color?'2px solid #333':'2px solid transparent')+';transition:border 0.1s"></div>').join('')}
-      </div>
-      <input type="hidden" id="eColor" value="${loan.color||'#e24b4a'}">
-    </div>
+    <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="eColor" value="${loan.color||'#e24b4a'}"></div>
   </div>
   <div class="g2" style="gap:12px;margin-bottom:12px">
     <div class="field"><div class="field-label">Начальная сумма, ₽</div><input class="field-input" type="number" id="eInitial" value="${+loan.initial_amount}"></div>
@@ -3442,12 +3498,7 @@ function openEditLoan(id) {
 </div>`;
 }
 
-function selectEditColor(color) {
-  document.getElementById('eColor').value = color;
-  document.querySelectorAll('#eColorPicker > div').forEach(el => {
-    el.style.border = el.style.background === color ? '2px solid #333' : '2px solid transparent';
-  });
-}
+
 
 async function updateLoan(id) {
   const name     = document.getElementById('eName').value.trim();
