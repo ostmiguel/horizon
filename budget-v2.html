@@ -2640,10 +2640,17 @@ async function loadLoans() {
 }
 
 function calcInterestRemaining(loans) {
-  // Sum interest from all unpaid schedule rows
   return loans.reduce((s, l) => {
     return s + (l._schedule||[])
       .filter(r => !r.is_paid && r.interest)
+      .reduce((a, r) => a + +r.interest, 0);
+  }, 0);
+}
+
+function calcInterestPaid(loans) {
+  return loans.reduce((s, l) => {
+    return s + (l._schedule||[])
+      .filter(r => r.is_paid && r.interest)
       .reduce((a, r) => a + +r.interest, 0);
   }, 0);
 }
@@ -2795,6 +2802,8 @@ function renderLoansPage() {
   const totalDebt = loans.reduce((s,l) => s + +l.current_balance, 0);
   const totalPayment = loans.reduce((s,l) => s + +(l._nextRow?.payment || l.monthly_payment), 0);
   const interestRemaining = calcInterestRemaining(loans);
+  const interestPaid = calcInterestPaid(loans);
+  window._loanInterestVals = { remaining: interestRemaining, paid: interestPaid };
 
   // Sort by strategy
   const sorted = [...loans];
@@ -2832,7 +2841,17 @@ function renderLoansPage() {
     <div class="kpi"><div class="kpi-label">Общий долг</div><div class="kpi-val">${fmt(totalDebt)}</div></div>
     <div class="kpi"><div class="kpi-label">Платежей в месяц</div><div class="kpi-val">${fmt(totalPayment)}</div></div>
     <div class="kpi"><div class="kpi-label">Закрытие всех</div><div class="kpi-val" style="font-size:15px">${latestClose ? latestClose.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div></div>
-    <div class="kpi" style="border-top:2.5px solid #dc2626"><div class="kpi-label">Переплата осталась</div><div class="kpi-val" style="color:#dc2626">${interestRemaining > 0 ? fmt(interestRemaining) : '—'}</div><div class="kpi-sub">${interestRemaining > 0 ? 'сумма процентов' : 'заполни график'}</div></div>
+    <div class="kpi" style="border-top:2.5px solid #dc2626">
+      <div class="kpi-label" id="loanIntKpiLabel">Переплата осталась</div>
+      <div class="kpi-val" id="loanIntKpiVal" style="color:#dc2626">${interestRemaining > 0 ? fmt(interestRemaining) : '—'}</div>
+      <div class="kpi-sub" style="display:flex;align-items:center;gap:6px;margin-top:5px">
+        <label class="toggle" style="transform:scale(0.8);transform-origin:left">
+          <input type="checkbox" id="loanIntToggle" onchange="toggleLoanInterestKpi(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="loanIntKpiSub" style="font-size:10px;color:var(--text3)">Переплата текущая ⇄</span>
+      </div>
+    </div>
   </div>
 
   ${renderWhatIfBlock(loans, sorted)}
@@ -2858,6 +2877,8 @@ function renderLoanCard(loan, idx) {
   const color     = loan.color || '#e24b4a';
   const nextRow   = loan._nextRow;
   const lastRow   = loan._lastRow;
+  const loanIntPaid      = (loan._schedule||[]).filter(r => r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
+  const loanIntRemaining = (loan._schedule||[]).filter(r => !r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
   // Balance from last paid row, fallback to current_balance if no paid rows
   const lastPaidRow = (loan._schedule||[]).filter(r => r.is_paid && r.balance).slice(-1)[0];
   const displayBalance = lastPaidRow ? +lastPaidRow.balance : (nextRow?.balance ? +nextRow.balance : +loan.current_balance);
@@ -2877,6 +2898,10 @@ function renderLoanCard(loan, idx) {
 
     ${lastPaidRow || nextRow?.balance ? '<div class="loan-row"><span class="loan-rl">Остаток</span><span class="loan-rv">'+fmt(displayBalance)+'</span></div>' : ''}
     <div class="loan-row"><span class="loan-rl">Начальная сумма</span><span class="loan-rv">${fmt(+loan.initial_amount)}</span></div>
+    ${loanIntPaid > 0 || loanIntRemaining > 0 ? `
+    <div class="loan-row"><span class="loan-rl">Переплата уплачена</span><span class="loan-rv" style="color:#dc2626">${loanIntPaid > 0 ? fmt(loanIntPaid) : '—'}</span></div>
+    <div class="loan-row"><span class="loan-rl">Переплата осталась</span><span class="loan-rv" style="color:var(--text3)">${loanIntRemaining > 0 ? fmt(loanIntRemaining) : '—'}</span></div>
+    ` : ''}
 
     ${schedFilled && nextRow ? `
     <div class="loan-row"><span class="loan-rl">Следующий платёж</span><span class="loan-rv">${fmt(+nextRow.payment)}</span></div>
@@ -3520,6 +3545,19 @@ async function deleteLoan(id) {
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   toast('✓ Кредит удалён');
   loadLoans();
+}
+
+
+function toggleLoanInterestKpi(showPaid) {
+  const vals = window._loanInterestVals;
+  if (!vals) return;
+  const val = showPaid ? vals.paid : vals.remaining;
+  const label = document.getElementById('loanIntKpiLabel');
+  const valEl = document.getElementById('loanIntKpiVal');
+  const sub   = document.getElementById('loanIntKpiSub');
+  if (label) label.textContent = showPaid ? 'Переплата текущая' : 'Переплата осталась';
+  if (valEl) valEl.textContent = val > 0 ? fmt(val) : '—';
+  if (sub)   sub.textContent   = showPaid ? 'Переплата осталась ⇄' : 'Переплата текущая ⇄';
 }
 
 // ── INIT ──
