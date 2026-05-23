@@ -577,6 +577,59 @@ body {
   .tx-filters { flex-wrap: wrap; }
 }
 
+
+/* ── LOANS PAGE ── */
+.loans-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:18px; }
+.loan-card { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:18px; border-top:3px solid var(--border2); }
+.loan-card-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+.loan-name { font-size:15px; font-weight:500; color:var(--text); }
+.loan-rate { font-size:11px; color:var(--text3); margin-top:2px; }
+.loan-badge { font-size:10px; padding:3px 8px; border-radius:20px; font-weight:500; }
+.loan-row { display:flex; justify-content:space-between; margin-bottom:7px; }
+.loan-rl { font-size:11px; color:var(--text3); }
+.loan-rv { font-size:11px; font-weight:500; color:var(--text); }
+.loan-progress { margin:14px 0 12px; }
+.loan-progress-labels { display:flex; justify-content:space-between; margin-bottom:5px; }
+.loan-progress-track { height:6px; background:var(--bg3); border-radius:3px; overflow:hidden; }
+.loan-progress-fill { height:100%; border-radius:3px; transition:width 0.4s; }
+.loan-footer { padding-top:12px; border-top:0.5px solid var(--border); }
+.loan-footer-dates { display:flex; justify-content:space-between; margin-bottom:10px; }
+.loan-footer-lbl { font-size:10px; color:var(--text3); margin-bottom:2px; }
+.loan-footer-val { font-size:12px; font-weight:500; color:var(--text); }
+.loan-strat { background:var(--bg); border:0.5px solid var(--border); border-radius:6px; padding:8px 10px; margin-top:8px; }
+.loan-strat-row { display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px; }
+.loan-strat-row:last-child { margin-bottom:0; }
+.loan-strat-lbl { color:var(--text3); }
+.loan-strat-val { font-weight:500; }
+.loan-actions { display:flex; gap:8px; margin-top:10px; }
+.loan-btn { flex:1; padding:7px; border-radius:6px; border:0.5px solid var(--border); background:var(--bg); font-size:11px; font-weight:500; color:var(--text2); cursor:pointer; text-align:center; font-family:'Space Grotesk',sans-serif; }
+.loan-btn:hover { background:var(--bg3); }
+.loan-btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.loan-btn-primary:hover { background:var(--accent2); }
+.loans-extra { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:18px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.loans-extra-label { font-size:13px; color:var(--text2); white-space:nowrap; }
+.loans-strategy-bar { display:flex; gap:6px; }
+.ls-btn { padding:6px 14px; border-radius:6px; border:0.5px solid var(--border); background:var(--bg); font-size:11px; font-weight:500; cursor:pointer; color:var(--text2); font-family:'Space Grotesk',sans-serif; }
+.ls-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+/* Schedule Modal */
+.schedule-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:500; }
+.schedule-modal-overlay.open { display:flex; }
+.schedule-modal { background:var(--bg2); border-radius:var(--radius); width:960px; max-width:96vw; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+.sched-head { padding:18px 20px 14px; border-bottom:0.5px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+.sched-title { font-size:15px; font-weight:500; color:var(--text); }
+.sched-body { flex:1; overflow-y:auto; padding:0; }
+.sched-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+.sched-tbl th { background:var(--bg2); padding:8px 12px; text-align:left; font-size:10px; font-weight:500; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; position:sticky; top:0; z-index:2; border-bottom:0.5px solid var(--border); box-shadow:0 1px 0 var(--border); }
+.sched-tbl td { padding:8px 12px; border-bottom:0.5px solid var(--border); color:var(--text); }
+.sched-tbl tr.paid td { color:var(--text3); background:rgba(5,150,105,0.03); }
+.sched-tbl tr:hover td { background:var(--bg); }
+.sched-input { width:88px; padding:3px 6px; border:0.5px solid var(--border); border-radius:4px; font-size:11px; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; }
+.sched-input:focus { outline:none; border-color:var(--accent); }
+.sched-foot { padding:14px 20px; border-top:0.5px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.sched-save-status { font-size:12px; color:var(--income); display:flex; align-items:center; gap:5px; }
+.sched-save-status.saving { color:var(--text3); }
+@media (max-width:768px) { .loans-grid { grid-template-columns:1fr; } }
+
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
@@ -585,6 +638,45 @@ body {
 <!-- CONFIRM TOAST -->
 <div class="confirm-popup" id="toast"></div>
 
+
+
+<!-- SCHEDULE MODAL -->
+<div class="schedule-modal-overlay" id="scheduleModal">
+  <div class="schedule-modal">
+    <div class="sched-head">
+      <div>
+        <div class="sched-title" id="schedTitle">График платежей</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px" id="schedSubtitle"></div>
+      </div>
+      <button style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer" onclick="closeScheduleModal()">✕</button>
+    </div>
+    <div class="sched-body">
+      <table class="sched-tbl">
+        <thead><tr>
+          <th>#</th><th>Дата</th><th>Платёж</th><th>Тело</th><th>Проценты</th><th>Доп. платёж</th><th>Остаток</th><th style="text-align:center">Оплачено</th>
+        </tr></thead>
+        <tbody id="schedBody"></tbody>
+      </table>
+    </div>
+    <div id="schedRecalcBar" style="display:none;padding:10px 20px;background:rgba(37,99,235,0.06);border-top:0.5px solid var(--border);font-size:12px;color:var(--accent)">
+      <span id="schedRecalcMsg"></span>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="loan-btn" onclick="schedRecalcCancel()">Не менять</button>
+        <button class="loan-btn loan-btn-primary" onclick="schedRecalcConfirm()">Пересчитать</button>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px">⚠ Суммы тела и процентов рассчитаны приблизительно. Уточни данные в банке и скорректируй при необходимости.</div>
+    </div>
+    <div class="sched-foot">
+      <div class="sched-save-status" id="schedSaveStatus">
+        <span>✓ Все изменения сохранены</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="loan-btn" onclick="closeScheduleModal()">Закрыть</button>
+        <button class="loan-btn loan-btn-primary" id="schedSaveBtn" onclick="saveSchedule()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- QUICK ADD MODAL -->
 <div class="quick-modal-overlay" id="quickModal">
@@ -669,6 +761,7 @@ body {
     <div class="nav-section">Операции</div>
     <div class="nav-item" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
     <div class="nav-item" data-page="plan"><span class="nav-icon">◷</span>План</div>
+    <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Обязательства</div>
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
     <div class="nav-item" data-page="references"><span class="nav-icon">◉</span>Справочники</div>
@@ -703,6 +796,10 @@ body {
   <div class="mob-nav-item" onclick="loadPage('plan')">
     <i class="ti ti-calendar-event mob-nav-icon" id="mnav-plan" aria-hidden="true"></i>
     <span class="mob-nav-label" id="mnavl-plan">План</span>
+  </div>
+  <div class="mob-nav-item" onclick="loadPage('loans')">
+    <i class="ti ti-credit-card mob-nav-icon" id="mnav-loans" aria-hidden="true"></i>
+    <span class="mob-nav-label" id="mnavl-loans">Кредиты</span>
   </div>
   <div class="mob-nav-item" onclick="loadPage('references')">
     <i class="ti ti-book-2 mob-nav-icon" id="mnav-references" aria-hidden="true"></i>
@@ -807,7 +904,7 @@ function loadPage(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   // Sync mobile bottom nav
-  ['dashboard','transactions','plan','references'].forEach(p => {
+  ['dashboard','transactions','plan','references','loans'].forEach(p => {
     const icon  = document.getElementById('mnav-' + p);
     const label = document.getElementById('mnavl-' + p);
     if (icon)  icon.classList.toggle('act',  p === page);
@@ -817,6 +914,7 @@ function loadPage(page) {
   else if (page === 'transactions') loadTransactions(false);
   else if (page === 'plan')         loadTransactions(true);
   else if (page === 'references')   loadReferences();
+  else if (page === 'loans')        loadLoans();
 }
 
 // ── HELPERS ──
@@ -2505,6 +2603,923 @@ function moveAcc(idx, dir) {
   const tbody = document.getElementById('accBody');
   if (tbody) tbody.innerHTML = renderAccRows(allAccs);
   toast('✓ Порядок сохранён');
+}
+
+
+// ── LOANS PAGE ──
+let _loansData = [];
+let _loanStrategy = 'snowball';
+let _schedLoanId = null;
+let _schedSaveTimer = null;
+
+async function loadLoans() {
+  const mc = document.getElementById('mainContent');
+  mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
+  const { data: loans } = await sb.from('loans').select('*').eq('is_active', true).order('id');
+  _loansData = loans || [];
+
+  // Load schedule summary for each loan
+  for (const loan of _loansData) {
+    const { data: sched } = await sb.from('loan_schedule')
+      .select('month_num, date, payment, principal, interest, balance, is_paid')
+      .eq('loan_id', loan.id).order('month_num');
+    loan._schedule = sched || [];
+    loan._paidCount = (sched||[]).filter(r => r.is_paid).length;
+    loan._totalRows = (sched||[]).length;
+    // Next unpaid row
+    // Next row = first unpaid row with date >= today, fallback to first unpaid
+    const todayStr = new Date().toISOString().split('T')[0];
+    const unpaid = (sched||[]).filter(r => !r.is_paid);
+    loan._nextRow = unpaid.find(r => r.date && r.date >= todayStr) || unpaid[0] || null;
+    // Last row = close date
+    // Last row = last row that has a date (sorted by month_num desc)
+    const withDate = (sched||[]).filter(r => r.date).sort((a,b) => b.month_num - a.month_num);
+    loan._lastRow = withDate[0] || (sched||[]).slice(-1)[0];
+  }
+  renderLoansPage();
+}
+
+function calcInterestRemaining(loans) {
+  // Sum interest from all unpaid schedule rows
+  return loans.reduce((s, l) => {
+    return s + (l._schedule||[])
+      .filter(r => !r.is_paid && r.interest)
+      .reduce((a, r) => a + +r.interest, 0);
+  }, 0);
+}
+
+function calcWhatIf(loans, sorted, extraMonthly) {
+  // Simulate payoff with extra payment using actual schedule balance data
+  // Returns { closeDateWith, closeDateWithout, savedMonths, savedInterest, steps }
+  if (!extraMonthly || extraMonthly <= 0) return null;
+
+  const rate = (l) => +l.rate / 12;
+
+  // Without extra: use last row date from each loan
+  let withoutDate = null;
+  loans.forEach(l => {
+    if (l._lastRow?.date) {
+      const d = new Date(l._lastRow.date);
+      if (!withoutDate || d > withoutDate) withoutDate = d;
+    }
+  });
+
+  // With extra: simulate month by month using current balances
+  const steps = [];
+  let extraPool = extraMonthly;
+  let maxEndDate = null;
+
+  const simLoans = sorted.map(l => ({
+    id: l.id, name: l.name, color: l.color||'#888',
+    bal: +l.current_balance, rate: +l.rate/12,
+    pmt: +(l._nextRow?.payment || l.monthly_payment),
+    done: false, monthsDone: 0
+  }));
+
+  // Find the one that gets the extra payment (first in sorted order)
+  let targetIdx = simLoans.findIndex(l => !l.done);
+  let totalInterestWith = 0;
+  let month = 0;
+
+  while (simLoans.some(l => !l.done) && month < 600) {
+    month++;
+    // Pay minimum on all, extra on target
+    simLoans.forEach((l, i) => {
+      if (l.done) return;
+      const intP = l.bal * l.rate;
+      const extra = (i === targetIdx) ? extraPool : 0;
+      const pmt = Math.min(l.pmt + extra, l.bal + intP);
+      const princ = pmt - intP;
+      totalInterestWith += intP;
+      l.bal = Math.max(0, l.bal - princ);
+      if (l.bal < 1) {
+        l.done = true;
+        l.monthsDone = month;
+        // When this loan closes, add its payment to the pool
+        if (i === targetIdx) {
+          extraPool += l.pmt;
+          targetIdx = simLoans.findIndex(sl => !sl.done);
+        }
+      }
+    });
+  }
+
+  const withDate = new Date();
+  const lastMonths = Math.max(...simLoans.map(l => l.monthsDone));
+  withDate.setMonth(withDate.getMonth() + lastMonths);
+
+  const savedMonths = withoutDate
+    ? Math.round((withoutDate - withDate) / (1000*60*60*24*30))
+    : 0;
+
+  const interestWithout = calcInterestRemaining(loans);
+  const savedInterest = Math.max(0, interestWithout - totalInterestWith);
+
+  // Build step-by-step instructions
+  const instrSteps = [];
+  let runningExtra = extraMonthly;
+  sorted.forEach((loan, idx) => {
+    const sim = simLoans.find(s => s.id === loan.id);
+    const closeMonth = sim?.monthsDone || 0;
+    const closeD = new Date(); closeD.setMonth(closeD.getMonth() + closeMonth);
+    instrSteps.push({
+      loan, idx, extra: runningExtra, closeDate: closeD,
+      nextExtra: runningExtra + +(loan._nextRow?.payment || loan.monthly_payment)
+    });
+    runningExtra += +(loan._nextRow?.payment || loan.monthly_payment);
+  });
+
+  return { withDate, withoutDate, savedMonths, savedInterest, instrSteps };
+}
+
+function renderWhatIfBlock(loans, sorted) {
+  const extra = window._loanExtra || 0;
+  const result = extra > 0 ? calcWhatIf(loans, sorted, extra) : null;
+
+  const stratName = _loanStrategy === 'snowball' ? 'Снежный ком' : _loanStrategy === 'avalanche' ? 'Лавина' : '';
+
+  return `<div class="card" style="margin-bottom:18px">
+  <div class="card-head">
+    <span class="card-title">Досрочное закрытие</span>
+    ${result ? '<span class="card-hint" style="color:var(--income)">✓ Виден потенциал</span>' : ''}
+  </div>
+  <div class="card-body">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+      <span style="font-size:13px;color:var(--text2);white-space:nowrap">Доп. платёж в месяц</span>
+      <input type="range" min="0" max="50000" step="500" value="${extra}"
+        id="loanExtraSlider" oninput="onLoanExtraChange(this.value)"
+        style="width:200px;accent-color:var(--accent)">
+      <span id="loanExtraVal" style="font-size:16px;font-weight:600;color:var(--text);min-width:80px">${fmt(extra)}</span>
+      ${_loanStrategy !== 'none' ? '<span style="font-size:11px;color:var(--text3)">Стратегия: ' + stratName + '</span>' : ''}
+    </div>
+
+    ${result ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="background:var(--bg);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid var(--border)">
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Без доп. платежа</div>
+        <div style="font-size:15px;font-weight:500;color:var(--text)">${result.withoutDate ? result.withoutDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">переплата ${fmt(calcInterestRemaining(loans))}</div>
+      </div>
+      <div style="background:rgba(5,150,105,0.06);border-radius:var(--radius-sm);padding:12px 14px;border:0.5px solid rgba(5,150,105,0.2)">
+        <div style="font-size:10px;color:var(--income);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">С доп. платежом ${fmt(extra)}</div>
+        <div style="font-size:15px;font-weight:500;color:var(--income)">${result.withDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</div>
+        <div style="font-size:11px;color:var(--income);margin-top:2px">экономия ${fmt(result.savedInterest)} · ${result.savedMonths} мес.</div>
+      </div>
+    </div>
+
+    <div style="background:var(--bg);border-radius:var(--radius-sm);padding:14px 16px;border:0.5px solid var(--border)">
+      <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:10px">Как применить в графике</div>
+      ${result.instrSteps.map((step, i) => `
+      <div style="display:flex;gap:10px;margin-bottom:${i<result.instrSteps.length-1?'12px':'0'};padding-bottom:${i<result.instrSteps.length-1?'12px':'0'};border-bottom:${i<result.instrSteps.length-1?'0.5px solid var(--border)':'none'}">
+        <div style="width:22px;height:22px;border-radius:50%;background:${step.loan.color||'#888'};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;font-weight:600">${i+1}</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:500;color:var(--text);margin-bottom:3px">${step.loan.name}</div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.5">
+            Добавляй <b>${fmt(step.extra)}</b> в колонку «Доп. платёж» начиная со следующего платежа.<br>
+            Закрытие: <b>${step.closeDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</b>
+            ${i < result.instrSteps.length-1 ? '<br>После закрытия направь <b>' + fmt(step.nextExtra) + '</b> на следующий кредит' : ''}
+          </div>
+          <button class="loan-btn" style="margin-top:6px;padding:4px 10px;font-size:10px" onclick="openScheduleModal(${step.loan.id})">Открыть график ${step.loan.name}</button>
+        </div>
+      </div>`).join('')}
+    </div>` : `
+    <div style="font-size:12px;color:var(--text3);text-align:center;padding:12px 0">
+      Передвинь бегунок чтобы увидеть потенциальную экономию
+    </div>`}
+  </div>
+</div>`;
+}
+
+function renderLoansPage() {
+  const loans = _loansData;
+  const totalDebt = loans.reduce((s,l) => s + +l.current_balance, 0);
+  const totalPayment = loans.reduce((s,l) => s + +(l._nextRow?.payment || l.monthly_payment), 0);
+  const interestRemaining = calcInterestRemaining(loans);
+
+  // Sort by strategy
+  const sorted = [...loans];
+  if (_loanStrategy === 'snowball') sorted.sort((a,b) => +a.current_balance - +b.current_balance);
+  else if (_loanStrategy === 'avalanche') sorted.sort((a,b) => +b.rate - +a.rate);
+
+  // Latest close date from schedules
+  let latestClose = null;
+  loans.forEach(l => {
+    if (l._lastRow?.date) {
+      const d = new Date(l._lastRow.date);
+      if (!latestClose || d > latestClose) latestClose = d;
+    }
+  });
+
+  const mc = document.getElementById('mainContent');
+  mc.innerHTML = `
+<div style="padding:20px 24px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="page-title">Обязательства</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${loans.length} кредит${loans.length===1?'':'а'} · общий долг ${fmt(totalDebt)}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="loans-strategy-bar">
+        <button class="ls-btn${_loanStrategy==='snowball'?' active':''}" onclick="setLoanStrategy('snowball')">Снежный ком</button>
+        <button class="ls-btn${_loanStrategy==='avalanche'?' active':''}" onclick="setLoanStrategy('avalanche')">Лавина</button>
+        <button class="ls-btn${_loanStrategy==='none'?' active':''}" onclick="setLoanStrategy('none')">Без стратегии</button>
+      </div>
+      <button class="btn-primary" onclick="openAddLoan()" style="font-size:12px;padding:7px 14px">+ Добавить кредит</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">
+    <div class="kpi"><div class="kpi-label">Общий долг</div><div class="kpi-val">${fmt(totalDebt)}</div></div>
+    <div class="kpi"><div class="kpi-label">Платежей в месяц</div><div class="kpi-val">${fmt(totalPayment)}</div></div>
+    <div class="kpi"><div class="kpi-label">Закрытие всех</div><div class="kpi-val" style="font-size:15px">${latestClose ? latestClose.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div></div>
+    <div class="kpi" style="border-top:2.5px solid #dc2626"><div class="kpi-label">Переплата осталась</div><div class="kpi-val" style="color:#dc2626">${interestRemaining > 0 ? fmt(interestRemaining) : '—'}</div><div class="kpi-sub">${interestRemaining > 0 ? 'сумма процентов' : 'заполни график'}</div></div>
+  </div>
+
+  ${renderWhatIfBlock(loans, sorted)}
+
+  <div class="loans-grid" id="loansGrid">
+    ${sorted.map((loan, idx) => renderLoanCard(loan, idx)).join('')}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><span class="card-title">Динамика снижения долга</span></div>
+    <div class="card-body"><div class="chart-wrap" style="height:200px"><canvas id="chartLoans" role="img" aria-label="График снижения долга по кредитам">Снижение долга по кредитам</canvas></div></div>
+  </div>
+</div>`;
+
+  renderLoansChart(loans);
+}
+
+function renderLoanCard(loan, idx) {
+  const paidCount = loan._paidCount || 0;
+  const totalRows = loan._totalRows || 0;
+  const totalPay  = +loan.total_payments;
+  const paidPct   = totalRows > 0 ? Math.round(paidCount / totalPay * 100) : 0;
+  const color     = loan.color || '#e24b4a';
+  const nextRow   = loan._nextRow;
+  const lastRow   = loan._lastRow;
+  // Balance from last paid row, fallback to current_balance if no paid rows
+  const lastPaidRow = (loan._schedule||[]).filter(r => r.is_paid && r.balance).slice(-1)[0];
+  const displayBalance = lastPaidRow ? +lastPaidRow.balance : (nextRow?.balance ? +nextRow.balance : +loan.current_balance);
+  const closeDate = lastRow?.date ? new Date(lastRow.date).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : '—';
+  const nextDate  = nextRow?.date  ? new Date(nextRow.date).toLocaleDateString('ru-RU')  : (loan.next_payment_date ? new Date(loan.next_payment_date).toLocaleDateString('ru-RU') : '—');
+  const schedFilled = totalRows > 0;
+  const stratLabel = _loanStrategy !== 'none' ? `${idx+1}-й по стратегии` : '';
+
+  return `<div class="loan-card" style="border-top-color:${color}">
+    <div class="loan-card-head">
+      <div>
+        <div class="loan-name">${loan.name}</div>
+        <div class="loan-rate">${(+loan.rate*100).toFixed(2)}% · ${paidCount} из ${totalPay} платежей</div>
+      </div>
+      ${stratLabel ? `<div class="loan-badge" style="background:${color}22;color:${color}">${stratLabel}</div>` : ''}
+    </div>
+
+    ${lastPaidRow || nextRow?.balance ? '<div class="loan-row"><span class="loan-rl">Остаток</span><span class="loan-rv">'+fmt(displayBalance)+'</span></div>' : ''}
+    <div class="loan-row"><span class="loan-rl">Начальная сумма</span><span class="loan-rv">${fmt(+loan.initial_amount)}</span></div>
+
+    ${schedFilled && nextRow ? `
+    <div class="loan-row"><span class="loan-rl">Следующий платёж</span><span class="loan-rv">${fmt(+nextRow.payment)}</span></div>
+    <div class="loan-row"><span class="loan-rl">из них тело / %</span><span class="loan-rv">${fmt(+nextRow.principal)} / ${fmt(+nextRow.interest)}</span></div>
+    ` : `
+    <div class="loan-row"><span class="loan-rl">Ежемесячный платёж</span><span class="loan-rv">${fmt(+loan.monthly_payment)}</span></div>
+    <div style="font-size:11px;color:var(--accent);margin-bottom:8px">↑ Заполни график для точных данных</div>
+    `}
+
+    <div class="loan-progress">
+      <div class="loan-progress-labels">
+        <span style="font-size:11px;color:var(--text3)">Погашено ${paidCount} из ${totalPay}</span>
+        <span style="font-size:11px;color:var(--text3)">${paidPct}%</span>
+      </div>
+      <div class="loan-progress-track"><div class="loan-progress-fill" style="width:${paidPct}%;background:${color}"></div></div>
+    </div>
+
+    <div class="loan-footer">
+      <div class="loan-footer-dates">
+        <div><div class="loan-footer-lbl">Следующий платёж</div><div class="loan-footer-val">${nextDate}</div></div>
+        <div style="text-align:right"><div class="loan-footer-lbl">Дата закрытия</div><div class="loan-footer-val">${closeDate}</div></div>
+      </div>
+      <div class="loan-actions">
+        <button class="loan-btn" onclick="openScheduleModal(${loan.id})">
+          ${schedFilled ? `График (${totalRows}/${totalPay})` : 'Заполнить график'}
+        </button>
+        <button class="loan-btn" onclick="openEditLoan(${loan.id})">Редактировать</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderLoansChart(loans) {
+  const ctxL = document.getElementById('chartLoans')?.getContext('2d');
+  if (!ctxL || !loans.length) return;
+
+  const datasets = [];
+  const allDates = new Set();
+
+  // Collect all dates from schedules
+  loans.forEach(l => (l._schedule||[]).forEach(r => allDates.add(r.date)));
+  const labels = [...allDates].sort();
+
+  // Dataset per loan from schedule balance column
+  loans.forEach(loan => {
+    const balByDate = {};
+    (loan._schedule||[]).forEach(r => { balByDate[r.date] = +r.balance; });
+    const data = labels.map(d => balByDate[d] !== undefined ? balByDate[d] : null);
+    datasets.push({
+      label: loan.name,
+      data,
+      borderColor: loan.color||'#888',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      spanGaps: true,
+    });
+  });
+
+  // Fallback if no schedule data
+  if (labels.length === 0) {
+    const mc = document.getElementById('chartLoans');
+    if (mc) mc.parentElement.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Заполни график платежей чтобы увидеть динамику</div>';
+    return;
+  }
+
+  new Chart(ctxL, {
+    type: 'line',
+    data: { labels: labels.map(d => new Date(d).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: datasets.length > 1, labels: { color:'#6B7280', font:{size:10}, boxWidth:8 }},
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw) }}
+      },
+      scales: {
+        x: { ticks:{ color:'#9CA3AF', font:{size:9}, maxTicksLimit:12, maxRotation:0 }, grid:{display:false} },
+        y: { ticks:{ color:'#9CA3AF', font:{size:9}, callback: v=>(v/1000).toFixed(0)+'к' }, grid:{color:'rgba(0,0,0,0.04)'} }
+      }
+    }
+  });
+}
+
+function setLoanStrategy(s) {
+  _loanStrategy = s;
+  renderLoansPage();
+}
+
+function onLoanExtraChange(val) {
+  window._loanExtra = parseInt(val) || 0;
+  const display = document.getElementById('loanExtraVal');
+  if (display) display.textContent = fmt(window._loanExtra);
+  clearTimeout(window._loanExtraTimer);
+  window._loanExtraTimer = setTimeout(() => renderLoansPage(), 350);
+}
+
+// ── Schedule Modal ──
+async function openScheduleModal(loanId) {
+  _schedLoanId = loanId;
+  const loan = _loansData.find(l => l.id === loanId);
+  if (!loan) return;
+  document.getElementById('schedTitle').textContent = 'График платежей — ' + loan.name;
+  document.getElementById('schedSubtitle').textContent = `${loan.total_payments} платежей · ${(+loan.rate*100).toFixed(2)}% годовых · вноси данные из банковского графика`;
+  const loanForSched = _loansData.find(l => l.id === loanId);
+  _schedLoanInitial = loanForSched ? +loanForSched.initial_amount : 0;
+  document.getElementById('scheduleModal').classList.add('open');
+  setSaveStatus('saved');
+  const saveBtn = document.getElementById('schedSaveBtn');
+  if (saveBtn) saveBtn.disabled = true;
+
+  // Load existing
+  const { data: existing } = await sb.from('loan_schedule').select('*').eq('loan_id', loanId).order('month_num');
+  const existingMap = {};
+  (existing||[]).forEach(r => existingMap[r.month_num] = r);
+
+  const tbody = document.getElementById('schedBody');
+  const rows = [];
+  for (let m = 1; m <= +loan.total_payments; m++) {
+    const ex = existingMap[m];
+    rows.push({ m, ex });
+  }
+
+  tbody.innerHTML = rows.map(({m, ex}) => `
+    <tr class="${ex?.is_paid ? 'paid' : ''}" id="sched-row-${m}" data-loan="${loanId}" data-month="${m}">
+      <td>${m}</td>
+      <td><input class="sched-input" type="date" value="${ex?.date||''}" data-field="date" oninput="schedMarkDirty()" style="width:110px"></td>
+      <td><input class="sched-input" type="number" value="${ex?.payment||''}" data-field="payment" oninput="schedMarkDirty()" placeholder="—"></td>
+      <td><input class="sched-input" type="number" value="${ex?.principal||''}" data-field="principal" oninput="schedOnPrincipal(this,${m})" placeholder="—"></td>
+      <td><input class="sched-input" type="number" value="${ex?.interest||''}" data-field="interest" oninput="schedMarkDirty()" placeholder="—"></td>
+      <td><input class="sched-input" type="number" value="${ex?.extra_payment||''}" data-field="extra_payment" oninput="schedOnExtra(this,${m})" placeholder="—" style="border-color:rgba(37,99,235,0.4)"></td>
+      <td><input class="sched-input" type="number" value="${ex?.balance||''}" data-field="balance" oninput="schedMarkDirty()" placeholder="—"></td>
+      <td style="text-align:center">
+        <label class="toggle" style="transform:scale(0.8)">
+          <input type="checkbox" ${ex?.is_paid?'checked':''} onchange="schedMarkDirty();schedTogglePaid(${loanId},${m},this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+    </tr>`).join('');
+}
+
+function closeScheduleModal() {
+  if (_schedDirty) {
+    if (!confirm('Есть несохранённые изменения. Закрыть без сохранения?')) return;
+  }
+  document.getElementById('scheduleModal').classList.remove('open');
+  _schedLoanId = null;
+  _schedDirty = false;
+  loadLoans();
+}
+
+// ── Schedule state ──
+let _schedDirty = false;
+let _schedLoanInitial = 0; // initial_amount of current loan
+
+function setSaveStatus(state) {
+  const el = document.getElementById('schedSaveStatus');
+  const btn = document.getElementById('schedSaveBtn');
+  if (!el) return;
+  if (state === 'dirty') {
+    el.className = 'sched-save-status saving';
+    el.innerHTML = '<span>Есть несохранённые изменения</span>';
+    if (btn) { btn.style.background = 'var(--accent)'; btn.disabled = false; }
+    _schedDirty = true;
+  } else if (state === 'saving') {
+    el.className = 'sched-save-status saving';
+    el.innerHTML = '<span>Сохранение...</span>';
+    if (btn) btn.disabled = true;
+  } else {
+    el.className = 'sched-save-status';
+    el.innerHTML = '<span>✓ Все изменения сохранены</span>';
+    if (btn) btn.disabled = true;
+    _schedDirty = false;
+  }
+}
+
+function schedMarkDirty() {
+  setSaveStatus('dirty');
+}
+
+function schedGetRowVal(monthNum, field) {
+  const row = document.getElementById(`sched-row-${monthNum}`);
+  if (!row) return null;
+  const el = row.querySelector(`[data-field="${field}"]`);
+  return el ? parseFloat(el.value) || null : null;
+}
+
+function schedSetRowVal(monthNum, field, val) {
+  const row = document.getElementById(`sched-row-${monthNum}`);
+  if (!row) return;
+  const el = row.querySelector(`[data-field="${field}"]`);
+  if (el && val !== null) el.value = Math.round(val * 100) / 100;
+}
+
+function schedGetPrevBalance(monthNum) {
+  // Look for previous row with balance in the DOM
+  for (let m = monthNum - 1; m >= 1; m--) {
+    const val = schedGetRowVal(m, 'balance');
+    if (val !== null && val > 0) return val;
+  }
+  // Fallback to initial_amount
+  return _schedLoanInitial || 0;
+}
+
+function schedOnPrincipal(input, monthNum) {
+  schedMarkDirty();
+  const principal = parseFloat(input.value);
+  if (isNaN(principal)) return;
+
+  // Auto-calc interest = payment - principal
+  const payment = schedGetRowVal(monthNum, 'payment');
+  if (payment !== null) {
+    const interest = payment - principal;
+    schedSetRowVal(monthNum, 'interest', interest >= 0 ? interest : null);
+  }
+
+  // Auto-calc balance = prevBalance - principal - extra
+  const extra = schedGetRowVal(monthNum, 'extra_payment') || 0;
+  const prevBal = schedGetPrevBalance(monthNum);
+  const newBal = Math.max(0, prevBal - principal - extra);
+  schedSetRowVal(monthNum, 'balance', newBal);
+}
+
+function schedOnExtra(input, monthNum) {
+  schedMarkDirty();
+  const extra = parseFloat(input.value) || 0;
+  const principal = schedGetRowVal(monthNum, 'principal');
+  if (principal === null) return;
+
+  // Recalc balance with extra
+  const prevBal = schedGetPrevBalance(monthNum);
+  const newBal = Math.max(0, prevBal - principal - extra);
+  schedSetRowVal(monthNum, 'balance', newBal);
+}
+
+async function saveSchedule() {
+  if (!_schedLoanId) return;
+  setSaveStatus('saving');
+
+  const tbody = document.getElementById('schedBody');
+  if (!tbody) return;
+
+  const rows = tbody.querySelectorAll('tr[data-month]');
+  const toUpsert = [];
+
+  rows.forEach(row => {
+    const m = parseInt(row.dataset.month);
+    const loanId = parseInt(row.dataset.loan);
+    const get = field => {
+      const el = row.querySelector(`[data-field="${field}"]`);
+      const val = el?.value;
+      return (val !== undefined && val !== '') ? val : null;
+    };
+    const dateVal    = get('date');
+    const payment    = parseFloat(get('payment'))       || null;
+    const principal  = parseFloat(get('principal'))     || null;
+    const interest   = parseFloat(get('interest'))      || null;
+    const balance    = parseFloat(get('balance'))       || null;
+    const extra      = parseFloat(get('extra_payment')) || null;
+    const isPaid     = row.querySelector('input[type=checkbox]')?.checked || false;
+    const hasAnyData = dateVal || payment || principal || interest || balance || isPaid;
+    if (hasAnyData) {
+      toUpsert.push({ loan_id: loanId, month_num: m, date: dateVal, payment, principal, interest, balance, extra_payment: extra, is_paid: isPaid });
+    }
+  });
+
+  // Upsert in batches of 50
+  for (let i = 0; i < toUpsert.length; i += 50) {
+    const batch = toUpsert.slice(i, i + 50);
+    await sb.from('loan_schedule').upsert(batch, { onConflict: 'loan_id,month_num' });
+  }
+
+  setSaveStatus('saved');
+  toast('✓ График сохранён');
+
+  // Update loan balance from last paid row
+  await refreshLoanBalance(_schedLoanId);
+}
+
+async function schedTogglePaid(loanId, monthNum, isPaid) {
+  const row = document.getElementById(`sched-row-${monthNum}`);
+
+  // Check DOM fields — payment or principal must be filled
+  const paymentVal = row?.querySelector('[data-field=payment]')?.value;
+  const principalVal = row?.querySelector('[data-field=principal]')?.value;
+  if (!paymentVal && !principalVal) {
+    if (row) {
+      const cb = row.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = false;
+    }
+    toast('Заполни хотя бы сумму платежа', false);
+    return;
+  }
+
+  // Save row first if not yet in DB
+  await schedSaveRow(loanId, monthNum);
+
+  // Now update is_paid
+  const { data: existing } = await sb.from('loan_schedule')
+    .select('id').eq('loan_id', loanId).eq('month_num', monthNum).maybeSingle();
+
+  if (existing) {
+    await sb.from('loan_schedule').update({ is_paid: isPaid }).eq('id', existing.id);
+  }
+  if (row) row.className = isPaid ? 'paid' : '';
+  await refreshLoanBalance(loanId);
+  setSaveStatus('saved');
+}
+
+async function refreshLoanBalance(loanId) {
+  // Find last paid row with balance, update loan current_balance
+  const { data: paid } = await sb.from('loan_schedule')
+    .select('balance').eq('loan_id', loanId).eq('is_paid', true)
+    .not('balance', 'is', null).order('month_num', {ascending:false}).limit(1);
+  if (paid?.length) {
+    await sb.from('loans').update({ current_balance: paid[0].balance }).eq('id', loanId);
+  }
+}
+
+
+// ── Extra payment recalc ──
+let _schedRecalcData = null;
+
+async function schedExtraChanged(loanId, monthNum, input) {
+  const extraVal = parseFloat(input.value);
+  if (isNaN(extraVal) || extraVal <= 0) return;
+
+  const loan = _loansData.find(l => l.id === loanId);
+  if (!loan) return;
+
+  // Load full schedule to simulate recalc
+  const { data: sched } = await sb.from('loan_schedule')
+    .select('*').eq('loan_id', loanId).order('month_num');
+  if (!sched?.length) return;
+
+  // Find current row and simulate forward
+  const rowIdx = sched.findIndex(r => r.month_num === monthNum);
+  if (rowIdx < 0) return;
+
+  const rate = +loan.rate / 12;
+  const currentBal = +sched[rowIdx].balance || 0;
+  const newBal = Math.max(0, currentBal - extraVal);
+  const affectedRows = sched.length - rowIdx - 1;
+
+  // Build recalc preview
+  const recalcRows = [];
+  let bal = newBal;
+  for (let i = rowIdx + 1; i < sched.length && bal > 0.01; i++) {
+    const intP = bal * rate;
+    const pmt = +loan.monthly_payment;
+    const princ = Math.min(pmt - intP, bal);
+    bal = Math.max(0, bal - princ);
+    recalcRows.push({
+      month_num: sched[i].month_num,
+      date: sched[i].date,
+      payment: +(pmt).toFixed(2),
+      principal: +princ.toFixed(2),
+      interest: +intP.toFixed(2),
+      balance: +bal.toFixed(2),
+      is_paid: sched[i].is_paid,
+      extra_payment: sched[i].extra_payment,
+      id: sched[i].id
+    });
+  }
+
+  const savedMonths = affectedRows - recalcRows.length;
+  _schedRecalcData = { loanId, monthNum, extraVal, newBal, recalcRows, currentRow: sched[rowIdx] };
+
+  // Show recalc bar
+  const bar = document.getElementById('schedRecalcBar');
+  const msg = document.getElementById('schedRecalcMsg');
+  if (bar && msg) {
+    msg.innerHTML = `Остаток на строке ${monthNum} изменится с <b>${fmt(currentBal)}</b> до <b>${fmt(newBal)}</b>.<br>
+      Затронет следующие ${recalcRows.length} строк${savedMonths > 0 ? ' · ускорит закрытие на ~' + savedMonths + ' мес.' : ''}.`;
+    bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function schedRecalcCancel() {
+  _schedRecalcData = null;
+  document.getElementById('schedRecalcBar').style.display = 'none';
+}
+
+async function schedRecalcConfirm() {
+  if (!_schedRecalcData) return;
+  const { loanId, monthNum, extraVal, newBal, recalcRows, currentRow } = _schedRecalcData;
+  setSaveStatus('saving');
+
+  // Save extra_payment and updated balance on current row
+  await sb.from('loan_schedule').update({
+    extra_payment: extraVal,
+    balance: newBal
+  }).eq('id', currentRow.id);
+
+  // Update all subsequent rows
+  for (const row of recalcRows) {
+    if (row.id) {
+      await sb.from('loan_schedule').update({
+        payment: row.payment,
+        principal: row.principal,
+        interest: row.interest,
+        balance: row.balance
+      }).eq('id', row.id);
+    }
+  }
+
+  setSaveStatus('saved');
+  _schedRecalcData = null;
+  document.getElementById('schedRecalcBar').style.display = 'none';
+
+  // Reload schedule modal
+  await openScheduleModal(loanId);
+  toast('✓ График пересчитан. Уточни суммы в банке.');
+}
+
+// ── Add/Edit Loan ──
+function openAddLoan() {
+  const colors = ['#e24b4a','#ba7517','#059669','#2563eb','#7c3aed','#db2777'];
+  document.getElementById('mainContent').innerHTML = `
+<div style="padding:20px 24px;max-width:560px">
+  <div class="page-title" style="margin-bottom:18px">Добавить кредит</div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="lName" placeholder="Тбанк"></div>
+    <div class="field">
+      <div class="field-label">Цвет</div>
+      <div style="display:flex;gap:8px;padding-top:6px" id="colorPicker">
+        ${colors.map((c,i)=>'<div onclick="selectLoanColor(\''+c+'\')" id="lc-'+i+'" style="width:22px;height:22px;border-radius:50%;background:'+c+';cursor:pointer;border:2px solid transparent;transition:border 0.1s"></div>').join('')}
+      </div>
+      <input type="hidden" id="lColor" value="#e24b4a">
+    </div>
+  </div>
+  <div class="field" style="margin-bottom:12px">
+    <div class="field-label">Начальная сумма, ₽</div>
+    <input class="field-input" type="number" id="lInitial" placeholder="480000">
+  </div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Ставка, % годовых</div><input class="field-input" type="number" step="0.01" id="lRate" placeholder="27.9"></div>
+    <div class="field"><div class="field-label">Ежемесячный платёж, ₽</div><input class="field-input" type="number" id="lPayment" placeholder="16360"></div>
+  </div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Номер следующего платежа</div><input class="field-input" type="number" id="lPayNum" placeholder="24"></div>
+    <div class="field"><div class="field-label">Всего платежей</div><input class="field-input" type="number" id="lTotalPay" placeholder="48"></div>
+  </div>
+  <div class="field" style="margin-bottom:16px">
+    <div class="field-label">Дата следующего платежа</div>
+    <input class="field-input" type="date" id="lNextDate">
+  </div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:16px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);border:0.5px solid var(--border)">
+    После добавления кредита заполни реальный график платежей из банка — это обеспечит точные даты и суммы.
+  </div>
+  <div style="display:flex;gap:10px">
+    <button class="btn-ghost" onclick="loadLoans()">Отмена</button>
+    <button class="btn-primary" onclick="saveLoan()">Сохранить</button>
+  </div>
+</div>`;
+  // Select first color
+  selectLoanColor('#e24b4a');
+}
+
+function selectLoanColor(color) {
+  document.getElementById('lColor').value = color;
+  document.querySelectorAll('#colorPicker > div').forEach(el => {
+    el.style.border = el.style.background === color ? '2px solid #333' : '2px solid transparent';
+  });
+}
+
+async function saveLoan() {
+  const name = document.getElementById('lName').value.trim();
+  const initial = parseFloat(document.getElementById('lInitial').value);
+  const rate = parseFloat(document.getElementById('lRate').value) / 100;
+  const payment = parseFloat(document.getElementById('lPayment').value);
+  const payNum = parseInt(document.getElementById('lPayNum').value) || 1;
+  const totalPay = parseInt(document.getElementById('lTotalPay').value);
+  const nextDate = document.getElementById('lNextDate').value;
+  const color = document.getElementById('lColor').value;
+
+  if (!name || isNaN(initial) || isNaN(rate) || isNaN(payment) || isNaN(totalPay)) {
+    toast('Заполни все обязательные поля', false); return;
+  }
+  const { error } = await sb.from('loans').insert({
+    name, initial_amount: initial, current_balance: initial,
+    rate, monthly_payment: payment, payment_number: payNum,
+    total_payments: totalPay, next_payment_date: nextDate||null,
+    color, is_active: true
+  });
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+
+  // Pre-fill schedule with dates and payment amounts
+  const { data: newLoan } = await sb.from('loans').select('id').order('id', {ascending:false}).limit(1).single();
+  if (newLoan) {
+    await prefillSchedule(newLoan.id, payNum, totalPay, payment, nextDate);
+  }
+
+  toast('✓ Кредит добавлен. График предзаполнен датами и суммами платежей.');
+  loadLoans();
+}
+
+function openEditLoan(id) {
+  const loan = _loansData.find(l => l.id === id);
+  if (!loan) return;
+  const colors = ['#e24b4a','#ba7517','#059669','#2563eb','#7c3aed','#db2777'];
+  document.getElementById('mainContent').innerHTML = `
+<div style="padding:20px 24px;max-width:560px">
+  <div class="page-title" style="margin-bottom:18px">Редактировать — ${loan.name}</div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eName" value="${loan.name}"></div>
+    <div class="field">
+      <div class="field-label">Цвет</div>
+      <div style="display:flex;gap:8px;padding-top:6px" id="eColorPicker">
+        ${colors.map(c=>'<div onclick="selectEditColor(\''+c+'\')" style="width:22px;height:22px;border-radius:50%;background:'+c+';cursor:pointer;border:'+(c===loan.color?'2px solid #333':'2px solid transparent')+';transition:border 0.1s"></div>').join('')}
+      </div>
+      <input type="hidden" id="eColor" value="${loan.color||'#e24b4a'}">
+    </div>
+  </div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Начальная сумма, ₽</div><input class="field-input" type="number" id="eInitial" value="${+loan.initial_amount}"></div>
+    <div class="field"><div class="field-label">Текущий остаток, ₽</div><input class="field-input" type="number" id="eBalance" value="${+loan.current_balance}"></div>
+  </div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Ставка, % годовых</div><input class="field-input" type="number" step="0.01" id="eRate" value="${(+loan.rate*100).toFixed(2)}"></div>
+    <div class="field"><div class="field-label">Ежемесячный платёж, ₽</div><input class="field-input" type="number" id="ePayment" value="${+loan.monthly_payment}"></div>
+  </div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Номер следующего платежа</div><input class="field-input" type="number" id="ePayNum" value="${loan.payment_number}"></div>
+    <div class="field"><div class="field-label">Всего платежей</div><input class="field-input" type="number" id="eTotalPay" value="${loan.total_payments}"></div>
+  </div>
+  <div class="field" style="margin-bottom:16px">
+    <div class="field-label">Дата следующего платежа</div>
+    <input class="field-input" type="date" id="eNextDate" value="${loan.next_payment_date||''}">
+  </div>
+  <div style="display:flex;gap:10px;justify-content:space-between">
+    <button class="btn-ghost" style="color:#dc2626;border-color:#dc2626" onclick="deleteLoan(${id})">Удалить кредит</button>
+    <div style="display:flex;gap:10px">
+      <button class="btn-ghost" onclick="loadLoans()">Отмена</button>
+      <button class="btn-primary" onclick="updateLoan(${id})">Сохранить</button>
+    </div>
+  </div>
+</div>`;
+}
+
+function selectEditColor(color) {
+  document.getElementById('eColor').value = color;
+  document.querySelectorAll('#eColorPicker > div').forEach(el => {
+    el.style.border = el.style.background === color ? '2px solid #333' : '2px solid transparent';
+  });
+}
+
+async function updateLoan(id) {
+  const name     = document.getElementById('eName').value.trim();
+  const initial  = parseFloat(document.getElementById('eInitial').value);
+  const balance  = parseFloat(document.getElementById('eBalance').value);
+  const rate     = parseFloat(document.getElementById('eRate').value) / 100;
+  const payment  = parseFloat(document.getElementById('ePayment').value);
+  const payNum   = parseInt(document.getElementById('ePayNum').value);
+  const totalPay = parseInt(document.getElementById('eTotalPay').value);
+  const nextDate = document.getElementById('eNextDate').value;
+  const color    = document.getElementById('eColor').value;
+  if (!name || isNaN(balance) || isNaN(payment)) { toast('Заполни обязательные поля', false); return; }
+  const { error } = await sb.from('loans').update({
+    name, initial_amount: initial, current_balance: balance,
+    rate, monthly_payment: payment, payment_number: payNum,
+    total_payments: totalPay, next_payment_date: nextDate||null,
+    color, updated_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+
+  // Update schedule prefill (dates and payment) without overwriting filled data
+  await prefillSchedule(id, payNum, totalPay, payment, nextDate);
+
+  toast('✓ Обновлено. График предзаполнен.');
+  loadLoans();
+}
+
+
+async function prefillSchedule(loanId, payNum, totalPay, payment, nextDateStr) {
+  if (!loanId || !payment || !totalPay) return;
+
+  // Load existing rows to avoid overwriting filled data
+  const { data: existing } = await sb.from('loan_schedule')
+    .select('month_num, payment, date, principal, balance')
+    .eq('loan_id', loanId).order('month_num');
+  const existingMap = {};
+  (existing||[]).forEach(r => existingMap[r.month_num] = r);
+
+  const rows = [];
+  const baseDate = nextDateStr ? new Date(nextDateStr) : null;
+
+  for (let m = payNum; m <= totalPay; m++) {
+    const ex = existingMap[m];
+    const offset = m - payNum;
+
+    // Calculate date for this row
+    let dateVal = ex?.date || null;
+    if (!dateVal && baseDate) {
+      const d = new Date(baseDate);
+      d.setMonth(d.getMonth() + offset);
+      dateVal = d.toISOString().split('T')[0];
+    }
+
+    // Only update payment if not filled or no other data
+    const paymentVal = ex?.payment || payment;
+
+    // Only upsert if something changed or row is new
+    const needsUpdate = !ex || !ex.date || !ex.payment;
+    if (needsUpdate) {
+      rows.push({
+        loan_id: loanId,
+        month_num: m,
+        date: dateVal,
+        payment: paymentVal,
+        // Don't overwrite principal/balance if already filled
+        ...(ex?.principal ? {} : {}),
+      });
+    } else if (ex && (!ex.date || !ex.payment)) {
+      rows.push({
+        loan_id: loanId,
+        month_num: m,
+        date: dateVal || ex.date,
+        payment: paymentVal,
+      });
+    }
+  }
+
+  // Upsert in batches of 50
+  for (let i = 0; i < rows.length; i += 50) {
+    await sb.from('loan_schedule').upsert(
+      rows.slice(i, i + 50),
+      { onConflict: 'loan_id,month_num', ignoreDuplicates: false }
+    );
+  }
+}
+
+
+async function deleteLoan(id) {
+  const loan = _loansData.find(l => l.id === id);
+  if (!confirm('Удалить кредит «' + (loan?.name||'') + '» и весь его график платежей? Это действие нельзя отменить.')) return;
+  // Delete schedule first
+  await sb.from('loan_schedule').delete().eq('loan_id', id);
+  // Delete loan
+  const { error } = await sb.from('loans').delete().eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  toast('✓ Кредит удалён');
+  loadLoans();
 }
 
 // ── INIT ──
