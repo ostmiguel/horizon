@@ -641,6 +641,46 @@ body {
 .sched-save-status.saving { color:var(--text3); }
 @media (max-width:768px) { .loans-grid { grid-template-columns:1fr; } }
 
+
+.tx-day-header td { }
+.tx-day-header:hover td { background:var(--bg) !important; }
+
+
+.sched-outdated td { opacity: 0.45; }
+.sched-outdated:hover td { opacity: 0.7; }
+
+
+/* ── HELP PAGE ── */
+.help-wrap { max-width: 900px; padding: 28px 32px; }
+.help-toc { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:16px 20px; margin-bottom:28px; }
+.help-toc-title { font-size:12px; font-weight:500; color:var(--text3); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; }
+.help-toc-list { list-style:none; display:flex; flex-direction:column; gap:4px; }
+.help-toc-list a { font-size:13px; color:var(--accent); text-decoration:none; }
+.help-toc-list a:hover { text-decoration:underline; }
+.help-section { margin-bottom:36px; scroll-margin-top:20px; }
+.help-section-title { font-size:18px; font-weight:500; color:var(--text); margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid var(--border); display:flex; align-items:center; gap:8px; }
+.help-section-icon { font-size:18px; }
+.help-p { font-size:14px; color:var(--text2); line-height:1.75; margin-bottom:12px; }
+.help-p b { color:var(--text); font-weight:500; }
+.help-note { background:rgba(37,99,235,0.06); border-left:3px solid var(--accent); border-radius:0 6px 6px 0; padding:10px 14px; margin:12px 0; font-size:12px; color:var(--text2); line-height:1.6; }
+.help-note b { color:var(--accent); }
+.help-warn { background:rgba(245,158,11,0.07); border-left:3px solid #D97706; border-radius:0 6px 6px 0; padding:10px 14px; margin:12px 0; font-size:12px; color:var(--text2); line-height:1.6; }
+.help-tip  { background:rgba(5,150,105,0.06); border-left:3px solid var(--income); border-radius:0 6px 6px 0; padding:10px 14px; margin:12px 0; font-size:12px; color:var(--text2); line-height:1.6; }
+.help-h3 { font-size:15px; font-weight:500; color:var(--text); margin:18px 0 8px; }
+.help-table { width:100%; border-collapse:collapse; font-size:12px; margin:12px 0; }
+.help-table th { background:var(--bg); padding:8px 12px; text-align:left; font-weight:500; color:var(--text3); border-bottom:1px solid var(--border); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+.help-table td { padding:10px 14px; border-bottom:0.5px solid var(--border); color:var(--text2); vertical-align:top; line-height:1.6; font-size:13px; }
+.help-table tr:last-child td { border-bottom:none; }
+.help-scenario { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius); padding:16px; margin:12px 0; }
+.help-scenario-title { font-size:13px; font-weight:500; color:var(--text); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+.help-step { display:flex; gap:10px; margin-bottom:10px; font-size:13px; color:var(--text2); line-height:1.6; }
+.help-step-num { width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; font-size:10px; font-weight:600; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+.help-tag { display:inline-block; font-size:10px; padding:2px 7px; border-radius:20px; font-weight:500; margin:0 2px; }
+.help-tag-exp  { background:rgba(220,38,38,0.1);  color:#dc2626; }
+.help-tag-inc  { background:rgba(5,150,105,0.1);  color:#059669; }
+.help-tag-tr   { background:rgba(37,99,235,0.1);   color:#2563eb; }
+.help-tag-obl  { background:rgba(230,81,0,0.1);    color:#e65100; }
+
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
@@ -699,7 +739,7 @@ body {
     <div class="qm-types">
       <div class="qm-type active-exp" id="qmt-expense"  onclick="setQmType('expense')">Расход</div>
       <div class="qm-type"            id="qmt-income"   onclick="setQmType('income')">Доход</div>
-      <div class="qm-type"            id="qmt-transfer" onclick="setQmType('transfer')">Трансфер</div>
+      <div class="qm-type"            id="qmt-transfer" onclick="setQmType('transfer')">Перевод</div>
       <div class="qm-type"            id="qmt-obligation" onclick="setQmType('obligation')">Обязат.</div>
     </div>
     <div class="qm-row">
@@ -773,6 +813,7 @@ body {
     <div class="nav-item" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
     <div class="nav-item" data-page="plan"><span class="nav-icon">◷</span>План</div>
     <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Кредиты</div>
+    <div class="nav-item" data-page="help"><span class="nav-icon">?</span>Справка</div>
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
     <div class="nav-item" data-page="references"><span class="nav-icon">◉</span>Справочники</div>
@@ -915,7 +956,7 @@ function loadPage(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   // Sync mobile bottom nav
-  ['dashboard','transactions','plan','references','loans'].forEach(p => {
+  ['dashboard','transactions','plan','references','loans','help'].forEach(p => {
     const icon  = document.getElementById('mnav-' + p);
     const label = document.getElementById('mnavl-' + p);
     if (icon)  icon.classList.toggle('act',  p === page);
@@ -926,6 +967,7 @@ function loadPage(page) {
   else if (page === 'plan')         loadTransactions(true);
   else if (page === 'references')   loadReferences();
   else if (page === 'loans')        loadLoans();
+  else if (page === 'help')         loadHelp();
 }
 
 // ── HELPERS ──
@@ -1059,7 +1101,7 @@ async function loadDashboard() {
         <div class="quick-btns">
           <button class="qbtn qbtn-income"   onclick="openQuickModal('income')">+ Доход</button>
           <button class="qbtn qbtn-expense"  onclick="openQuickModal('expense')">+ Расход</button>
-          <button class="qbtn qbtn-transfer" onclick="openQuickModal('transfer')">+ Трансфер</button>
+          <button class="qbtn qbtn-transfer" onclick="openQuickModal('transfer')">+ Перевод</button>
         </div>
       </div>
 
@@ -1658,25 +1700,77 @@ async function loadTransactions(isPlan) {
   }
 }
 
+const DOW_RU = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+const MONTHS_FULL = ['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
+function fmtDayHeader(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((d - today) / 86400000);
+  const prefix = diff === 0 ? 'Сегодня · ' : diff === -1 ? 'Вчера · ' : '';
+  return prefix + d.getDate() + ' ' + MONTHS_FULL[d.getMonth()+1] + ' ' + d.getFullYear() + ' · ' + DOW_RU[d.getDay()];
+}
+
 function renderTxRows(rows, isPlan) {
-  if (!rows.length) return '';
-  const cols = window._txCols || ['date','type','subcat','category','from','to','amount','note'];
-  return rows.map(r => {
-    const type = getFlowType(r.account_from, r.account_to);
-    const badges = {income:'<span class="badge badge-inc">Доход</span>',expense:'<span class="badge badge-exp">Расход</span>',transfer:'<span class="badge badge-tr">Трансфер</span>',obligation:'<span class="badge badge-obl">Обяз.</span>'};
-    const amtClass = {income:'amt-income',expense:'amt-expense',transfer:'amt-transfer',obligation:'amt-transfer'};
-    const cells = {
-      date:     `<td style="white-space:nowrap">${fmtDate(r.date)}</td>`,
-      type:     `<td style="white-space:nowrap">${badges[type]||''}</td>`,
-      subcat:   `<td>${r.categories?.subcategory||'—'}</td>`,
-      category: `<td style="color:var(--text2)">${r.categories?.category||'—'}</td>`,
-      from:     `<td style="white-space:nowrap">${r.account_from}</td>`,
-      to:       `<td style="white-space:nowrap">${r.account_to}</td>`,
-      amount:   `<td style="white-space:nowrap;text-align:right" class="${amtClass[type]||''}">${fmt(r.amount)}</td>`,
-      note:     `<td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.note||''}">${r.note||'—'}</td>`,
-    };
-    return `<tr>${cols.map(c=>cells[c]||'').join('')}<td style="white-space:nowrap"><button class="edit-btn" onclick="editTx(${r.id},${isPlan})" style="margin-right:3px">ред.</button><button class="del-btn" onclick="deleteTx(${r.id},${isPlan})">×</button></td></tr>`;
-  }).join('');
+  if (!rows.length) return '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Нет транзакций</td></tr>';
+
+  const badges = {income:'<span class="badge badge-inc">Доход</span>',expense:'<span class="badge badge-exp">Расход</span>',transfer:'<span class="badge badge-tr">Перевод</span>',obligation:'<span class="badge badge-obl">Обяз.</span>'};
+  const amtClass = {income:'amt-income',expense:'amt-expense',transfer:'amt-transfer',obligation:'amt-transfer'};
+
+  // Group by date
+  const byDate = {};
+  const dateOrder = [];
+  rows.forEach(r => {
+    const d = r.date.substring(0,10);
+    if (!byDate[d]) { byDate[d] = []; dateOrder.push(d); }
+    byDate[d].push(r);
+  });
+
+  let html = '';
+  dateOrder.forEach(date => {
+    const dayRows = byDate[date];
+
+    // Calculate day total (income - expenses - obligations)
+    let dayNet = 0;
+    dayRows.forEach(r => {
+      const type = getFlowType(r.account_from, r.account_to);
+      if (type === 'income') dayNet += +r.amount;
+      else if (type === 'expense' || type === 'obligation') dayNet -= +r.amount;
+    });
+    const netColor = dayNet >= 0 ? 'var(--income)' : 'var(--expense)';
+    const netSign  = dayNet >= 0 ? '+' : '';
+    const txWord   = dayRows.length === 1 ? 'транзакция' : dayRows.length < 5 ? 'транзакции' : 'транзакций';
+
+    // Day header row
+    html += `<tr class="tx-day-header">
+      <td colspan="9" style="padding:9px 12px;background:var(--bg);border-top:1.5px solid var(--border);border-bottom:0.5px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;font-weight:500;color:var(--text)">${fmtDayHeader(date)}</span>
+            <span style="font-size:11px;color:var(--text3)">${dayRows.length} ${txWord}</span>
+          </div>
+          <span style="font-size:12px;font-weight:500;padding:2px 10px;border-radius:20px;background:${dayNet>=0?'rgba(5,150,105,0.08)':'rgba(220,38,38,0.07)'};color:${netColor}">${netSign}${fmt(Math.abs(dayNet))}</span>
+        </div>
+      </td>
+    </tr>`;
+
+    // Transaction rows for this day
+    dayRows.forEach(r => {
+      const type = getFlowType(r.account_from, r.account_to);
+      html += `<tr>
+        <td style="white-space:nowrap;color:var(--text3);font-size:12px">${fmtDate(r.date)}</td>
+        <td style="white-space:nowrap">${badges[type]||''}</td>
+        <td>${r.categories?.subcategory||'—'}</td>
+        <td style="color:var(--text2)">${r.categories?.category||'—'}</td>
+        <td style="white-space:nowrap;color:var(--text2)">${r.account_from}</td>
+        <td style="white-space:nowrap;color:var(--text2)">${r.account_to}</td>
+        <td style="white-space:nowrap;text-align:right;font-weight:500" class="${amtClass[type]||''}">${fmt(r.amount)}</td>
+        <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.note||''}">${r.note||'—'}</td>
+        <td style="white-space:nowrap"><button class="edit-btn" onclick="editTx(${r.id},${isPlan})" style="margin-right:3px">ред.</button><button class="del-btn" onclick="deleteTx(${r.id},${isPlan})">×</button></td>
+      </tr>`;
+    });
+  });
+  return html;
 }
 
 function filterTx() {
@@ -3101,8 +3195,43 @@ async function openScheduleModal(loanId) {
     rows.push({ m, ex });
   }
 
-  tbody.innerHTML = rows.map(({m, ex}) => `
-    <tr class="${ex?.is_paid ? 'paid' : ''}" id="sched-row-${m}" data-loan="${loanId}" data-month="${m}">
+  // Find first row with balance = 0 (credit closed)
+  let closedAt = null;
+  rows.forEach(({m, ex}) => {
+    if (ex?.balance !== null && ex?.balance !== undefined && +ex.balance === 0 && closedAt === null) {
+      closedAt = m;
+    }
+  });
+
+  // Savings = interest in rows after closedAt (skipped payments)
+  const savedInterest = closedAt ? rows
+    .filter(({m, ex}) => m > closedAt && ex?.interest)
+    .reduce((s, {ex}) => s + +ex.interest, 0) : 0;
+  const originalLastMonth = rows[rows.length - 1]?.m || 0;
+  const monthsSaved = closedAt ? originalLastMonth - closedAt : 0;
+
+  let separatorInserted = false;
+  tbody.innerHTML = rows.map(({m, ex}) => {
+    let sep = '';
+    if (!separatorInserted && closedAt !== null && m > closedAt) {
+      separatorInserted = true;
+      sep = `<tr id="sched-closed-sep" style="background:rgba(5,150,105,0.04)">
+        <td colspan="8" style="padding:10px 14px;border-top:2px solid rgba(5,150,105,0.3);border-bottom:2px solid rgba(5,150,105,0.3)">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--income);font-weight:500">
+              <i class="ti ti-circle-check" style="font-size:15px" aria-hidden="true"></i>
+              Кредит закрыт на платеже №${closedAt}
+              ${monthsSaved > 0 ? '<span style="font-size:11px;font-weight:400;color:var(--text3)">· на ' + monthsSaved + ' мес. раньше</span>' : ''}
+            </div>
+            ${savedInterest > 0 ? '<span style="font-size:12px;font-weight:500;color:var(--income)">Экономия на процентах: ' + fmt(savedInterest) + '</span>' : ''}
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px;padding-left:23px">
+            Строки ниже — из оригинального банковского графика. Они устарели и требуют пересмотра.
+          </div>
+        </td>
+      </tr>`;
+    }
+    return sep + `<tr class="${ex?.is_paid ? 'paid' : ''}${closedAt && m > closedAt ? ' sched-outdated' : ''}" id="sched-row-${m}" data-loan="${loanId}" data-month="${m}">
       <td>${m}</td>
       <td><input class="sched-input" type="date" value="${ex?.date||''}" data-field="date" oninput="schedMarkDirty()" style="width:110px"></td>
       <td><input class="sched-input" type="number" value="${ex?.payment||''}" data-field="payment" oninput="schedMarkDirty()" placeholder="—"></td>
@@ -3116,7 +3245,8 @@ async function openScheduleModal(loanId) {
           <span class="toggle-slider"></span>
         </label>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 }
 
 function closeScheduleModal() {
@@ -3232,11 +3362,11 @@ async function saveSchedule() {
       return (val !== undefined && val !== '') ? val : null;
     };
     const dateVal    = get('date');
-    const payment    = parseFloat(get('payment'))       || null;
-    const principal  = parseFloat(get('principal'))     || null;
-    const interest   = parseFloat(get('interest'))      || null;
-    const balance    = parseFloat(get('balance'))       || null;
-    const extra      = parseFloat(get('extra_payment')) || null;
+    const _pv = get('payment');    const payment    = _pv !== null ? (parseFloat(_pv) || 0) || null : null;
+    const _pr = get('principal');  const principal  = _pr !== null ? parseFloat(_pr) : null;
+    const _in = get('interest');   const interest   = _in !== null ? parseFloat(_in) : null;
+    const _ba = get('balance');    const balance    = _ba !== null ? parseFloat(_ba) : null;
+    const _ex = get('extra_payment'); const extra   = _ex !== null ? (parseFloat(_ex) || null) : null;
     const isPaid     = row.querySelector('input[type=checkbox]')?.checked || false;
     const hasAnyData = dateVal || payment || principal || interest || balance || isPaid;
     if (hasAnyData) {
@@ -3255,6 +3385,9 @@ async function saveSchedule() {
 
   // Update loan balance from last paid row
   await refreshLoanBalance(_schedLoanId);
+
+  // Reload schedule to show separator if credit is closed
+  if (_schedLoanId) await openScheduleModal(_schedLoanId);
 }
 
 async function schedTogglePaid(loanId, monthNum, isPaid) {
@@ -3609,6 +3742,205 @@ function toggleLoanInterestKpi(showPaid) {
   if (label) label.textContent = showPaid ? 'Переплата текущая' : 'Переплата осталась';
   if (valEl) valEl.textContent = val > 0 ? fmt(val) : '—';
   if (sub)   sub.textContent   = showPaid ? 'Переплата осталась ⇄' : 'Переплата текущая ⇄';
+}
+
+
+function loadHelp() {
+  const mc = document.getElementById('mainContent');
+  mc.innerHTML = `
+<div class="help-wrap">
+  <div class="page-title" style="margin-bottom:4px">Справка</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Как работать с приложением</div>
+
+  <div class="help-toc">
+    <div class="help-toc-title">Содержание</div>
+    <ul class="help-toc-list">
+      <li><a href="#h-concept">1. Концепция учёта</a></li>
+      <li><a href="#h-accounts">2. Счета — типы и назначение</a></li>
+      <li><a href="#h-balance">3. Операционный и общий баланс</a></li>
+      <li><a href="#h-tx">4. Транзакции — типы и как вносить</a></li>
+      <li><a href="#h-scenarios">5. Жизненные сценарии</a></li>
+      <li><a href="#h-plan">6. Планирование</a></li>
+      <li><a href="#h-loans">7. Кредиты</a></li>
+      <li><a href="#h-start">8. С чего начать</a></li>
+    </ul>
+  </div>
+
+  <!-- 1. КОНЦЕПЦИЯ -->
+  <div class="help-section" id="h-concept">
+    <div class="help-section-title"><span class="help-section-icon">◈</span>1. Концепция учёта</div>
+    <p class="help-p">Приложение использует <b>кассовый метод учёта</b> — деньги фиксируются в момент реального движения, а не в момент возникновения обязательства. Это самый простой и интуитивный способ вести личный бюджет: заплатил за продукты — записал расход, получил зарплату — записал доход.</p>
+    <p class="help-p">Главная идея — <b>каждая операция это движение денег между двумя счетами</b>. Деньги всегда откуда-то приходят и куда-то уходят. Не бывает операции «просто расход» — деньги ушли с конкретной карты на конкретную статью расходов.</p>
+    <div class="help-note"><b>Пример:</b> Ты заплатил картой Тбанк 500 ₽ за кофе. Это движение: <b>твоя карта → Расход</b>. Карта уменьшилась на 500 ₽, расходы увеличились на 500 ₽.</div>
+    <p class="help-p">Такой подход даёт полную картину: ты всегда видишь не только сколько потратил, но и с какого счёта, и куда именно.</p>
+  </div>
+
+  <!-- 2. СЧЕТА -->
+  <div class="help-section" id="h-accounts">
+    <div class="help-section-title"><span class="help-section-icon">◉</span>2. Счета — типы и назначение</div>
+    <p class="help-p">Все счета делятся на три типа:</p>
+    <table class="help-table">
+      <thead><tr><th>Тип</th><th>Что это</th><th>Примеры</th><th>Влияет на баланс</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Актив</b></td>
+          <td>Реальные деньги которыми ты владеешь — на картах, наличными, на вкладах</td>
+          <td>твоя карта, Наличные, другая карта, Брокерский счёт, Резерв</td>
+          <td>Да</td>
+        </tr>
+        <tr>
+          <td><b>Пассив</b></td>
+          <td>Долги и обязательства — деньги которые ты должен вернуть</td>
+          <td>Обязательства (кредиты), Долг другу</td>
+          <td>Да (уменьшает)</td>
+        </tr>
+        <tr>
+          <td><b>Поток</b></td>
+          <td>Технические счета — не реальные деньги, а источники и стоки. Нужны чтобы зафиксировать откуда пришли и куда ушли деньги</td>
+          <td>Доход, Расход</td>
+          <td>Нет</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="help-note"><b>Почему «Доход» и «Расход» это счета, а не категории?</b> Потому что каждая операция — это движение между двумя счетами. Зарплата это движение: <b>Доход → твоя карта</b>. Счёт «Доход» — технический, он не хранит реальные деньги, он просто обозначает источник.</div>
+    <div class="help-h3">Включать ли счёт в баланс?</div>
+    <p class="help-p">У каждого счёта-актива есть переключатель <b>«В балансе»</b>. Если включён — остаток по этому счёту учитывается в операционном балансе на дашборде. Если выключен — счёт существует, транзакции по нему записываются, но в общий баланс он не входит.</p>
+    <div class="help-tip">Например, брокерский счёт или резервный фонд можно исключить из операционного баланса — так ты видишь только «живые» деньги которыми реально распоряжаешься в текущем месяце.</div>
+  </div>
+
+  <!-- 3. БАЛАНС -->
+  <div class="help-section" id="h-balance">
+    <div class="help-section-title"><span class="help-section-icon">◈</span>3. Операционный и общий баланс</div>
+    <div class="help-h3">Операционный баланс (Баланс опер.)</div>
+    <p class="help-p">Сумма остатков по всем активам у которых включён переключатель <b>«В балансе»</b>. Это деньги которыми ты реально управляешь прямо сейчас — карты, наличные, текущие счета.</p>
+    <div class="help-h3">Общий баланс / Net Worth</div>
+    <p class="help-p">Все активы (включая сбережения, брокерский счёт) <b>минус</b> все пассивы (кредиты, долги). Это твоя реальная финансовая стоимость — сколько у тебя осталось бы если закрыть все долги прямо сейчас.</p>
+    <div class="help-note"><b>Пример:</b> твоя карта 5 000 ₽ + Брокерский 145 000 ₽ − Кредит ОТП 263 000 ₽ = Net Worth −113 000 ₽. Это означает что долги пока превышают активы — это нормальная ситуация при наличии кредитов.</div>
+    <div class="help-h3">График баланса по дням</div>
+    <p class="help-p"><b>Зелёная линия (Факт)</b> — реальный баланс по внесённым транзакциям от начала месяца до сегодня.</p>
+    <p class="help-p"><b>Синяя пунктирная (Прогноз)</b> — продолжение графика от сегодня до конца месяца на основе плановых транзакций. Показывает где будет баланс если всё пойдёт по плану.</p>
+    <div class="help-warn">Если прогнозная линия уходит в минус — жди предупреждения под графиком. Это сигнал что нужно пересмотреть расходы или перенести крупный платёж.</div>
+  </div>
+
+  <!-- 4. ТРАНЗАКЦИИ -->
+  <div class="help-section" id="h-tx">
+    <div class="help-section-title"><span class="help-section-icon">↕</span>4. Транзакции — типы и как вносить</div>
+    <table class="help-table">
+      <thead><tr><th>Тип</th><th>Когда использовать</th><th>Откуда → Куда</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="help-tag help-tag-exp">Расход</span></td>
+          <td>Любая трата денег — еда, транспорт, услуги, развлечения</td>
+          <td>Карта / Наличные → Расход</td>
+        </tr>
+        <tr>
+          <td><span class="help-tag help-tag-inc">Доход</span></td>
+          <td>Любое поступление денег — зарплата, подработка, возврат</td>
+          <td>Доход → Карта / Наличные</td>
+        </tr>
+        <tr>
+          <td><span class="help-tag help-tag-tr">Перевод</span></td>
+          <td>Перемещение между своими счетами — перевод между картами, снятие наличных</td>
+          <td>Карта 1 → Карта 2</td>
+        </tr>
+        <tr>
+          <td><span class="help-tag help-tag-obl">Обязат.</span></td>
+          <td>Платёж по кредиту или возврат долга — деньги уходят в счёт погашения долга</td>
+          <td>Карта → Обязательства</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="help-h3">Кредитная карта</div>
+    <p class="help-p">Если ты платишь кредитной картой и погашаешь её в том же месяце — записывай операцию напрямую: <b>Карта → Расход</b>, минуя счёт «Обязательства». Кредитка здесь просто технический инструмент оплаты, а не источник долга.</p>
+    <div class="help-tip">Правило: если долг закрывается в том же месяце — это расход. Если переходит на следующий месяц — это обязательство.</div>
+  </div>
+
+  <!-- 5. СЦЕНАРИИ -->
+  <div class="help-section" id="h-scenarios">
+    <div class="help-section-title"><span class="help-section-icon">◷</span>5. Жизненные сценарии</div>
+
+    <div class="help-scenario">
+      <div class="help-scenario-title">🛒 Купил продукты за наличные</div>
+      <div class="help-step"><div class="help-step-num">1</div><div>Нажми <b>+ Расход</b> на дашборде</div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div>Откуда: <b>Наличные</b> · Куда: <b>Расход</b></div></div>
+      <div class="help-step"><div class="help-step-num">3</div><div>Подкатегория: <b>Продукты</b> · Сумма · Дата</div></div>
+    </div>
+
+    <div class="help-scenario">
+      <div class="help-scenario-title">💳 Перевёл деньги с одной карты на другую</div>
+      <div class="help-step"><div class="help-step-num">1</div><div>Нажми <b>+ Перевод</b></div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div>Откуда: <b>Карта 1</b> · Куда: <b>Карта 2</b></div></div>
+      <div class="help-step"><div class="help-step-num">3</div><div>Сумма · Дата. Категория не нужна — это не доход и не расход</div></div>
+    </div>
+
+    <div class="help-scenario">
+      <div class="help-scenario-title">💰 Получил зарплату</div>
+      <div class="help-step"><div class="help-step-num">1</div><div>Нажми <b>+ Доход</b></div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div>Откуда: <b>Доход</b> · Куда: карта на которую пришла зарплата</div></div>
+      <div class="help-step"><div class="help-step-num">3</div><div>Подкатегория: <b>Зарплата</b> · Сумма · Дата</div></div>
+    </div>
+
+    <div class="help-scenario">
+      <div class="help-scenario-title">🏦 Внёс платёж по кредиту</div>
+      <div class="help-step"><div class="help-step-num">1</div><div>Нажми <b>+ Расход</b></div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div>Откуда: карта с которой списали · Куда: <b>Обязательства</b></div></div>
+      <div class="help-step"><div class="help-step-num">3</div><div>Сумма · Дата · Нажми сохранить</div></div>
+      <div class="help-step"><div class="help-step-num">4</div><div>Открой <b>Кредиты → График платежей</b> и отметь галочку <b>«Оплачено»</b> на нужной строке</div></div>
+    </div>
+
+    <div class="help-scenario">
+      <div class="help-scenario-title">👤 Одолжил деньги другу и он вернул</div>
+      <div class="help-step"><div class="help-step-num">1</div><div><b>Когда давал:</b> Перевод · Откуда: твоя карта · Куда: создай счёт «Долг Имя» тип Актив</div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div><b>Когда вернул:</b> Перевод · Откуда: «Долг Имя» · Куда: твоя карта</div></div>
+      <div class="help-tip" style="margin:6px 0 0">Так ты всегда видишь кто и сколько тебе должен в блоке «Счета» на дашборде.</div>
+    </div>
+
+    <div class="help-scenario">
+      <div class="help-scenario-title">✈️ Потратил деньги в путешествии в другой валюте</div>
+      <div class="help-step"><div class="help-step-num">1</div><div>Записывай сумму в рублях по курсу на день операции</div></div>
+      <div class="help-step"><div class="help-step-num">2</div><div>Откуда: карта с которой списали · Куда: <b>Расход</b> · Подкатегория: соответствующая</div></div>
+      <div class="help-step"><div class="help-step-num">3</div><div>В комментарии можно указать сумму в исходной валюте для справки</div></div>
+    </div>
+  </div>
+
+  <!-- 6. ПЛАН -->
+  <div class="help-section" id="h-plan">
+    <div class="help-section-title"><span class="help-section-icon">◷</span>6. Планирование</div>
+    <p class="help-p">Страница <b>«План»</b> — это бюджет на месяц. Сюда вносишь все ожидаемые доходы и расходы до того как они произошли. На дашборде синяя пунктирная линия прогноза строится именно по этим данным.</p>
+    <div class="help-h3">Что стоит планировать</div>
+    <p class="help-p">В первую очередь — <b>фиксированные платежи</b>: аренда, кредиты, подписки, коммуналка. Они повторяются каждый месяц и их легко внести заранее. Потом — <b>переменные расходы</b> по категориям: продукты, транспорт, развлечения — средние суммы исходя из прошлых месяцев.</p>
+    <div class="help-tip">Чем подробнее план — тем точнее прогноз на графике и тем раньше ты увидишь потенциальный кассовый разрыв.</div>
+    <div class="help-h3">План vs Факт</div>
+    <p class="help-p">Блок <b>«План vs Факт»</b> на дашборде показывает по каждой категории сколько планировал потратить и сколько потратил реально. Зелёная полоска — в рамках плана. Оранжевая — близко к лимиту. Красная — лимит превышен.</p>
+  </div>
+
+  <!-- 7. КРЕДИТЫ -->
+  <div class="help-section" id="h-loans">
+    <div class="help-section-title"><span class="help-section-icon">◎</span>7. Кредиты</div>
+    <p class="help-p">Страница <b>«Кредиты»</b> — это трекер займов. Здесь ты видишь остаток по каждому кредиту, переплату и прогноз закрытия.</p>
+    <div class="help-h3">Как заполнить график платежей</div>
+    <div class="help-step"><div class="help-step-num">1</div><div>Добавь кредит — укажи начальную сумму, ставку, размер платежа и дату следующего платежа</div></div>
+    <div class="help-step"><div class="help-step-num">2</div><div>Нажми <b>«График платежей»</b> на карточке — откроется таблица с предзаполненными датами и суммами платежей</div></div>
+    <div class="help-step"><div class="help-step-num">3</div><div>Возьми банковский график платежей и перенеси колонки: тело, проценты, остаток — по каждой строке</div></div>
+    <div class="help-step"><div class="help-step-num">4</div><div>Нажми <b>«Сохранить»</b> — карточка обновится с реальными данными</div></div>
+    <div class="help-step"><div class="help-step-num">5</div><div>После каждого платежа открывай график и включай галочку <b>«Оплачено»</b> на нужной строке</div></div>
+    <div class="help-warn">Данные в графике берутся только из банковского расписания — система ничего не считает сама. Это сделано намеренно: банки могут включать страховки, округления и другие нюансы которые сложно воспроизвести точно.</div>
+    <div class="help-h3">Стратегии досрочного закрытия</div>
+    <p class="help-p">Если у тебя есть свободные деньги сверх минимального платежа — блок <b>«Досрочное закрытие»</b> покажет как быстро ты сможешь закрыть все кредиты и сколько сэкономишь на процентах. Выбери стратегию в выпадающем списке и передвинь бегунок доп. платежа.</p>
+  </div>
+
+  <!-- 8. С ЧЕГО НАЧАТЬ -->
+  <div class="help-section" id="h-start">
+    <div class="help-section-title"><span class="help-section-icon">◈</span>8. С чего начать</div>
+    <div class="help-step"><div class="help-step-num">1</div><div><b>Создай счета</b> — зайди в Справочники → Счета. Добавь все карты и наличные которыми пользуешься. Укажи текущий остаток в поле «Нач. остаток».</div></div>
+    <div class="help-step"><div class="help-step-num">2</div><div><b>Проверь категории</b> — в Справочниках уже есть базовый набор. Добавь или переименуй под свои нужды.</div></div>
+    <div class="help-step"><div class="help-step-num">3</div><div><b>Внеси транзакции</b> — начни с текущего месяца. Не обязательно вносить всё с начала года — достаточно текущего периода чтобы дашборд заработал.</div></div>
+    <div class="help-step"><div class="help-step-num">4</div><div><b>Заполни план</b> — перейди на страницу «План» и внеси ожидаемые доходы и крупные расходы месяца. Это запустит прогноз на графике.</div></div>
+    <div class="help-step"><div class="help-step-num">5</div><div><b>Добавь кредиты</b> — если есть займы, добавь их на странице «Кредиты» и заполни график платежей из банка.</div></div>
+    <div class="help-tip">Не старайся сделать всё идеально с первого раза. Начни с малого — несколько транзакций в день — и постепенно система начнёт давать полезные данные.</div>
+  </div>
+
+</div>`;
 }
 
 // ── INIT ──
