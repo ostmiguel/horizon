@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS transactions (
   note           TEXT,
   use_in_forecast BOOLEAN DEFAULT true,
   source         TEXT DEFAULT 'manual',
-  -- Generated columns
   dow   SMALLINT GENERATED ALWAYS AS (EXTRACT(DOW FROM date)::SMALLINT) STORED,
   month SMALLINT GENERATED ALWAYS AS (EXTRACT(MONTH FROM date)::SMALLINT) STORED,
   year  SMALLINT GENERATED ALWAYS AS (EXTRACT(YEAR FROM date)::SMALLINT) STORED,
@@ -67,11 +66,41 @@ CREATE TABLE IF NOT EXISTS plan (
   category_id    INTEGER REFERENCES categories(id) ON DELETE SET NULL,
   participant_id INTEGER REFERENCES participants(id) ON DELETE SET NULL,
   note           TEXT,
-  -- Generated columns
   dow   SMALLINT GENERATED ALWAYS AS (EXTRACT(DOW FROM date)::SMALLINT) STORED,
   month SMALLINT GENERATED ALWAYS AS (EXTRACT(MONTH FROM date)::SMALLINT) STORED,
   year  SMALLINT GENERATED ALWAYS AS (EXTRACT(YEAR FROM date)::SMALLINT) STORED,
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS loans (
+  id                SERIAL PRIMARY KEY,
+  name              TEXT NOT NULL,
+  initial_amount    NUMERIC(14,2) NOT NULL,
+  current_balance   NUMERIC(14,2) NOT NULL,
+  rate              NUMERIC(6,4) NOT NULL,
+  monthly_payment   NUMERIC(14,2) NOT NULL,
+  payment_number    INTEGER DEFAULT 1,
+  total_payments    INTEGER NOT NULL,
+  next_payment_date DATE,
+  color             TEXT DEFAULT '#e24b4a',
+  is_active         BOOLEAN DEFAULT true,
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS loan_schedule (
+  id            SERIAL PRIMARY KEY,
+  loan_id       INTEGER REFERENCES loans(id) ON DELETE CASCADE,
+  month_num     INTEGER NOT NULL,
+  date          DATE,
+  payment       NUMERIC(14,2),
+  principal     NUMERIC(14,2),
+  interest      NUMERIC(14,2),
+  balance       NUMERIC(14,2),
+  extra_payment NUMERIC(14,2),
+  is_paid       BOOLEAN DEFAULT false,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT loan_schedule_loan_month_unique UNIQUE (loan_id, month_num)
 );
 
 
@@ -85,13 +114,12 @@ CREATE INDEX IF NOT EXISTS idx_transactions_category_id   ON transactions(catego
 
 CREATE INDEX IF NOT EXISTS idx_plan_date          ON plan(date);
 CREATE INDEX IF NOT EXISTS idx_plan_year_month    ON plan(year, month);
-CREATE INDEX IF NOT EXISTS idx_plan_account_from  ON plan(account_from);
-CREATE INDEX IF NOT EXISTS idx_plan_account_to    ON plan(account_to);
+
+CREATE INDEX IF NOT EXISTS idx_loan_schedule_loan_id ON loan_schedule(loan_id);
 
 
 -- ── VIEWS ───────────────────────────────────────────────────
 
--- Current balance per account
 CREATE OR REPLACE VIEW account_balance AS
 SELECT
   a.name,
@@ -110,7 +138,6 @@ LEFT JOIN transactions t ON t.account_from = a.name OR t.account_to = a.name
 GROUP BY a.id, a.name, a.account_type, a.color, a.include_in_balance, a.initial_balance
 ORDER BY a.id;
 
--- Monthly summary
 CREATE OR REPLACE VIEW monthly_summary AS
 SELECT
   year, month,
@@ -122,7 +149,6 @@ FROM transactions
 GROUP BY year, month
 ORDER BY year, month;
 
--- Category expense summary
 CREATE OR REPLACE VIEW category_expense_summary AS
 SELECT
   c.group_name, c.category, c.subcategory,
@@ -133,21 +159,6 @@ JOIN categories c ON t.category_id = c.id
 WHERE t.account_to = 'Расход'
 GROUP BY c.group_name, c.category, c.subcategory, t.year, t.month;
 
--- Daily running balance
-CREATE OR REPLACE VIEW daily_balance AS
-SELECT
-  date,
-  SUM(SUM(
-    CASE
-      WHEN t.account_to   IN (SELECT name FROM accounts WHERE account_type = 'Актив' AND include_in_balance) THEN  t.amount
-      WHEN t.account_from IN (SELECT name FROM accounts WHERE account_type = 'Актив' AND include_in_balance) THEN -t.amount
-      ELSE 0
-    END
-  )) OVER (ORDER BY date) AS running_balance
-FROM transactions t
-GROUP BY date
-ORDER BY date;
-
 
 -- ── SECURITY ────────────────────────────────────────────────
 
@@ -156,29 +167,31 @@ ALTER TABLE categories    DISABLE ROW LEVEL SECURITY;
 ALTER TABLE participants  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions  DISABLE ROW LEVEL SECURITY;
 ALTER TABLE plan          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE loans         DISABLE ROW LEVEL SECURITY;
+ALTER TABLE loan_schedule DISABLE ROW LEVEL SECURITY;
 
-GRANT ALL ON accounts     TO anon, authenticated;
-GRANT ALL ON categories   TO anon, authenticated;
-GRANT ALL ON participants TO anon, authenticated;
-GRANT ALL ON transactions TO anon, authenticated;
-GRANT ALL ON plan         TO anon, authenticated;
+GRANT ALL ON accounts      TO anon, authenticated;
+GRANT ALL ON categories    TO anon, authenticated;
+GRANT ALL ON participants  TO anon, authenticated;
+GRANT ALL ON transactions  TO anon, authenticated;
+GRANT ALL ON plan          TO anon, authenticated;
+GRANT ALL ON loans         TO anon, authenticated;
+GRANT ALL ON loan_schedule TO anon, authenticated;
 
 GRANT SELECT ON account_balance          TO anon, authenticated;
 GRANT SELECT ON monthly_summary          TO anon, authenticated;
 GRANT SELECT ON category_expense_summary TO anon, authenticated;
-GRANT SELECT ON daily_balance            TO anon, authenticated;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 
 
 -- ── DEFAULT DATA ─────────────────────────────────────────────
--- Minimal starter accounts — edit names and colors to your preference
 
 INSERT INTO accounts (name, account_type, color, initial_balance, include_in_balance) VALUES
   ('Карта (основная)', 'Актив',  '#4682B4', 0, true),
   ('Наличные',         'Актив',  '#888780', 0, true),
   ('Резерв',           'Актив',  '#B0C4DE', 0, false),
-  ('Обязательства',    'Пассив', '#CD5C5C', 0, true),
+  ('Обязательства',    'Пассив', '#CD5C5C', 0, false),
   ('Доход',            'Поток',  '#6B8E23', 0, false),
   ('Расход',           'Поток',  '#FF4500', 0, false)
 ON CONFLICT (name) DO NOTHING;
@@ -193,4 +206,5 @@ ON CONFLICT DO NOTHING;
 -- 2. Add your categories or import from a template
 -- 3. Set initial balances to your current account balances
 -- 4. Start adding transactions
+-- 5. Add loans in the Loans section if needed
 -- ============================================================
