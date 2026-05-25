@@ -226,7 +226,7 @@ body {
 .with-panel { display: flex; gap: 0; }
 .panel-main { flex: 1; min-width: 0; }
 .side-panel {
-  width: 260px; flex-shrink: 0;
+  width: 320px; flex-shrink: 0;
   background: var(--bg2); border-left: 1px solid var(--border);
   padding: 16px;
 }
@@ -783,6 +783,86 @@ body {
       <input class="field-input" type="text" id="qmNote" placeholder="необязательно">
     </div>
     <button class="qm-save" id="qmSave" onclick="saveQuickTx()">Сохранить</button>
+  </div>
+</div>
+
+
+<!-- RECURRING MODAL -->
+<div class="quick-modal-overlay" id="recurringModal">
+  <div class="quick-modal" style="max-width:480px">
+    <div class="qm-title">
+      <span>Повторяющийся платёж</span>
+      <button class="qm-close" onclick="closeRecurringModal()">✕</button>
+    </div>
+
+    <div class="qm-types" style="grid-template-columns:repeat(3,1fr)">
+      <div class="qm-type active-exp" id="rqmt-expense"   onclick="setRqmType('expense')">Расход</div>
+      <div class="qm-type"            id="rqmt-income"    onclick="setRqmType('income')">Доход</div>
+      <div class="qm-type"            id="rqmt-transfer"  onclick="setRqmType('transfer')">Перевод</div>
+    </div>
+
+    <div class="qm-row">
+      <div class="field" style="margin:0">
+        <div class="field-label">Сумма, ₽</div>
+        <input class="field-input" type="number" id="rAmount" placeholder="0" min="0.01" step="0.01">
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Дата первого платежа</div>
+        <input class="field-input" type="date" id="rStartDate">
+      </div>
+    </div>
+
+    <div class="qm-row">
+      <div class="field" style="margin:0">
+        <div class="field-label">Откуда</div>
+        <select class="field-select" id="rFrom"></select>
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Куда</div>
+        <select class="field-select" id="rTo"></select>
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:8px" id="rSubcatRow">
+      <div class="field-label">Подкатегория</div>
+      <select class="field-select" id="rSubcat" onchange="onRSubcatChange()">
+        <option value="">— выбери —</option>
+      </select>
+    </div>
+    <div class="qm-row" id="rCatRow" style="margin-bottom:8px">
+      <div class="field" style="margin:0">
+        <div class="field-label">Категория</div>
+        <div class="field-input field-auto" id="rCat" style="font-size:11px;color:var(--accent)">—</div>
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Группа</div>
+        <div class="field-input field-auto" id="rGroup" style="font-size:11px;color:var(--accent)">—</div>
+      </div>
+    </div>
+
+    <div class="qm-row">
+      <div class="field" style="margin:0">
+        <div class="field-label">Периодичность</div>
+        <select class="field-select" id="rFreq">
+          <option value="monthly">Каждый месяц</option>
+          <option value="weekly">Каждую неделю</option>
+          <option value="daily">Каждый день</option>
+        </select>
+      </div>
+      <div class="field" style="margin:0">
+        <div class="field-label">Дата окончания</div>
+        <input class="field-input" type="date" id="rEndDate" placeholder="бессрочно">
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:12px">
+      <div class="field-label">Комментарий</div>
+      <input class="field-input" type="text" id="rNote" placeholder="необязательно">
+    </div>
+
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px" id="rPreview"></div>
+
+    <button class="qm-save" id="rSave" onclick="saveRecurring()">Создать записи в плане</button>
   </div>
 </div>
 
@@ -1644,6 +1724,7 @@ async function loadTransactions(isPlan) {
           <button class="qbtn qbtn-income"   onclick="openTxForm('income',${isPlan})">+ Доход</button>
           <button class="qbtn qbtn-expense"  onclick="openTxForm('expense',${isPlan})">+ Расход</button>
           <button class="qbtn qbtn-transfer" onclick="openTxForm('transfer',${isPlan})">+ Перевод</button>
+
         </div>
       </div>
       <div class="card">
@@ -1934,7 +2015,71 @@ function buildTxForm(activeType, isPlan) {
     <div class="field"><div class="field-label">Комментарий</div>
       <input class="field-input" type="text" id="fNote" placeholder="необязательно">
     </div>
+
+    <div style="margin-bottom:10px;padding:10px 0;border-top:0.5px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <label class="toggle">
+          <input type="checkbox" id="fRecurring" onchange="toggleRecurringFields()">
+          <span class="toggle-slider"></span>
+        </label>
+        <span style="font-size:12px;color:var(--text2)">Повторяющийся платёж</span>
+      </div>
+      <div id="recurringFields" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="field" style="margin:0">
+            <div class="field-label">Периодичность</div>
+            <select class="field-select" id="fFreq" onchange="updateTxRecurringPreview()">
+              <option value="monthly">Каждый месяц</option>
+              <option value="weekly">Каждую неделю</option>
+              <option value="daily">Каждый день</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0">
+            <div class="field-label">Дата окончания</div>
+            <input class="field-input" type="date" id="fEndDate" onchange="updateTxRecurringPreview()" placeholder="до конца года">
+          </div>
+        </div>
+        <div id="fRecurringPreview" style="font-size:11px;color:var(--accent);padding:4px 0"></div>
+      </div>
+    </div>
+
     <button class="save-btn" onclick="saveTx(${isPlan})" id="saveTxBtn">Сохранить</button>`;
+}
+
+function toggleRecurringFields() {
+  const cb = document.getElementById('fRecurring');
+  const fields = document.getElementById('recurringFields');
+  if (fields) fields.style.display = cb?.checked ? 'block' : 'none';
+  if (cb?.checked) updateTxRecurringPreview();
+}
+
+function updateTxRecurringPreview() {
+  const preview = document.getElementById('fRecurringPreview');
+  if (!preview) return;
+  const date    = document.getElementById('fDate')?.value;
+  const end     = document.getElementById('fEndDate')?.value;
+  const freq    = document.getElementById('fFreq')?.value;
+  const amount  = parseFloat(document.getElementById('fAmount')?.value);
+  if (!date) { preview.textContent = ''; return; }
+
+  // End of current year if no end date
+  const startD  = new Date(date + 'T00:00:00');
+  const endD    = end ? new Date(end + 'T00:00:00') : new Date(startD.getFullYear(), 11, 31);
+  let count = 0, cur = new Date(startD);
+  // Skip first date (already being saved as the transaction itself)
+  if (freq === 'monthly')     cur.setMonth(cur.getMonth() + 1);
+  else if (freq === 'weekly') cur.setDate(cur.getDate() + 7);
+  else                        cur.setDate(cur.getDate() + 1);
+  while (cur <= endD && count < 500) {
+    count++;
+    if (freq === 'monthly')     cur.setMonth(cur.getMonth() + 1);
+    else if (freq === 'weekly') cur.setDate(cur.getDate() + 7);
+    else                        cur.setDate(cur.getDate() + 1);
+  }
+  const freqLabel = freq === 'monthly' ? 'месяц' : freq === 'weekly' ? 'неделю' : 'день';
+  const endLabel  = end ? `до ${new Date(end).toLocaleDateString('ru-RU')}` : 'до конца года';
+  const totalStr  = !isNaN(amount) && count > 0 ? ` · итого ${fmt(amount * count)}` : '';
+  preview.innerHTML = `Будет создано <b>${count}</b> плановых записей · каждый ${freqLabel} · ${endLabel}${totalStr}`;
 }
 
 function onSubcatChange() {
@@ -1975,7 +2120,32 @@ async function saveTx(isPlan) {
     const { error } = await sb.from(tbl).insert(row);
     if (error) throw error;
 
-    toast('✓ Сохранено');
+    // Handle recurring
+    const isRecurring = document.getElementById('fRecurring')?.checked;
+    if (isRecurring) {
+      const freq   = document.getElementById('fFreq')?.value || 'monthly';
+      const endVal = document.getElementById('fEndDate')?.value;
+      const startD = new Date(date + 'T00:00:00');
+      const endD   = endVal ? new Date(endVal + 'T00:00:00') : new Date(startD.getFullYear(), 11, 31);
+      let cur = new Date(startD);
+      if (freq === 'monthly')     cur.setMonth(cur.getMonth() + 1);
+      else if (freq === 'weekly') cur.setDate(cur.getDate() + 7);
+      else                        cur.setDate(cur.getDate() + 1);
+      const planRows = [];
+      while (cur <= endD && planRows.length < 500) {
+        const d = cur.getFullYear() + '-' + String(cur.getMonth()+1).padStart(2,'0') + '-' + String(cur.getDate()).padStart(2,'0');
+        planRows.push({ date: d, amount, account_from: from, account_to: to, category_id: catId||null, note: note||null, source: 'recurring' });
+        if (freq === 'monthly')     cur.setMonth(cur.getMonth() + 1);
+        else if (freq === 'weekly') cur.setDate(cur.getDate() + 7);
+        else                        cur.setDate(cur.getDate() + 1);
+      }
+      for (let i = 0; i < planRows.length; i += 50) {
+        await sb.from('plan').insert(planRows.slice(i, i + 50));
+      }
+      toast('✓ Сохранено + ' + planRows.length + ' плановых записей');
+    } else {
+      toast('✓ Сохранено');
+    }
     await loadMeta();
     loadTransactions(isPlan);
   } catch(err) {
@@ -2573,7 +2743,11 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
       const d = new Date(p.date); d.setHours(0,0,0,0);
       return d > today && d <= in3days && +p.amount >= 2000;
     })
-    .sort((a,b) => new Date(a.date)-new Date(b.date));
+    .sort((a,b) => {
+      const dateDiff = new Date(a.date) - new Date(b.date);
+      if (dateDiff !== 0) return dateDiff;
+      return +b.amount - +a.amount; // largest first on same day
+    });
 
   if (upcoming.length > 0) {
     const p = upcoming[0];
@@ -4004,6 +4178,191 @@ function loadHelp() {
 
 </div>`;
 }
+
+
+// ── RECURRING PAYMENTS ──
+let _rqmType = 'expense';
+
+function openRecurringModal() {
+  _rqmType = 'expense';
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('rStartDate').value = today;
+  document.getElementById('rEndDate').value = '';
+  document.getElementById('rAmount').value = '';
+  document.getElementById('rNote').value = '';
+  const btn = document.getElementById('rSave');
+  if (btn) { btn.disabled = false; }
+  setRqmType('expense');
+  document.getElementById('recurringModal').classList.add('open');
+  setTimeout(() => document.getElementById('rAmount')?.focus(), 100);
+  updateRecurringPreview();
+}
+
+function closeRecurringModal() {
+  document.getElementById('recurringModal').classList.remove('open');
+}
+
+function setRqmType(type) {
+  _rqmType = type;
+  ['expense','income','transfer'].forEach(t => {
+    const el = document.getElementById('rqmt-' + t);
+    if (el) el.className = 'qm-type' + (t === type ? ` active-${t==='income'?'inc':t==='expense'?'exp':'tr'}` : '');
+  });
+
+  const realAccs = accounts_cache.filter(a => a.account_type === 'Актив');
+  const fromSel  = document.getElementById('rFrom');
+  const toSel    = document.getElementById('rTo');
+  const makeOpts = list => list.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+
+  if (type === 'income') {
+    fromSel.innerHTML = '<option value="Доход">Доход</option>';
+    toSel.innerHTML   = makeOpts(realAccs);
+  } else if (type === 'expense') {
+    fromSel.innerHTML = makeOpts(realAccs);
+    toSel.innerHTML   = '<option value="Расход">Расход</option>';
+  } else {
+    fromSel.innerHTML = makeOpts(accounts_cache.filter(a => a.account_type !== 'Поток'));
+    toSel.innerHTML   = makeOpts(accounts_cache.filter(a => a.account_type !== 'Поток'));
+  }
+
+  const subcatRow = document.getElementById('rSubcatRow');
+  const catRow    = document.getElementById('rCatRow');
+  const subcatSel = document.getElementById('rSubcat');
+  if (type === 'transfer') {
+    if (subcatRow) subcatRow.style.display = 'none';
+    if (catRow)    catRow.style.display    = 'none';
+  } else {
+    if (subcatRow) subcatRow.style.display = '';
+    if (catRow)    catRow.style.display    = '';
+    const filtered = cats.filter(c =>
+      type === 'income'  ? c.group_name === 'Доходы' :
+      type === 'expense' ? c.group_name.startsWith('Расходы') : false
+    );
+    subcatSel.innerHTML = '<option value="">— выбери —</option>' +
+      filtered.map(c => `<option value="${c.id}">${c.subcategory}</option>`).join('');
+  }
+  const catEl   = document.getElementById('rCat');
+  const groupEl = document.getElementById('rGroup');
+  if (catEl)   catEl.textContent   = '—';
+  if (groupEl) groupEl.textContent = '—';
+}
+
+function onRSubcatChange() {
+  const sel = document.getElementById('rSubcat');
+  const opt = sel?.options[sel.selectedIndex];
+  const catEl   = document.getElementById('rCat');
+  const groupEl = document.getElementById('rGroup');
+  if (opt?.value) {
+    const cat = cats.find(c => c.id === parseInt(opt.value));
+    if (catEl)   catEl.textContent   = cat?.category   || '—';
+    if (groupEl) groupEl.textContent = cat?.group_name || '—';
+  } else {
+    if (catEl)   catEl.textContent   = '—';
+    if (groupEl) groupEl.textContent = '—';
+  }
+  updateRecurringPreview();
+}
+
+function updateRecurringPreview() {
+  const preview  = document.getElementById('rPreview');
+  if (!preview) return;
+  const start    = document.getElementById('rStartDate')?.value;
+  const end      = document.getElementById('rEndDate')?.value;
+  const freq     = document.getElementById('rFreq')?.value;
+  const amount   = parseFloat(document.getElementById('rAmount')?.value);
+
+  if (!start) { preview.textContent = ''; return; }
+
+  const count = countRecurringDates(start, end, freq);
+  const freqLabel = freq === 'monthly' ? 'месяц' : freq === 'weekly' ? 'неделю' : 'день';
+  const total = isNaN(amount) ? '' : ` · итого ${fmt(amount * count)}`;
+  const endLabel = end ? ` до ${new Date(end).toLocaleDateString('ru-RU')}` : ' бессрочно (до конца следующего года)';
+  preview.innerHTML = `<span style="color:var(--accent)">Будет создано ${count} записей</span> · каждый ${freqLabel}${endLabel}${total}`;
+}
+
+function countRecurringDates(start, end, freq) {
+  const startD = new Date(start + 'T00:00:00');
+  const endD   = end ? new Date(end + 'T00:00:00') : new Date(startD.getFullYear() + 1, startD.getMonth(), startD.getDate());
+  let count = 0, cur = new Date(startD);
+  while (cur <= endD && count < 500) {
+    count++;
+    if (freq === 'monthly')     cur.setMonth(cur.getMonth() + 1);
+    else if (freq === 'weekly') cur.setDate(cur.getDate() + 7);
+    else                        cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function generateRecurringDates(start, end, freq) {
+  const startD = new Date(start + 'T00:00:00');
+  const endD   = end ? new Date(end + 'T00:00:00') : new Date(startD.getFullYear() + 1, startD.getMonth(), startD.getDate());
+  const dates = [], cur = new Date(startD);
+  while (cur <= endD && dates.length < 500) {
+    dates.push(cur.toISOString().split('T')[0]);
+    if (freq === 'monthly')     cur.setMonth(cur.getMonth() + 1);
+    else if (freq === 'weekly') cur.setDate(cur.getDate() + 7);
+    else                        cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+async function saveRecurring() {
+  const btn = document.getElementById('rSave');
+  if (btn) btn.disabled = true;
+
+  const amount  = parseFloat(document.getElementById('rAmount')?.value);
+  const start   = document.getElementById('rStartDate')?.value;
+  const end     = document.getElementById('rEndDate')?.value || null;
+  const from    = document.getElementById('rFrom')?.value;
+  const to      = document.getElementById('rTo')?.value;
+  const freq    = document.getElementById('rFreq')?.value;
+  const note    = document.getElementById('rNote')?.value || null;
+  const subcatEl = document.getElementById('rSubcat');
+  const catId   = subcatEl?.value ? parseInt(subcatEl.value) : null;
+
+  if (!amount || amount <= 0 || !start || !from || !to) {
+    toast('Заполни обязательные поля', false);
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  // Save to recurring table
+  const { data: recRow, error: recErr } = await sb.from('recurring').insert({
+    amount, account_from: from, account_to: to,
+    category_id: catId, note, frequency: freq,
+    start_date: start, end_date: end, is_active: true
+  }).select().single();
+
+  if (recErr) { toast('Ошибка: ' + recErr.message, false); if (btn) btn.disabled = false; return; }
+
+  // Generate plan entries
+  const dates = generateRecurringDates(start, end, freq);
+  const rows = dates.map(d => ({
+    date: d, amount, account_from: from, account_to: to,
+    category_id: catId, note, source: 'recurring'
+  }));
+
+  // Insert in batches of 50
+  for (let i = 0; i < rows.length; i += 50) {
+    const { error } = await sb.from('plan').insert(rows.slice(i, i + 50));
+    if (error) { toast('Ошибка создания записей: ' + error.message, false); if (btn) btn.disabled = false; return; }
+  }
+
+  closeRecurringModal();
+  toast(`✓ Создано ${dates.length} плановых записей`);
+  loadTransactions(true);
+}
+
+// Close on overlay click
+document.getElementById('recurringModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('recurringModal')) closeRecurringModal();
+});
+
+// Update preview on input changes
+['rStartDate','rEndDate','rFreq','rAmount'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', updateRecurringPreview);
+});
+
 
 // ── INIT ──
 window.onload = async () => {
