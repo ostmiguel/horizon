@@ -740,7 +740,7 @@ body {
       <div class="qm-type active-exp" id="qmt-expense"  onclick="setQmType('expense')">Расход</div>
       <div class="qm-type"            id="qmt-income"   onclick="setQmType('income')">Доход</div>
       <div class="qm-type"            id="qmt-transfer" onclick="setQmType('transfer')">Перевод</div>
-      <div class="qm-type"            id="qmt-obligation" onclick="setQmType('obligation')">Обязат.</div>
+      <div class="qm-type"            id="qmt-obligation" onclick="setQmType('obligation')">Обязательство</div>
     </div>
     <div class="qm-row">
       <div class="field" style="margin:0">
@@ -1643,7 +1643,7 @@ async function loadTransactions(isPlan) {
         <div class="quick-btns">
           <button class="qbtn qbtn-income"   onclick="openTxForm('income',${isPlan})">+ Доход</button>
           <button class="qbtn qbtn-expense"  onclick="openTxForm('expense',${isPlan})">+ Расход</button>
-          <button class="qbtn qbtn-transfer" onclick="openTxForm('transfer',${isPlan})">+ Трансфер</button>
+          <button class="qbtn qbtn-transfer" onclick="openTxForm('transfer',${isPlan})">+ Перевод</button>
         </div>
       </div>
       <div class="card">
@@ -1670,14 +1670,14 @@ async function loadTransactions(isPlan) {
             <div style="overflow-x:auto">
               <table class="tx-tbl" id="txTable">
                 <thead id="txThead"><tr>
-                  <th draggable="true" data-col="date" class="tx-col-drag">Дата</th>
-                  <th draggable="true" data-col="type" class="tx-col-drag">Тип</th>
-                  <th draggable="true" data-col="subcat" class="tx-col-drag">Подкатегория</th>
-                  <th draggable="true" data-col="category" class="tx-col-drag">Категория</th>
-                  <th draggable="true" data-col="from" class="tx-col-drag">Откуда</th>
-                  <th draggable="true" data-col="to" class="tx-col-drag">Куда</th>
-                  <th draggable="true" data-col="amount" class="tx-col-drag">Сумма</th>
-                  <th draggable="true" data-col="note" class="tx-col-drag">Комментарий</th>
+                  <th>Дата</th>
+                  <th style="width:90px">Тип</th>
+                  <th>Откуда</th>
+                  <th>Куда</th>
+                  <th style="text-align:right">Сумма</th>
+                  <th style="color:var(--text3);font-weight:400">Подкатегория</th>
+                  <th style="color:var(--text3);font-weight:400">Категория</th>
+                  <th style="color:var(--text3);font-weight:400">Комментарий</th>
                   <th style="width:70px"></th>
                 </tr></thead>
                 <tbody id="txBody">${renderTxRows(rows||[], isPlan)}</tbody>
@@ -1714,7 +1714,7 @@ function fmtDayHeader(dateStr) {
 function renderTxRows(rows, isPlan) {
   if (!rows.length) return '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Нет транзакций</td></tr>';
 
-  const badges = {income:'<span class="badge badge-inc">Доход</span>',expense:'<span class="badge badge-exp">Расход</span>',transfer:'<span class="badge badge-tr">Перевод</span>',obligation:'<span class="badge badge-obl">Обяз.</span>'};
+  const badges = {income:'<span class="badge badge-inc">Доход</span>',expense:'<span class="badge badge-exp">Расход</span>',transfer:'<span class="badge badge-tr">Перевод</span>',obligation:'<span class="badge badge-obl">Обязательство</span>'};
   const amtClass = {income:'amt-income',expense:'amt-expense',transfer:'amt-transfer',obligation:'amt-transfer'};
 
   // Group by date
@@ -1758,13 +1758,13 @@ function renderTxRows(rows, isPlan) {
     dayRows.forEach(r => {
       const type = getFlowType(r.account_from, r.account_to);
       html += `<tr>
-        <td style="white-space:nowrap;color:var(--text3);font-size:12px">${fmtDate(r.date)}</td>
+        <td style="white-space:nowrap;color:var(--text3);font-size:12px;padding-left:12px">${fmtDate(r.date)}</td>
         <td style="white-space:nowrap">${badges[type]||''}</td>
-        <td>${r.categories?.subcategory||'—'}</td>
-        <td style="color:var(--text2)">${r.categories?.category||'—'}</td>
         <td style="white-space:nowrap;color:var(--text2)">${r.account_from}</td>
         <td style="white-space:nowrap;color:var(--text2)">${r.account_to}</td>
         <td style="white-space:nowrap;text-align:right;font-weight:500" class="${amtClass[type]||''}">${fmt(r.amount)}</td>
+        <td style="color:var(--text3);font-size:12px">${r.categories?.subcategory||'—'}</td>
+        <td style="color:var(--text3);font-size:12px">${r.categories?.category||'—'}</td>
         <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.note||''}">${r.note||'—'}</td>
         <td style="white-space:nowrap"><button class="edit-btn" onclick="editTx(${r.id},${isPlan})" style="margin-right:3px">ред.</button><button class="del-btn" onclick="deleteTx(${r.id},${isPlan})">×</button></td>
       </tr>`;
@@ -1810,7 +1810,7 @@ function updateSubcatFilter() {
 
 // ── COLUMN DRAG & DROP ──
 let _dragColIdx = null;
-window._txCols = JSON.parse(localStorage.getItem('tx_cols') || 'null') || ['date','type','subcat','category','from','to','amount','note'];
+window._txCols = ['date','type','from','to','amount','subcat','category','note'];
 
 function initColDrag() {
   const ths = document.querySelectorAll('.tx-col-drag');
@@ -1853,15 +1853,17 @@ function rebuildTxHeaders() {
   const cols = window._txCols;
   const tr = thead.querySelector('tr');
   const actionTh = tr.lastElementChild;
-  // Remove all except last
   while (tr.children.length > 1) tr.removeChild(tr.firstElementChild);
   cols.forEach(c => {
     const th = document.createElement('th');
-    th.draggable = true; th.dataset.col = c; th.className = 'tx-col-drag';
     th.textContent = COL_LABELS[c]||c;
+    if (c === 'amount') th.style.textAlign = 'right';
+    if (['subcat','category','note'].includes(c)) {
+      th.style.color = 'var(--text3)';
+      th.style.fontWeight = '400';
+    }
     tr.insertBefore(th, actionTh);
   });
-  setTimeout(initColDrag, 0);
 }
 
 function openTxForm(type, isPlan) {
@@ -1873,8 +1875,8 @@ function buildTxForm(activeType, isPlan) {
   const types = [
     {k:'income',   label:'Доход',    cls:'active-inc'},
     {k:'expense',  label:'Расход',   cls:'active-exp'},
-    {k:'transfer', label:'Трансфер', cls:'active-tr'},
-    {k:'obligation',label:'Обязательства',cls:'active-obl'},
+    {k:'transfer', label:'Перевод', cls:'active-tr'},
+    {k:'obligation',label:'Обязательство',cls:'active-obl'},
   ];
 
   const subCatsFiltered = cats.filter(c => {
@@ -2164,6 +2166,7 @@ function renderAccRows(rows) {
     </td>
     <td style="white-space:nowrap">
       <button class="edit-btn" onclick="editAccount(${a.id})" style="margin-right:3px">ред.</button>
+      ${!['Доход','Расход','Обязательства','Дебиторка'].includes(a.name) ? `<button class="del-btn" onclick="deleteAccount(${a.id},'${a.name}')" style="margin-right:3px">×</button>` : ''}
       <button class="edit-btn" onclick="moveAcc(${idx},-1)" style="padding:2px 5px" ${idx===0?'disabled':''}>↑</button>
       <button class="edit-btn" onclick="moveAcc(${idx},1)"  style="padding:2px 5px" ${idx===rows.length-1?'disabled':''}>↓</button>
     </td>
@@ -2177,7 +2180,10 @@ function renderCatRows(rows) {
     <td style="color:var(--text2)">${c.category}</td>
     <td><span class="tag">${c.group_name}</span></td>
     <td>${c.character?`<span class="tag">${c.character}</span>`:'—'}</td>
-    <td><button class="del-btn" onclick="deleteCat(${c.id})">×</button></td>
+    <td style="white-space:nowrap">
+      <button class="edit-btn" onclick="editCat(${c.id})" style="margin-right:4px">ред.</button>
+      <button class="del-btn" onclick="deleteCat(${c.id})">×</button>
+    </td>
   </tr>`).join('');
 }
 
@@ -2320,19 +2326,23 @@ async function saveAccount(btn) {
 async function editAccount(id) {
   const { data: acc } = await sb.from('accounts').select('*').eq('id', id).single();
   if (!acc) return;
+  const isSystemAcc = ['Доход','Расход','Обязательства','Дебиторка'].includes(acc.name);
+  const isRenameOnly = ['Обязательства','Дебиторка'].includes(acc.name);
   const mo = document.createElement('div');
   mo.className = 'modal-overlay open';
   mo.innerHTML = `<div class="modal">
     <div class="modal-title">Редактировать счёт</div>
-    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eAccName" value="${acc.name}"/></div>
-    <div class="field"><div class="field-label">Начальный остаток</div><input class="field-input" type="number" id="eAccBal" value="${acc.initial_balance}"/></div>
+    ${isRenameOnly ? '<div style="font-size:11px;color:var(--accent);padding:6px 0 10px">Системный счёт — можно изменить только название и цвет</div>' : ''}
+    ${isSystemAcc && !isRenameOnly ? '<div style="font-size:11px;color:var(--text3);padding:6px 0 10px">Системный счёт — редактирование ограничено</div>' : ''}
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eAccName" value="${acc.name}" ${isSystemAcc && !isRenameOnly ? 'disabled' : ''}/></div>
+    ${!isSystemAcc ? `<div class="field"><div class="field-label">Начальный остаток</div><input class="field-input" type="number" id="eAccBal" value="${acc.initial_balance}"/></div>` : `<input type="hidden" id="eAccBal" value="${acc.initial_balance}">`}
     <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="eAccColor" value="${acc.color||'#0E7490'}"/></div>
-    <div class="field"><div class="field-label">В оперативный баланс</div>
+    ${!isSystemAcc ? `<div class="field"><div class="field-label">В оперативный баланс</div>
       <div class="toggle-wrap">
         <label class="toggle"><input type="checkbox" id="eAccInBal" ${acc.include_in_balance?'checked':''}><span class="toggle-slider"></span></label>
         <span class="toggle-label">Включать в расчёт баланса</span>
       </div>
-    </div>
+    </div>` : `<input type="hidden" id="eAccInBal" value="${acc.include_in_balance}">`}
     <div class="modal-btns">
       <button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
       <button class="btn-primary" onclick="updateAccount(${id},this)">Сохранить</button>
@@ -2350,6 +2360,15 @@ async function updateAccount(id, btn) {
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   btn.closest('.modal-overlay').remove();
   toast('✓ Сохранено');
+  await loadMeta();
+  loadReferences();
+}
+
+async function deleteAccount(id, name) {
+  if (!confirm(`Удалить счёт «${name}»? Транзакции по нему останутся в базе но счёт будет удалён.`)) return;
+  const { error } = await sb.from('accounts').delete().eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  toast('✓ Счёт удалён');
   await loadMeta();
   loadReferences();
 }
@@ -2393,6 +2412,48 @@ async function saveCategory(btn) {
   btn.closest('.modal-overlay').remove();
   toast('✓ Подкатегория добавлена');
   await loadMeta();
+  loadReferences();
+}
+
+function editCat(id) {
+  const c = (window._allCats||[]).find(c => c.id === id);
+  if (!c) return;
+
+  // Inline edit — replace the row with an edit form
+  const row = document.querySelector(`#catBody tr`);
+  const tbody = document.getElementById('catBody');
+  if (!tbody) return;
+
+  // Find which tr corresponds to this id
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const targetRow = rows.find(r => r.innerHTML.includes(`editCat(${id})`));
+  if (!targetRow) return;
+
+  targetRow.innerHTML = `
+    <td><input class="field-input" id="eSub_${id}" value="${c.subcategory}" style="padding:4px 8px;font-size:12px;width:140px"></td>
+    <td><input class="field-input" id="eCat_${id}" value="${c.category}" style="padding:4px 8px;font-size:12px;width:120px"></td>
+    <td><input class="field-input" id="eGrp_${id}" value="${c.group_name}" style="padding:4px 8px;font-size:12px;width:140px"></td>
+    <td><input class="field-input" id="eChr_${id}" value="${c.character||''}" placeholder="необяз." style="padding:4px 8px;font-size:12px;width:90px"></td>
+    <td style="white-space:nowrap">
+      <button class="btn-primary" onclick="updateCategory(${id})" style="font-size:11px;padding:4px 10px;margin-right:4px">✓</button>
+      <button class="btn-ghost" onclick="loadReferences()" style="font-size:11px;padding:4px 8px">✕</button>
+    </td>`;
+}
+
+async function updateCategory(id) {
+  const sub  = document.getElementById(`eSub_${id}`)?.value.trim();
+  const cat  = document.getElementById(`eCat_${id}`)?.value.trim();
+  const grp  = document.getElementById(`eGrp_${id}`)?.value.trim();
+  const chr  = document.getElementById(`eChr_${id}`)?.value.trim() || null;
+
+  if (!sub || !cat || !grp) { toast('Заполни все поля', false); return; }
+
+  const { error } = await sb.from('categories').update({
+    subcategory: sub, category: cat, group_name: grp, character: chr
+  }).eq('id', id);
+
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  toast('✓ Категория обновлена');
   loadReferences();
 }
 
