@@ -208,3 +208,22 @@ ON CONFLICT DO NOTHING;
 -- 4. Start adding transactions
 -- 5. Add loans in the Loans section if needed
 -- ============================================================
+
+CREATE TABLE IF NOT EXISTS recurring (
+  id            SERIAL PRIMARY KEY,
+  amount        NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+  account_from  TEXT NOT NULL,
+  account_to    TEXT NOT NULL,
+  category_id   INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+  note          TEXT,
+  frequency     TEXT NOT NULL CHECK (frequency IN ('monthly','weekly','daily')),
+  start_date    DATE NOT NULL,
+  end_date      DATE,
+  day_of_month  INTEGER,
+  is_active     BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE recurring DISABLE ROW LEVEL SECURITY;
+GRANT ALL ON recurring TO anon, authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
