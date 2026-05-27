@@ -681,6 +681,18 @@ body {
 .help-tag-tr   { background:rgba(37,99,235,0.1);   color:#2563eb; }
 .help-tag-obl  { background:rgba(230,81,0,0.1);    color:#e65100; }
 
+
+.fab-add {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: var(--accent); border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+  font-size: 22px; color: white; line-height: 1;
+  font-family: 'Space Grotesk', sans-serif;
+  transition: opacity 0.15s;
+}
+.fab-add:hover { opacity: 0.88; }
+
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
@@ -927,7 +939,7 @@ body {
   </div>
   <div class="mob-nav-item" onclick="loadPage('plan')">
     <i class="ti ti-calendar-event mob-nav-icon" id="mnav-plan" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-plan">План</span>
+    <span class="mob-nav-label" id="mnavl-plan">Прогноз</span>
   </div>
   <div class="mob-nav-item" onclick="loadPage('loans')">
     <i class="ti ti-credit-card mob-nav-icon" id="mnav-loans" aria-hidden="true"></i>
@@ -1178,11 +1190,7 @@ async function loadDashboard() {
           <div class="page-title">Дашборд</div>
           <div class="page-sub">${periodLabel}</div>
         </div>
-        <div class="quick-btns">
-          <button class="qbtn qbtn-income"   onclick="openQuickModal('income')">+ Доход</button>
-          <button class="qbtn qbtn-expense"  onclick="openQuickModal('expense')">+ Расход</button>
-          <button class="qbtn qbtn-transfer" onclick="openQuickModal('transfer')">+ Перевод</button>
-        </div>
+        <button class="fab-add" onclick="openQuickModal('expense')" title="Добавить транзакцию" aria-label="Добавить транзакцию">+</button>
       </div>
 
       <div class="kpi-row">
@@ -1225,7 +1233,10 @@ async function loadDashboard() {
       </div>
 
       <div class="g21">
+
+        <!-- ЛЕВАЯ КОЛОНКА: графики + план vs факт -->
         <div style="display:flex;flex-direction:column;gap:14px">
+
           <div class="card">
             <div class="card-head">
               <span class="card-title">Баланс по дням — ${periodLabel}</span>
@@ -1237,6 +1248,7 @@ async function loadDashboard() {
             <div class="card-body"><div class="chart-wrap" style="height:160px"><canvas id="chartLine"></canvas></div></div>
             <div id="balanceHint" style="padding:6px 16px 10px;display:flex;flex-direction:column;gap:3px"></div>
           </div>
+
           <div class="card">
             <div class="card-head"><span class="card-title">Доходы и расходы — план / факт</span><span class="card-hint" style="display:flex;gap:10px;font-size:10px;flex-wrap:wrap">
                 <span style="display:inline-flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:rgba(5,150,105,0.8);display:inline-block;border-radius:2px"></span>Доход факт</span>
@@ -1248,62 +1260,82 @@ async function loadDashboard() {
               </span></div>
             <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chartBar"></canvas></div></div>
           </div>
-        </div>
-        <div class="card">
-          <div class="card-head"><span class="card-title">Счета</span></div>
-          <div class="card-body-sm">
-            <div class="acc-list">
-              ${(()=>{const fl=(accs||[]).filter(a=>a.account_type!=='Поток');const no=(accounts_cache||[]).map(a=>a.name);if(no.length)fl.sort((a,b)=>{const ai=no.indexOf(a.name),bi=no.indexOf(b.name);return(ai<0?999:ai)-(bi<0?999:bi);});return fl.map(a=>`
-              <div class="acc-item">
-                <div class="acc-left">
-                  <div class="acc-dot" style="background:${a.color||'#888'}"></div>
-                  <div>
-                    <div class="acc-name">${a.name}</div>
-                    <div style="font-size:9px;color:var(--text3)">${a.account_type}</div>
-                  </div>
-                </div>
-                <div class="acc-val" style="color:${+a.current_balance<0?'var(--expense)':+a.current_balance===0?'var(--text3)':'var(--income)'}">${fmt(a.current_balance)}</div>
-              </div>`).join('');})()}
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="g12">
-        <div class="card">
-          <div class="card-head">
-            <span class="card-title">Расходы по категориям</span>
-            <span class="card-hint">${fmt(expense)}</span>
-          </div>
-          <div class="card-body" style="display:flex;justify-content:center;padding:16px">
-            <div style="position:relative;width:220px;height:220px">
-              <canvas id="chartDonut"></canvas>
-              <div id="donutCenter" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 20px">
-                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Итого</div>
-                <div style="font-size:17px;font-weight:600;color:var(--text);font-family:'Space Grotesk',sans-serif">${fmt(expense)}</div>
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Расходы — план / факт</span>
+            </div>
+            <div class="card-body">
+              <div class="pvf-rows">
+                ${(()=>{
+                  const expCats = (cats||[])
+                    .filter(c => c.group_name && c.group_name.toLowerCase().includes('расход'))
+                    .map(c => c.category)
+                    .filter((v,i,a) => a.indexOf(v) === i);
+                  const allCats = [...new Set([...expCats, ...Object.keys(byCat), ...Object.keys(planByCat)])];
+                  return allCats.map(cat => {
+                    const fact = byCat[cat]||0, pl = planByCat[cat]||0;
+                    if (fact === 0 && pl === 0) return '';
+                    const over = (pl > 0 && fact > pl) || (pl === 0 && fact > 0);
+                    const pct = pl > 0 ? Math.min(fact/pl*100, 100) : fact > 0 ? 100 : 0;
+                    const barColor = over ? 'var(--expense)' : 'var(--income)';
+                    const numColor = over ? 'var(--expense)' : 'var(--text2)';
+                    return '<div class="pvf-row">' +
+                      '<div class="pvf-meta">' +
+                        '<span class="pvf-name">' + cat + '</span>' +
+                        '<span class="pvf-nums" style="font-size:13px">' +
+                          '<span style="color:' + numColor + '">' + fmt(fact) + '</span>' +
+                          '<span style="color:var(--text3)"> / ' + fmt(pl) + '</span>' +
+                        '</span>' +
+                      '</div>' +
+                      '<div class="pvf-track"><div class="pvf-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
+                    '</div>';
+                  }).join('');
+                })()}
               </div>
             </div>
           </div>
+
         </div>
 
-        <div class="card">
-          <div class="card-head"><span class="card-title">План vs Факт</span></div>
-          <div class="card-body">
-            <div class="pvf-rows">
-              ${Object.keys({...byCat,...planByCat}).slice(0,8).map(cat=>{
-                const fact = byCat[cat]||0, pl = planByCat[cat]||0;
-                const pct = pl>0?Math.min(fact/pl*100,100):fact>0?100:0;
-                const color = pl>0&&fact>pl?'var(--expense)':pct>80?'#FF8C00':'var(--income)';
-                return `<div class="pvf-row">
-                  <div class="pvf-meta">
-                    <span class="pvf-name">${cat}</span>
-                    <span class="pvf-nums">${fmt(fact)} / ${pl>0?fmt(pl):'—'}</span>
-                  </div>
-                  <div class="pvf-track"><div class="pvf-fill" style="width:${pct}%;background:${color}"></div></div>
-                </div>`;
-              }).join('')}
+        <!-- ПРАВАЯ КОЛОНКА: донат + счета -->
+        <div style="display:flex;flex-direction:column;gap:14px">
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Расходы по категориям</span>
+              <span class="card-hint">${fmt(expense)}</span>
+            </div>
+            <div class="card-body" style="display:flex;justify-content:center;padding:16px">
+              <div style="position:relative;width:220px;height:220px">
+                <canvas id="chartDonut"></canvas>
+                <div id="donutCenter" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 20px">
+                  <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em">Итого</div>
+                  <div style="font-size:17px;font-weight:600;color:var(--text);font-family:'Space Grotesk',sans-serif">${fmt(expense)}</div>
+                </div>
+              </div>
             </div>
           </div>
+
+          <div class="card">
+            <div class="card-head"><span class="card-title">Счета</span></div>
+            <div class="card-body-sm">
+              <div class="acc-list">
+                ${(()=>{const fl=(accs||[]).filter(a=>a.account_type!=='Поток');const no=(accounts_cache||[]).map(a=>a.name);if(no.length)fl.sort((a,b)=>{const ai=no.indexOf(a.name),bi=no.indexOf(b.name);return(ai<0?999:ai)-(bi<0?999:bi);});return fl.map(a=>`
+                <div class="acc-item">
+                  <div class="acc-left">
+                    <div class="acc-dot" style="background:${a.color||'#888'}"></div>
+                    <div>
+                      <div class="acc-name">${a.name}</div>
+                      <div style="font-size:9px;color:var(--text3)">${a.account_type}</div>
+                    </div>
+                  </div>
+                  <div class="acc-val" style="color:${+a.current_balance<0?'var(--expense)':+a.current_balance===0?'var(--text3)':'var(--income)'}">${fmt(a.current_balance)}</div>
+                </div>`).join('');})()}
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>`;
 
@@ -1712,7 +1744,8 @@ async function loadTransactions(isPlan) {
       .select('*, categories(subcategory,category,group_name)')
       .eq('year', year);
     if (month > 0) q = q.eq('month', month);
-    const { data: rows } = await q.order('date', { ascending: false }).limit(200);
+    const limit = month > 0 ? 200 : 2000;
+    const { data: rows } = await q.order('date', { ascending: false }).limit(limit);
 
     main.innerHTML = `
       <div class="topbar">
@@ -1720,12 +1753,7 @@ async function loadTransactions(isPlan) {
           <div class="page-title">${isPlan ? 'План' : 'Транзакции'}</div>
           <div class="page-sub">${month>0?MONTHS[month]+' ':' '}${year}</div>
         </div>
-        <div class="quick-btns">
-          <button class="qbtn qbtn-income"   onclick="openTxForm('income',${isPlan})">+ Доход</button>
-          <button class="qbtn qbtn-expense"  onclick="openTxForm('expense',${isPlan})">+ Расход</button>
-          <button class="qbtn qbtn-transfer" onclick="openTxForm('transfer',${isPlan})">+ Перевод</button>
-
-        </div>
+        <button class="fab-add" onclick="openTxForm('expense',${isPlan})" title="Добавить транзакцию" aria-label="Добавить транзакцию">+</button>
       </div>
       <div class="card">
         <div class="with-panel">
@@ -4053,7 +4081,7 @@ function loadHelp() {
     <div class="help-note"><b>Пример:</b> Карта: 5 000 ₽ + Брокерский счёт: 145 000 ₽ − Кредит: 263 000 ₽ = Баланс (общ.) −113 000 ₽. Это означает что долги пока превышают активы — нормальная ситуация при наличии кредитов.</div>
     <div class="help-h3">График баланса по дням</div>
     <p class="help-p"><b>Зелёная линия (Факт)</b> — реальный баланс по внесённым транзакциям от начала месяца до сегодня.</p>
-    <p class="help-p"><b>Синяя пунктирная (Прогноз)</b> — продолжение графика от сегодня до конца месяца на основе плановых транзакций. Показывает где будет баланс если всё пойдёт по плану.</p>
+    <p class="help-p"><b>Синяя линия (План)</b> — баланс если бы все плановые транзакции выполнялись точно в срок. Показывает где ты должен был быть. Расстояние между линиями — отклонение от плана. Показывает где будет баланс если всё пойдёт по плану.</p>
     <div class="help-warn">Если прогнозная линия уходит в минус — жди предупреждения под графиком. Это сигнал что нужно пересмотреть расходы или перенести крупный платёж.</div>
   </div>
 
