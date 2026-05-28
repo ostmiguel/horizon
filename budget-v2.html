@@ -516,13 +516,12 @@ body {
   .kpi-label { font-size: 8px !important; }
   .kpi-sub   { font-size: 8px !important; }
   .kpi { padding: 9px 10px !important; }
-  .g21 { grid-template-columns: 1fr !important; }
+  .g21 { grid-template-columns: 1fr !important; display: flex !important; flex-direction: column !important; }
   .g12 { grid-template-columns: 1fr !important; }
   .g2  { grid-template-columns: 1fr !important; }
   .page-title { font-size: 15px !important; }
-  .quick-btns { gap: 5px; }
-  .qbtn { font-size: 10px; padding: 6px 8px; }
-  .topbar { flex-direction: column; gap: 8px; align-items: flex-start; }
+
+  .topbar { flex-direction: row; gap: 8px; align-items: center; justify-content: space-between; }
 
   /* Bottom nav for mobile */
   .sidebar { display: none !important; }
@@ -537,6 +536,7 @@ body {
     box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
   }
   .main { padding-bottom: 80px !important; }
+  .fab-add { width: 36px; height: 36px; font-size: 20px; border-radius: 10px; }
 }
 @media (min-width: 769px) {
   .mobile-nav { display: none !important; }
@@ -692,6 +692,40 @@ body {
   transition: opacity 0.15s;
 }
 .fab-add:hover { opacity: 0.88; }
+
+
+/* ── SUMMARY PAGE ── */
+.summary-wrap { padding: 20px 24px; }
+.summary-year-bar { display:flex; align-items:center; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+.sy-btn { padding:6px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg2); font-size:12px; font-weight:500; color:var(--text2); cursor:pointer; font-family:'Space Grotesk',sans-serif; }
+.sy-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.summary-kpi { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:20px; }
+.summary-grid { display:grid; grid-template-columns:1fr 1.6fr; gap:16px; margin-bottom:20px; }
+.sum-card { margin-bottom:20px; }
+.sum-card-title { font-size:11px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:0.08em; padding:10px 14px; background:var(--bg3); border-bottom:2px solid var(--border2); }
+.sum-pair { display:flex; gap:16px; align-items:flex-start; }
+.sum-pair-left { flex-shrink:0; width:380px; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+.sum-pair-right { flex:1; min-width:0; background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; overflow-x:auto; }
+.sum-table { width:100%; border-collapse:collapse; font-size:12px; }
+.sum-table th { background:var(--bg); padding:8px 12px; text-align:left; font-size:10px; font-weight:500; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid var(--border); white-space:nowrap; }
+.sum-table th.num { text-align:right; }
+.sum-table td { padding:9px 12px; border-bottom:0.5px solid var(--border); color:var(--text2); white-space:nowrap; }
+.sum-table td.num { text-align:right; font-variant-numeric:tabular-nums; color:var(--text); }
+.sum-table td.pct { text-align:right; color:var(--text3); font-size:11px; }
+.sum-table tr:last-child td { border-bottom:none; }
+.sum-table tr.sum-row-hover td { background:var(--bg3); transition:background 0.1s; }
+.sum-months th, .sum-months td { min-width:72px; }
+@media(max-width:768px){.sum-pair{flex-direction:column}.sum-pair-left,.sum-pair-right{width:100%}}
+.sum-table { width:100%; border-collapse:collapse; font-size:12px; }
+.sum-table th { background:var(--bg); padding:7px 12px; text-align:left; font-size:10px; font-weight:500; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid var(--border); white-space:nowrap; }
+.sum-table th.num { text-align:right; }
+.sum-table td { padding:8px 12px; border-bottom:0.5px solid var(--border); color:var(--text2); white-space:nowrap; }
+.sum-table td.num { text-align:right; font-variant-numeric:tabular-nums; color:var(--text); }
+.sum-table td.pct { text-align:right; color:var(--text3); font-size:11px; }
+.sum-table tr:last-child td { border-bottom:none; }
+.sum-table tr.sum-row-hover td { background:var(--bg3); transition:background 0.1s; }
+.sum-months th, .sum-months td { min-width:72px; }
+@media (max-width:768px) { .summary-kpi { grid-template-columns:repeat(3,1fr); } .summary-grid { grid-template-columns:1fr; } }
 
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
@@ -901,6 +935,7 @@ body {
   <div class="nav">
     <div class="nav-section">Обзор</div>
     <div class="nav-item active" data-page="dashboard"><span class="nav-icon">◈</span>Дашборд</div>
+    <div class="nav-item" data-page="summary"><span class="nav-icon">◑</span>Сводка</div>
     <div class="nav-section">Операции</div>
     <div class="nav-item" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
     <div class="nav-item" data-page="plan"><span class="nav-icon">◷</span>План</div>
@@ -1048,7 +1083,7 @@ function loadPage(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   // Sync mobile bottom nav
-  ['dashboard','transactions','plan','references','loans','help'].forEach(p => {
+  ['dashboard','summary','transactions','plan','references','loans','help'].forEach(p => {
     const icon  = document.getElementById('mnav-' + p);
     const label = document.getElementById('mnavl-' + p);
     if (icon)  icon.classList.toggle('act',  p === page);
@@ -1060,6 +1095,7 @@ function loadPage(page) {
   else if (page === 'references')   loadReferences();
   else if (page === 'loans')        loadLoans();
   else if (page === 'help')         loadHelp();
+  else if (page === 'summary')      loadSummary();
 }
 
 // ── HELPERS ──
@@ -1210,7 +1246,7 @@ async function loadDashboard() {
           ${deltaObligation!==null?`<div class="kpi-sub">${deltaObligation>=0?'▲':'▼'} ${Math.abs(deltaObligation).toFixed(0)}% от плана</div>`:'<div class="kpi-sub">план: '+fmt(planObligation)+'</div>'}
         </div>
         <div class="kpi" style="--kpi-accent:${delta>=0?'var(--income)':'var(--expense)'}">
-          <div class="kpi-label">Результат</div>
+          <div class="kpi-label">Профит</div>
           <div class="kpi-val" style="color:${delta>=0?'var(--income)':'var(--expense)'}"><span class="desktop-val">${delta>=0?'+':''}${fmt(delta)}</span><span class="mobile-val">${fmtK(delta)}</span></div>
           <div class="kpi-sub">${delta>=0?'Профицит':'Дефицит'}</div>
         </div>
@@ -1504,6 +1540,18 @@ async function loadDashboard() {
         }
       }
     };
+    // Hide chart tooltip when clicking outside
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.chart-wrap')) {
+        [chartLine, chartBar, chartDonut].forEach(c => {
+          if (c && c.tooltip) {
+            c.tooltip.opacity = 0;
+            c.update('none');
+          }
+        });
+      }
+    });
+
     const ctxLine = document.getElementById('chartLine')?.getContext('2d');
     if (ctxLine) {
       Chart.register(dangerZonePlugin);
@@ -4390,6 +4438,257 @@ document.getElementById('recurringModal')?.addEventListener('click', e => {
 ['rStartDate','rEndDate','rFreq','rAmount'].forEach(id => {
   document.getElementById(id)?.addEventListener('input', updateRecurringPreview);
 });
+
+
+
+// ── SUMMARY PAGE ──
+let _summaryYear = new Date().getFullYear();
+let _summaryMode = 'year'; // 'year' | 'all'
+
+async function loadSummary() {
+  const mc = document.getElementById('mainContent');
+  mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
+
+  // Get available years
+  const { data: txYears } = await sb.from('transactions').select('year').order('year');
+  const { data: plYears  } = await sb.from('plan').select('year').order('year');
+  const years = [...new Set([
+    ...(txYears||[]).map(r=>r.year),
+    ...(plYears||[]).map(r=>r.year)
+  ])].sort();
+
+  // Load data
+  let txQ = sb.from('transactions').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory)');
+  let plQ = sb.from('plan').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory)');
+
+  if (_summaryMode === 'year') {
+    txQ = txQ.eq('year', _summaryYear);
+    plQ = plQ.eq('year', _summaryYear);
+  }
+
+  const [{ data: txAll }, { data: plAll }, { data: accs }] = await Promise.all([
+    txQ, plQ,
+    sb.from('accounts').select('name,account_type,include_in_balance,color')
+  ]);
+
+  const savingsAccNames = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
+  const operAccNames   = new Set((accs||[]).filter(a => a.account_type === 'Актив' && a.include_in_balance).map(a => a.name));
+
+  // ── Aggregate helpers ──
+  function groupTx(rows) {
+    // totals by name
+    const income={}, expense={}, savings={}, obligation={};
+    // per cat per col: { catName: { colKey: amount } }
+    const incomeCM={}, expenseCM={}, savingsCM={}, obligationCM={};
+
+    rows.forEach(r => {
+      const yr  = r.date.substring(0,4);
+      const m   = r.date.substring(5,7);
+      const key = _summaryMode === 'all' ? yr : m;
+      const sub = r.categories?.subcategory || '—';
+      const cat = r.categories?.category    || '—';
+      const amt = +r.amount;
+      const from = r.account_from, to = r.account_to;
+
+      function addCat(totMap, catMap, name, val) {
+        totMap[name] = (totMap[name]||0) + val;
+        if (!catMap[name]) catMap[name] = {};
+        catMap[name][key] = (catMap[name][key]||0) + val;
+      }
+
+      if (from === 'Доход') {
+        addCat(income, incomeCM, sub, amt);
+      } else if (to === 'Расход') {
+        addCat(expense, expenseCM, cat, amt);
+      } else if (savingsAccNames.has(to) && operAccNames.has(from)) {
+        addCat(savings, savingsCM, sub, amt);
+      } else if (savingsAccNames.has(from) && operAccNames.has(to)) {
+        addCat(savings, savingsCM, sub, -amt);
+      } else if (to === 'Обязательства') {
+        addCat(obligation, obligationCM, sub, amt);
+      }
+    });
+    return { income, expense, savings, obligation, incomeCM, expenseCM, savingsCM, obligationCM };
+  }
+
+  const fact = groupTx(txAll||[]);
+  const plan = groupTx(plAll||[]);
+
+  const totalIncome     = Object.values(fact.income).reduce((s,v)=>s+v,0);
+  const totalExpense    = Object.values(fact.expense).reduce((s,v)=>s+v,0);
+  const totalObligation = Object.values(fact.obligation).reduce((s,v)=>s+v,0);
+  const totalSavings    = Object.values(fact.savings).reduce((s,v)=>s+v,0);
+  const profit          = totalIncome - totalExpense - totalObligation;
+  const savingsRate     = totalIncome > 0 ? (totalSavings / totalIncome * 100) : 0;
+
+  // ── Column keys ──
+  const MONTH_NAMES = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+  let colKeys, colLabels;
+  if (_summaryMode === 'all') {
+    colKeys   = years.map(y => String(y));
+    colLabels = colKeys;
+  } else {
+    colKeys   = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+    colLabels = MONTH_NAMES;
+  }
+
+  // ── Render helpers ──
+  function renderTable(rows, totalFact, planRows) {
+    if (!rows.length) return '<tr><td colspan="4" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>';
+    const body = rows.map(([name, factAmt]) => {
+      const planAmt = planRows[name] || 0;
+      const pct = totalFact > 0 ? (Math.abs(factAmt) / Math.abs(totalFact) * 100).toFixed(1) : '0.0';
+      const over = planAmt > 0 && factAmt > planAmt;
+      return `<tr>
+        <td style="color:var(--text)">${name}</td>
+        <td class="num" style="color:var(--text3)">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
+        <td class="num" style="${over ? 'color:var(--expense)' : ''}">${fmt(factAmt)}</td>
+        <td class="pct">${pct}%</td>
+      </tr>`;
+    }).join('');
+    const totalPlan = rows.reduce((s,[name]) => s + (planRows[name]||0), 0);
+    const totalFactSum = rows.reduce((s,[,v]) => s + v, 0);
+    const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">
+      <td style="color:var(--text);font-weight:600">Итого</td>
+      <td class="num" style="color:var(--text3);font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
+      <td class="num" style="font-weight:600">${fmt(totalFactSum)}</td>
+      <td class="pct" style="font-weight:600">100%</td>
+    </tr>`;
+    return body + totalRow;
+  }
+
+  function renderMonthTable(catFactMap, colorFn) {
+    const cats = Object.keys(catFactMap);
+    if (!cats.length) return `<tr><td colspan="${colKeys.length}" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>`;
+    const rows = cats.map(cat => {
+      const cells = colKeys.map(k => {
+        const v = (catFactMap[cat]||{})[k] || 0;
+        const style = colorFn && v !== 0 ? `color:${colorFn(v)}` : 'color:var(--text3)';
+        return `<td class="num" style="${style}">${v !== 0 ? fmt(v) : '—'}</td>`;
+      }).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    const totalCells = colKeys.map(k => {
+      const total = cats.reduce((s, cat) => s + ((catFactMap[cat]||{})[k]||0), 0);
+      const style = colorFn && total !== 0 ? `color:${colorFn(total)};font-weight:600` : 'color:var(--text);font-weight:600';
+      return `<td class="num" style="${style}">${total !== 0 ? fmt(total) : '—'}</td>`;
+    }).join('');
+    const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">${totalCells}</tr>`;
+    return rows + totalRow;
+  }
+
+  const monthHead = colKeys.map((k,i) => `<th class="num">${colLabels[i]}</th>`).join('');
+
+  function section(title, leftRows, leftTotal, leftPlan, catMonthMap, color) {
+    const sortedRows = Object.entries(leftRows)
+      .filter(([,v]) => Math.abs(v) > 0)
+      .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const filteredCM = {};
+    sortedRows.forEach(([name]) => { filteredCM[name] = catMonthMap[name] || {}; });
+    return `<div class="sum-card">
+      <div class="sum-pair">
+        <div class="sum-pair-left">
+          <div class="sum-card-title">${title}</div>
+          <table class="sum-table">
+            <thead><tr>
+              <th>Категория</th>
+              <th class="num">План</th>
+              <th class="num">Факт</th>
+              <th class="num">%</th>
+            </tr></thead>
+            <tbody>${renderTable(sortedRows, leftTotal, leftPlan)}</tbody>
+          </table>
+        </div>
+        <div class="sum-pair-right sum-months">
+          <div class="sum-card-title">${title}</div>
+          <table class="sum-table">
+            <thead><tr>${monthHead}</tr></thead>
+            <tbody>${renderMonthTable(filteredCM, color)}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  mc.innerHTML = `
+<div class="summary-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div class="page-title">Сводка</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${_summaryMode==='all'?'Все годы':_summaryYear + ' год'}</div>
+    </div>
+    <div class="summary-year-bar">
+      <button class="sy-btn${_summaryMode==='all'?' active':''}" onclick="setSummaryMode('all')">Все годы</button>
+      ${years.map(y=>`<button class="sy-btn${_summaryMode==='year'&&_summaryYear===y?' active':''}" onclick="setSummaryYear(${y})">${y}</button>`).join('')}
+    </div>
+  </div>
+
+  <div class="summary-kpi">
+    <div class="kpi" style="--kpi-accent:var(--income)">
+      <div class="kpi-label">Доходы</div>
+      <div class="kpi-val" style="color:var(--income)">${fmt(totalIncome)}</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:var(--expense)">
+      <div class="kpi-label">Расходы</div>
+      <div class="kpi-val" style="color:var(--expense)">${fmt(totalExpense)}</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:#E65100">
+      <div class="kpi-label">Обязательства</div>
+      <div class="kpi-val" style="color:#E65100">${fmt(totalObligation)}</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:${profit>=0?'var(--income)':'var(--expense)'}">
+      <div class="kpi-label">Профит</div>
+      <div class="kpi-val" style="color:${profit>=0?'var(--income)':'var(--expense)'}">${fmt(profit)}</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:var(--accent)">
+      <div class="kpi-label">Сбережения</div>
+      <div class="kpi-val" style="color:${totalSavings>=0?'var(--income)':'var(--expense)'}">${fmt(totalSavings)}</div>
+    </div>
+    <div class="kpi" style="--kpi-accent:var(--accent)">
+      <div class="kpi-label">Норма сбережений</div>
+      <div class="kpi-val" style="color:var(--accent);font-size:${savingsRate>=10?'22px':'18px'}">${savingsRate.toFixed(2)}%</div>
+    </div>
+  </div>
+
+  ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)')}
+  ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? 'var(--expense)' : 'var(--text3)')}
+  ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? 'var(--expense)' : 'var(--text3)')}
+  ${section('Обязательства', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null)}
+</div>`;
+  setTimeout(bindSummaryHover, 0);
+}
+
+function bindSummaryHover() {
+  // For each sum-card, sync hover between left and right tbody rows
+  document.querySelectorAll('.sum-card').forEach(card => {
+    const leftRows  = Array.from(card.querySelectorAll('.sum-pair-left  tbody tr'));
+    const rightRows = Array.from(card.querySelectorAll('.sum-pair-right tbody tr'));
+    const allPairs  = leftRows.map((lr, i) => [lr, rightRows[i]]).filter(([a,b]) => a && b);
+    allPairs.forEach(([lr, rr]) => {
+      [lr, rr].forEach(el => {
+        el.addEventListener('mouseenter', () => {
+          lr.classList.add('sum-row-hover');
+          rr.classList.add('sum-row-hover');
+        });
+        el.addEventListener('mouseleave', () => {
+          lr.classList.remove('sum-row-hover');
+          rr.classList.remove('sum-row-hover');
+        });
+      });
+    });
+  });
+}
+
+function setSummaryYear(y) {
+  _summaryYear = y;
+  _summaryMode = 'year';
+  loadSummary();
+}
+
+function setSummaryMode(mode) {
+  _summaryMode = mode;
+  loadSummary();
+}
 
 
 // ── INIT ──
