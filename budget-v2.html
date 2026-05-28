@@ -968,21 +968,21 @@ body {
     <i class="ti ti-layout-dashboard mob-nav-icon" id="mnav-dashboard" aria-hidden="true"></i>
     <span class="mob-nav-label" id="mnavl-dashboard">Дашборд</span>
   </div>
+  <div class="mob-nav-item" onclick="loadPage('summary')">
+    <i class="ti ti-chart-bar mob-nav-icon" id="mnav-summary" aria-hidden="true"></i>
+    <span class="mob-nav-label" id="mnavl-summary">Сводка</span>
+  </div>
   <div class="mob-nav-item" onclick="loadPage('transactions')">
     <i class="ti ti-arrows-exchange mob-nav-icon" id="mnav-transactions" aria-hidden="true"></i>
     <span class="mob-nav-label" id="mnavl-transactions">Транзакции</span>
   </div>
   <div class="mob-nav-item" onclick="loadPage('plan')">
     <i class="ti ti-calendar-event mob-nav-icon" id="mnav-plan" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-plan">Прогноз</span>
+    <span class="mob-nav-label" id="mnavl-plan">План</span>
   </div>
   <div class="mob-nav-item" onclick="loadPage('loans')">
     <i class="ti ti-credit-card mob-nav-icon" id="mnav-loans" aria-hidden="true"></i>
     <span class="mob-nav-label" id="mnavl-loans">Кредиты</span>
-  </div>
-  <div class="mob-nav-item" onclick="loadPage('references')">
-    <i class="ti ti-book-2 mob-nav-icon" id="mnav-references" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-references">Справочники</span>
   </div>
 </nav>
 
@@ -1083,7 +1083,7 @@ function loadPage(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   // Sync mobile bottom nav
-  ['dashboard','summary','transactions','plan','references','loans','help'].forEach(p => {
+  ['dashboard','summary','transactions','plan','loans','references','help'].forEach(p => {
     const icon  = document.getElementById('mnav-' + p);
     const label = document.getElementById('mnavl-' + p);
     if (icon)  icon.classList.toggle('act',  p === page);
@@ -2915,7 +2915,8 @@ function setQmType(type) {
     fromSel.innerHTML = '<option value="Доход">Доход</option>';
     toSel.innerHTML   = makeOpts(realAccs);
   } else if (type === 'expense') {
-    fromSel.innerHTML = makeOpts(realAccs);
+    const expFromAccs = accounts_cache.filter(a => a.account_type === 'Актив' || a.account_type === 'Пассив');
+    fromSel.innerHTML = makeOpts(expFromAccs);
     toSel.innerHTML   = '<option value="Расход">Расход</option>';
   } else if (type === 'obligation') {
     fromSel.innerHTML = makeOpts(realAccs);
