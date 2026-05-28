@@ -1306,7 +1306,7 @@ async function loadDashboard() {
                 ${(()=>{
                   const expCats = (cats||[])
                     .filter(c => c.group_name && c.group_name.toLowerCase().includes('расход'))
-                    .map(c => c.category)
+                    .map(c => c.subcategory)
                     .filter((v,i,a) => a.indexOf(v) === i);
                   const allCats = [...new Set([...expCats, ...Object.keys(byCat), ...Object.keys(planByCat)])];
                   return allCats.map(cat => {
@@ -4444,6 +4444,7 @@ document.getElementById('recurringModal')?.addEventListener('click', e => {
 // ── SUMMARY PAGE ──
 let _summaryYear = new Date().getFullYear();
 let _summaryMode = 'year'; // 'year' | 'all'
+let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Эпизодический'
 
 async function loadSummary() {
   const mc = document.getElementById('mainContent');
@@ -4458,8 +4459,8 @@ async function loadSummary() {
   ])].sort();
 
   // Load data
-  let txQ = sb.from('transactions').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory)');
-  let plQ = sb.from('plan').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory)');
+  let txQ = sb.from('transactions').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)');
+  let plQ = sb.from('plan').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)');
 
   if (_summaryMode === 'year') {
     txQ = txQ.eq('year', _summaryYear);
@@ -4496,10 +4497,12 @@ async function loadSummary() {
         catMap[name][key] = (catMap[name][key]||0) + val;
       }
 
+      const char = r.categories?.character || null; // character is on subcategory level
+      const charOk = _summaryChar === 'all' || char === _summaryChar || !char;
       if (from === 'Доход') {
         addCat(income, incomeCM, sub, amt);
       } else if (to === 'Расход') {
-        addCat(expense, expenseCM, cat, amt);
+        if (_summaryChar === 'all' || char === _summaryChar) addCat(expense, expenseCM, sub, amt);
       } else if (savingsAccNames.has(to) && operAccNames.has(from)) {
         addCat(savings, savingsCM, to, amt);
       } else if (savingsAccNames.has(from) && operAccNames.has(to)) {
@@ -4511,8 +4514,13 @@ async function loadSummary() {
     return { income, expense, savings, obligation, incomeCM, expenseCM, savingsCM, obligationCM };
   }
 
-  const fact = groupTx(txAll||[]);
-  const plan = groupTx(plAll||[]);
+  const fact    = groupTx(txAll||[]);
+  const plan    = groupTx(plAll||[]);
+  // Unfiltered expense breakdown for KPI (always shows full picture)
+  const _savedChar = _summaryChar;
+  _summaryChar = 'all';
+  const factAll = groupTx(txAll||[]);
+  _summaryChar = _savedChar;
 
   const totalIncome     = Object.values(fact.income).reduce((s,v)=>s+v,0);
   const totalExpense    = Object.values(fact.expense).reduce((s,v)=>s+v,0);
@@ -4617,9 +4625,17 @@ async function loadSummary() {
       <div class="page-title">Сводка</div>
       <div style="font-size:11px;color:var(--text3);margin-top:2px">${_summaryMode==='all'?'Все годы':_summaryYear + ' год'}</div>
     </div>
-    <div class="summary-year-bar">
-      <button class="sy-btn${_summaryMode==='all'?' active':''}" onclick="setSummaryMode('all')">Все годы</button>
-      ${years.map(y=>`<button class="sy-btn${_summaryMode==='year'&&_summaryYear===y?' active':''}" onclick="setSummaryYear(${y})">${y}</button>`).join('')}
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <div class="summary-year-bar" style="margin-bottom:0">
+        <button class="sy-btn${_summaryMode==='all'?' active':''}" onclick="setSummaryMode('all')">Все годы</button>
+        ${years.map(y=>`<button class="sy-btn${_summaryMode==='year'&&_summaryYear===y?' active':''}" onclick="setSummaryYear(${y})">${y}</button>`).join('')}
+      </div>
+      <div style="width:1px;height:20px;background:var(--border)"></div>
+      <div class="summary-year-bar" style="margin-bottom:0">
+        <button class="sy-btn${_summaryChar==='all'?' active':''}" onclick="setSummaryChar('all')">Все расходы</button>
+        <button class="sy-btn${_summaryChar==='Повседневный'?' active':''}" onclick="setSummaryChar('Повседневный')">Повседневные</button>
+        <button class="sy-btn${_summaryChar==='Эпизодический'?' active':''}" onclick="setSummaryChar('Эпизодический')">Эпизодические</button>
+      </div>
     </div>
   </div>
 
@@ -4629,8 +4645,19 @@ async function loadSummary() {
       <div class="kpi-val" style="color:var(--income)">${fmt(totalIncome)}</div>
     </div>
     <div class="kpi" style="--kpi-accent:var(--expense)">
-      <div class="kpi-label">Расходы</div>
-      <div class="kpi-val" style="color:var(--expense)">${fmt(totalExpense)}</div>
+      <div class="kpi-label">Расходы${_summaryChar!=='all'?' ('+(_summaryChar==='Повседневный'?'повсед.':'эпизод.')+')'  :''}</div>
+      <div class="kpi-val" style="color:var(--expense)">${fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0))}</div>
+      <div class="kpi-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        ${(()=>{
+          const allExp  = Object.entries(factAll.expense);
+          const regExp  = allExp.filter(([sub])=>{ const c=(cats||[]).find(x=>x.subcategory===sub); return c&&c.character==='Повседневный'; }).reduce((s,[,v])=>s+v,0);
+          const episExp = allExp.filter(([sub])=>{ const c=(cats||[]).find(x=>x.subcategory===sub); return c&&c.character==='Эпизодический'; }).reduce((s,[,v])=>s+v,0);
+          const parts = [];
+          if (regExp>0)  parts.push('<span title="Повседневные">↗ ' + fmtK(regExp) + '</span>');
+          if (episExp>0) parts.push('<span style="color:var(--neutral)" title="Эпизодические">✦ ' + fmtK(episExp) + '</span>');
+          return parts.join('<span style="color:var(--border2)"> · </span>');
+        })()}
+      </div>
     </div>
     <div class="kpi" style="--kpi-accent:#E65100">
       <div class="kpi-label">Обязательства</div>
@@ -4649,6 +4676,7 @@ async function loadSummary() {
       <div class="kpi-val" style="color:var(--accent);font-size:${savingsRate>=10?'22px':'18px'}">${savingsRate.toFixed(2)}%</div>
     </div>
   </div>
+
 
   ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)', 'rgba(5,150,105,0.1)', 'var(--income)')}
   ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? 'var(--expense)' : 'var(--text3)', 'rgba(220,38,38,0.1)', 'var(--expense)')}
@@ -4677,6 +4705,11 @@ function bindSummaryHover() {
       });
     });
   });
+}
+
+function setSummaryChar(char) {
+  _summaryChar = char;
+  loadSummary();
 }
 
 function setSummaryYear(y) {
