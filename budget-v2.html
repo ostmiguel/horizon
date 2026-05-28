@@ -4501,9 +4501,9 @@ async function loadSummary() {
       } else if (to === 'Расход') {
         addCat(expense, expenseCM, cat, amt);
       } else if (savingsAccNames.has(to) && operAccNames.has(from)) {
-        addCat(savings, savingsCM, sub, amt);
+        addCat(savings, savingsCM, to, amt);
       } else if (savingsAccNames.has(from) && operAccNames.has(to)) {
-        addCat(savings, savingsCM, sub, -amt);
+        addCat(savings, savingsCM, from, -amt);
       } else if (to === 'Обязательства') {
         addCat(obligation, obligationCM, sub, amt);
       }
@@ -4533,45 +4533,44 @@ async function loadSummary() {
   }
 
   // ── Render helpers ──
-  function renderTable(rows, totalFact, planRows) {
+  function renderTable(rows, totalFact, planRows, totalColor) {
     if (!rows.length) return '<tr><td colspan="4" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>';
     const body = rows.map(([name, factAmt]) => {
       const planAmt = planRows[name] || 0;
       const pct = totalFact > 0 ? (Math.abs(factAmt) / Math.abs(totalFact) * 100).toFixed(1) : '0.0';
       const over = planAmt > 0 && factAmt > planAmt;
       return `<tr>
-        <td style="color:var(--text)">${name}</td>
-        <td class="num" style="color:var(--text3)">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
-        <td class="num" style="${over ? 'color:var(--expense)' : ''}">${fmt(factAmt)}</td>
-        <td class="pct">${pct}%</td>
+        <td style="color:#111827">${name}</td>
+        <td class="num" style="color:#6b7280">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
+        <td class="num" style="color:${over ? 'var(--expense)' : '#111827'}">${fmt(factAmt)}</td>
+        <td class="pct" style="color:#9ca3af">${pct}%</td>
       </tr>`;
     }).join('');
     const totalPlan = rows.reduce((s,[name]) => s + (planRows[name]||0), 0);
     const totalFactSum = rows.reduce((s,[,v]) => s + v, 0);
     const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">
-      <td style="color:var(--text);font-weight:600">Итого</td>
-      <td class="num" style="color:var(--text3);font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
-      <td class="num" style="font-weight:600">${fmt(totalFactSum)}</td>
-      <td class="pct" style="font-weight:600">100%</td>
+      <td style="color:#111827;font-weight:600">Итого</td>
+      <td class="num" style="color:#6b7280;font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
+      <td class="num" style="color:#111827;font-weight:600">${fmt(totalFactSum)}</td>
+      <td class="pct" style="color:#9ca3af;font-weight:600">100%</td>
     </tr>`;
     return body + totalRow;
   }
 
-  function renderMonthTable(catFactMap, colorFn) {
+  function renderMonthTable(catFactMap, colorFn, totalColor) {
     const cats = Object.keys(catFactMap);
     if (!cats.length) return `<tr><td colspan="${colKeys.length}" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>`;
     const rows = cats.map(cat => {
       const cells = colKeys.map(k => {
         const v = (catFactMap[cat]||{})[k] || 0;
-        const style = colorFn && v !== 0 ? `color:${colorFn(v)}` : 'color:var(--text3)';
-        return `<td class="num" style="${style}">${v !== 0 ? fmt(v) : '—'}</td>`;
+        return `<td class="num" style="color:${v !== 0 ? '#111827' : 'var(--text3)'}">${v !== 0 ? fmt(v) : '—'}</td>`;
       }).join('');
       return `<tr>${cells}</tr>`;
     }).join('');
     const totalCells = colKeys.map(k => {
       const total = cats.reduce((s, cat) => s + ((catFactMap[cat]||{})[k]||0), 0);
-      const style = colorFn && total !== 0 ? `color:${colorFn(total)};font-weight:600` : 'color:var(--text);font-weight:600';
-      return `<td class="num" style="${style}">${total !== 0 ? fmt(total) : '—'}</td>`;
+      const c = total !== 0 ? '#111827' : 'var(--text3)';
+      return `<td class="num" style="color:${c};font-weight:600">${total !== 0 ? fmt(total) : '—'}</td>`;
     }).join('');
     const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">${totalCells}</tr>`;
     return rows + totalRow;
@@ -4579,16 +4578,17 @@ async function loadSummary() {
 
   const monthHead = colKeys.map((k,i) => `<th class="num">${colLabels[i]}</th>`).join('');
 
-  function section(title, leftRows, leftTotal, leftPlan, catMonthMap, color) {
+  function section(title, leftRows, leftTotal, leftPlan, catMonthMap, color, headerColor, sectionTotalColor) {
     const sortedRows = Object.entries(leftRows)
       .filter(([,v]) => Math.abs(v) > 0)
       .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
     const filteredCM = {};
     sortedRows.forEach(([name]) => { filteredCM[name] = catMonthMap[name] || {}; });
+    const hStyle = headerColor ? `background:${headerColor};border-bottom:2px solid var(--border2)` : '';
     return `<div class="sum-card">
       <div class="sum-pair">
         <div class="sum-pair-left">
-          <div class="sum-card-title">${title}</div>
+          <div class="sum-card-title" style="${hStyle}">${title}</div>
           <table class="sum-table">
             <thead><tr>
               <th>Категория</th>
@@ -4596,14 +4596,14 @@ async function loadSummary() {
               <th class="num">Факт</th>
               <th class="num">%</th>
             </tr></thead>
-            <tbody>${renderTable(sortedRows, leftTotal, leftPlan)}</tbody>
+            <tbody>${renderTable(sortedRows, leftTotal, leftPlan, sectionTotalColor)}</tbody>
           </table>
         </div>
         <div class="sum-pair-right sum-months">
-          <div class="sum-card-title">${title}</div>
+          <div class="sum-card-title" style="${hStyle}">${title}</div>
           <table class="sum-table">
             <thead><tr>${monthHead}</tr></thead>
-            <tbody>${renderMonthTable(filteredCM, color)}</tbody>
+            <tbody>${renderMonthTable(filteredCM, color, sectionTotalColor)}</tbody>
           </table>
         </div>
       </div>
@@ -4650,10 +4650,10 @@ async function loadSummary() {
     </div>
   </div>
 
-  ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)')}
-  ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? 'var(--expense)' : 'var(--text3)')}
-  ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? 'var(--expense)' : 'var(--text3)')}
-  ${section('Обязательства', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null)}
+  ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)', 'rgba(5,150,105,0.1)', 'var(--income)')}
+  ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? 'var(--expense)' : 'var(--text3)', 'rgba(220,38,38,0.1)', 'var(--expense)')}
+  ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? 'var(--expense)' : 'var(--text3)', 'rgba(37,99,235,0.1)', '#111827')}
+  ${section('Обязательства', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null, 'rgba(230,81,0,0.1)', '#111827')}
 </div>`;
   setTimeout(bindSummaryHover, 0);
 }
