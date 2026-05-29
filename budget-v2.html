@@ -344,6 +344,7 @@ body {
   background: var(--bg2); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 28px;
   width: 400px; max-width: 95vw;
+  max-height: 90vh; overflow-y: auto;
   box-shadow: 0 20px 60px rgba(28,43,32,0.2);
   animation: modalIn 0.2s ease;
 }
@@ -916,7 +917,24 @@ body {
 <div class="modal-overlay open" id="configModal">
   <div class="modal">
     <div class="modal-title">Подключение к базе данных</div>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:18px;line-height:1.6">Введи данные Supabase проекта. Найти их можно в Settings → API.</p>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button onclick="switchToMyDb()" id="btnMyDb"
+        style="flex:1;padding:9px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;color:var(--text2)">
+        👤 Моя база
+      </button>
+      <button onclick="switchToDemoDb()" id="btnDemoDb"
+        style="flex:1;padding:9px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;color:var(--text2)">
+        🎬 Демо
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button onclick="resetMyDb()" style="flex:1;padding:6px;border-radius:var(--radius-xs);border:1px solid var(--border);background:transparent;font-size:10px;color:var(--text3);cursor:pointer;font-family:inherit">↺ Сбросить мою базу</button>
+      <button onclick="resetDemoDb()" style="flex:1;padding:6px;border-radius:var(--radius-xs);border:1px solid var(--border);background:transparent;font-size:10px;color:var(--text3);cursor:pointer;font-family:inherit">↺ Сбросить демо</button>
+    </div>
+
+    <div style="height:0.5px;background:var(--border);margin-bottom:16px"></div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6">Или введи данные вручную. Найти их можно в Settings → API.</p>
     <div class="field"><div class="field-label">Supabase URL</div><input class="field-input" id="cfgUrl" placeholder="https://xxxx.supabase.co"/></div>
     <div class="field"><div class="field-label">Anon Key</div><input class="field-input" id="cfgKey" placeholder="eyJ..."/></div>
     <div class="modal-btns">
@@ -930,7 +948,7 @@ body {
 <nav class="sidebar">
   <div class="logo">
     <div class="logo-title">Бюджет</div>
-    <div class="logo-sub">личные финансы</div>
+    <div class="logo-sub" id="dbIndicator">личные финансы</div>
   </div>
   <div class="nav">
     <div class="nav-section">Обзор</div>
@@ -1006,29 +1024,122 @@ const CAT_COLORS = {
   'Кредиты - процент':'#CD5C5C','Подписки':'#20B2AA','Прочее':'#888'
 };
 
+
+// ── DATABASE SWITCHING ──
+const DEMO_URL = localStorage.getItem('demo_url') || '';
+const DEMO_KEY = localStorage.getItem('demo_key') || '';
+
+function switchToMyDb() {
+  const url = localStorage.getItem('my_url');
+  const key = localStorage.getItem('my_key');
+  if (!url || !key) {
+    const mUrl = prompt('Введи URL своей базы:');
+    const mKey = prompt('Введи Anon Key своей базы:');
+    if (!mUrl || !mKey) return;
+    localStorage.setItem('my_url', mUrl.trim());
+    localStorage.setItem('my_key', mKey.trim());
+    document.getElementById('cfgUrl').value = mUrl.trim();
+    document.getElementById('cfgKey').value = mKey.trim();
+  } else {
+    document.getElementById('cfgUrl').value = url;
+    document.getElementById('cfgKey').value = key;
+  }
+  localStorage.setItem('db_mode', 'my');
+  document.getElementById('btnMyDb').style.borderColor = 'var(--accent)';
+  document.getElementById('btnMyDb').style.color = 'var(--accent)';
+  document.getElementById('btnDemoDb').style.borderColor = 'var(--border)';
+  document.getElementById('btnDemoDb').style.color = 'var(--text2)';
+  saveConfig();
+}
+
+function switchToDemoDb() {
+  const url = localStorage.getItem('demo_url');
+  const key = localStorage.getItem('demo_key');
+  if (!url || !key) {
+    const dUrl = prompt('Введи URL демо базы:');
+    const dKey = prompt('Введи Anon Key демо базы:');
+    if (!dUrl || !dKey) return;
+    localStorage.setItem('demo_url', dUrl.trim());
+    localStorage.setItem('demo_key', dKey.trim());
+    document.getElementById('cfgUrl').value = dUrl.trim();
+    document.getElementById('cfgKey').value = dKey.trim();
+  } else {
+    document.getElementById('cfgUrl').value = url;
+    document.getElementById('cfgKey').value = key;
+  }
+  localStorage.setItem('db_mode', 'demo');
+  document.getElementById('btnDemoDb').style.borderColor = 'var(--accent)';
+  document.getElementById('btnDemoDb').style.color = 'var(--accent)';
+  document.getElementById('btnMyDb').style.borderColor = 'var(--border)';
+  document.getElementById('btnMyDb').style.color = 'var(--text2)';
+  saveConfig();
+}
+
+function resetMyDb() {
+  if (!confirm('Удалить сохранённые данные своей базы?')) return;
+  localStorage.removeItem('my_url');
+  localStorage.removeItem('my_key');
+  toast('✓ Данные своей базы удалены');
+}
+function resetDemoDb() {
+  if (!confirm('Удалить сохранённые данные демо базы?')) return;
+  localStorage.removeItem('demo_url');
+  localStorage.removeItem('demo_key');
+  toast('✓ Данные демо базы удалены');
+}
+function updateDbButtons() {
+  const curUrl = localStorage.getItem('sb_url2');
+  const myUrl  = localStorage.getItem('sb_url2');
+  const demoUrl = localStorage.getItem('demo_url');
+  // Check which is active by comparing stored URL
+  // (After saveConfig, sb_url2 is always the active one)
+  // We track active mode separately
+  const mode = localStorage.getItem('db_mode') || 'my';
+  const myBtn   = document.getElementById('btnMyDb');
+  const demoBtn = document.getElementById('btnDemoDb');
+  if (!myBtn || !demoBtn) return;
+  if (uiMode === 'demo') {
+    demoBtn.style.borderColor = 'var(--accent)';
+    demoBtn.style.color = 'var(--accent)';
+    myBtn.style.borderColor = 'var(--border)';
+    myBtn.style.color = 'var(--text2)';
+  } else {
+    myBtn.style.borderColor = 'var(--accent)';
+    myBtn.style.color = 'var(--accent)';
+    demoBtn.style.borderColor = 'var(--border)';
+    demoBtn.style.color = 'var(--text2)';
+  }
+}
+
 // ── CONFIG ──
 function openConfig() {
   document.getElementById('cfgUrl').value = localStorage.getItem('sb_url2') || '';
   document.getElementById('cfgKey').value = localStorage.getItem('sb_key2') || '';
   document.getElementById('configModal').classList.add('open');
+  setTimeout(updateDbButtons, 0);
 }
 function closeConfig() { if (sb) document.getElementById('configModal').classList.remove('open'); }
 async function saveConfig() {
   const url = document.getElementById('cfgUrl').value.trim();
   const key = document.getElementById('cfgKey').value.trim();
   if (!url || !key) return;
+  // Save as active connection (sb_url2 = current active)
   localStorage.setItem('sb_url2', url);
   localStorage.setItem('sb_key2', key);
+  // Auto-save to my_url if not demo and my_url not set yet
+  const saveMode = localStorage.getItem('db_mode') || 'my';
+  if (saveMode === 'my' && !localStorage.getItem('my_url')) {
+    localStorage.setItem('my_url', url);
+    localStorage.setItem('my_key', key);
+  }
   sb = createClient(url, key);
   document.getElementById('configModal').classList.remove('open');
-  await loadMeta();
-  initPeriod();
-  loadPage('dashboard');
+  window.location.reload();
 }
 function initClient() {
   const url = localStorage.getItem('sb_url2');
   const key = localStorage.getItem('sb_key2');
-  if (url && key) { sb = createClient(url, key); return true; }
+  if (url && key) { sb = createClient(url, key); const m=localStorage.getItem('db_mode')||'my'; const ind=document.getElementById('dbIndicator'); if(ind) ind.textContent=m==='demo'?'🎬 демо-режим':'личные финансы'; return true; }
   return false;
 }
 
