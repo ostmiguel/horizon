@@ -914,7 +914,7 @@ body {
 </div>
 
 <!-- CONFIG MODAL -->
-<div class="modal-overlay open" id="configModal">
+<div class="modal-overlay" id="configModal">
   <div class="modal">
     <div class="modal-title">Подключение к базе данных</div>
 
@@ -1032,11 +1032,16 @@ class QueryBuilder {
 
   select(cols) { this._select = cols; return this; }
   eq(col, val) { this._filters[col] = val; return this; }
+  neq(col, val) { this._filters[`${col}__neq`] = val; return this; }
+  not(col, op, val) { this._filters[`${col}__not_${op}`] = val === null ? 'null' : val; return this; }
   order(col, opts = {}) { this._order = { col, ...opts }; return this; }
   limit(n) { this._limit = n; return this; }
   single() { this._single = true; return this; }
+  maybeSingle() { this._single = true; this._maybe = true; return this; }
   lt(col, val) { this._filters[`${col}__lt`] = val; return this; }
   gt(col, val) { this._filters[`${col}__gt`] = val; return this; }
+  gte(col, val) { this._filters[`${col}__gte`] = val; return this; }
+  lte(col, val) { this._filters[`${col}__lte`] = val; return this; }
 
   // Build URL
   _url() {
@@ -1050,6 +1055,11 @@ class QueryBuilder {
       recurring:    '/api/recurring',
       participants: '/api/participants',
     };
+    // Special case: loan_schedule with loan_id filter → /api/loans/{id}/schedule
+    if (this._table === 'loan_schedule' && this._filters.loan_id) {
+      return `${API_BASE}/api/loans/${this._filters.loan_id}/schedule`;
+    }
+
     let url = API_BASE + (map[this._table] || `/api/${this._table}`);
     if (this._id) url += `/${this._id}`;
 
@@ -1057,7 +1067,21 @@ class QueryBuilder {
     if (this._table === 'plan' || this._isPlan) params.set('plan', 'true');
     if (this._filters.year)  params.set('year',  this._filters.year);
     if (this._filters.month) params.set('month', this._filters.month);
+    if (this._filters['date__lt'])  params.set('date_lt',  this._filters['date__lt']);
+    if (this._filters['date__gt'])  params.set('date_gt',  this._filters['date__gt']);
+    if (this._filters['date__lte']) params.set('date_lte', this._filters['date__lte']);
+    if (this._filters['date__gte']) params.set('date_gte', this._filters['date__gte']);
     if (this._limit) params.set('limit', this._limit);
+    if (this._filters['id__neq'] !== undefined) params.set('id__neq', this._filters['id__neq']);
+    if (this._filters['balance__not_is'] !== undefined) params.set('balance__not_null', '1');
+    if (this._filters['is_active'] !== undefined) params.set('is_active', this._filters['is_active']);
+    if (this._filters['loan_id'] && this._table !== 'loan_schedule') params.set('loan_id', this._filters['loan_id']);
+    if (this._filters['month_num'] !== undefined) params.set('month_num', this._filters['month_num']);
+    if (this._filters['is_paid'] !== undefined) params.set('is_paid', this._filters['is_paid']);
+    if (this._order) {
+      params.set('order_by', this._order.col);
+      if (this._order.ascending === false) params.set('order_dir', 'desc');
+    }
     if (params.toString()) url += '?' + params.toString();
     return url;
   }
@@ -1133,6 +1157,14 @@ const horizonAPI = {
             else qb._filters[col] = val;
             return this;
           },
+          neq(col, val) {
+            qb._filters[`${col}__neq`] = val;
+            return this;
+          },
+          not(col, op, val) {
+            qb._filters[`${col}__not_${op}`] = val === null ? 'null' : val;
+            return this;
+          },
           then(resolve, reject) { return qb._exec().then(resolve, reject); },
         };
       },
@@ -1142,10 +1174,43 @@ const horizonAPI = {
         return {
           eq(col, val) {
             if (col === 'id') qb._id = val;
+            else qb._filters[col] = val;
             return this;
           },
           then(resolve, reject) { return qb._exec().then(resolve, reject); },
         };
+      },
+
+      upsert(body, opts = {}) {
+        qb._method = 'POST';
+        qb._body   = Array.isArray(body) ? body : [body];
+        qb._upsert = true;
+        qb._upsertOpts = opts;
+        // Build special upsert URL
+        const origExec = qb._exec.bind(qb);
+        qb._exec = async function() {
+          try {
+            const url = `${API_BASE}/api/${qb._table}/upsert`;
+            const res = await fetch(url, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ rows: qb._body, on_conflict: opts.onConflict || null })
+            });
+            if (!res.ok) { const e = await res.text(); return { data: null, error: { message: e } }; }
+            const data = await res.json();
+            return { data, error: null };
+          } catch(e) { return { data: null, error: { message: e.message } }; }
+        };
+        return {
+          then(resolve, reject) { return qb._exec().then(resolve, reject); },
+        };
+      },
+
+      // neq filter support
+      neq(col, val) {
+        qb._filters[`${col}__neq`] = val;
+        return this;
       },
     };
   },
@@ -1289,35 +1354,28 @@ function openConfig() {
 }
 function closeConfig() { if (sb) document.getElementById('configModal').classList.remove('open'); }
 async function saveConfig() {
-  const url = document.getElementById('cfgUrl').value.trim();
-  const key = document.getElementById('cfgKey').value.trim();
-  if (!url || !key) return;
-  // Save as active connection (sb_url2 = current active)
-  localStorage.setItem('sb_url2', url);
-  localStorage.setItem('sb_key2', key);
-  // Auto-save to my_url if not demo and my_url not set yet
-  const saveMode = localStorage.getItem('db_mode') || 'my';
-  if (saveMode === 'my' && !localStorage.getItem('my_url')) {
-    localStorage.setItem('my_url', url);
-    localStorage.setItem('my_key', key);
-  }
-  sb = createClient(url, key);
+  // Not needed with our API
   document.getElementById('configModal').classList.remove('open');
-  window.location.reload();
 }
 function initClient() {
   const url = localStorage.getItem('sb_url2');
   const key = localStorage.getItem('sb_key2');
-  if (url && key) { sb = createClient(url, key); const m=localStorage.getItem('db_mode')||'my'; const ind=document.getElementById('dbIndicator'); if(ind) ind.textContent=m==='demo'?'🎬 демо-режим':'личные финансы'; return true; }
-  return false;
+  return true; // Always connected to our API
+}
+
+function initSupabase() {
+  return true; // Always connected to our API
 }
 
 // ── META ──
 async function loadMeta() {
   try {
-    const { data: c } = await sb.from('categories').select('*').order('group_name').order('category').order('subcategory');
-    cats = c || [];
-    const { data: a } = await sb.from('accounts').select('*').eq('is_active', true).order('account_type').order('name');
+    const [catRes, accRes] = await Promise.all([
+      sb.from('categories').select('*').order('group_name').order('category').order('subcategory'),
+      sb.from('accounts').select('*').order('account_type').order('name')
+    ]);
+    cats = catRes.data || [];
+    const a = accRes.data || [];
     // Apply custom sort order if saved
     const savedOrder = JSON.parse(localStorage.getItem('acc_order') || '[]');
     if (savedOrder.length) {
@@ -1330,8 +1388,9 @@ async function loadMeta() {
         return xi - yi;
       });
     }
-    accounts_cache = a || [];
-  } catch(e) { console.error('loadMeta', e); }
+    accounts_cache = a;
+    console.log('loadMeta: cats=' + cats.length + ' accounts=' + accounts_cache.length);
+  } catch(e) { console.error('loadMeta error:', e); }
 }
 
 // ── PERIOD ──
@@ -1439,7 +1498,8 @@ async function loadDashboard() {
     const { data: planFull } = await qpFull;
 
     // Fetch accounts
-    const { data: accs } = await sb.from('account_balance').select('*');
+    const { data: accs } = await sb.from('accounts').select('*');
+    if (accs) accounts_cache = accs; // Keep cache in sync
 
     // Aggregate
     const income  = txs.filter(t => t.account_from === 'Доход').reduce((s,t) => s + +t.amount, 0);
@@ -1478,10 +1538,11 @@ async function loadDashboard() {
     // By month for chart
     const byMonth = {};
     txs.forEach(t => {
-      if (!byMonth[t.month]) byMonth[t.month] = {inc:0,exp:0,obl:0};
-      if (t.account_from === 'Доход')          byMonth[t.month].inc += +t.amount;
-      if (t.account_to   === 'Расход')         byMonth[t.month].exp += +t.amount;
-      if (t.account_to   === 'Обязательства')  byMonth[t.month].obl += +t.amount;
+      const m = new Date(t.date).getMonth() + 1;
+      if (!byMonth[m]) byMonth[m] = {inc:0,exp:0,obl:0};
+      if (t.account_from === 'Доход')          byMonth[m].inc += +t.amount;
+      if (t.account_to   === 'Расход')         byMonth[m].exp += +t.amount;
+      if (t.account_to   === 'Обязательства')  byMonth[m].obl += +t.amount;
     });
     const mLabels=[], mInc=[], mExp=[], mObl=[];
     for (let m=1; m<=12; m++) {
@@ -1677,44 +1738,35 @@ async function loadDashboard() {
       .map(a => a.name));
 
     const today = new Date(); today.setHours(0,0,0,0);
-
-    // initBal = initial_balance + all fact txs before period + plan txs before period (for future dates)
-    const baseBal = (accounts_cache||[])
-      .filter(a => a.account_type === 'Актив' && a.include_in_balance)
-      .reduce((s,a) => s + (+a.initial_balance||0), 0);
-
-    // Fetch fact txs before period start
-    const { data: txsBefore } = await sb.from('transactions')
-      .select('date, amount, account_from, account_to')
-      .lt('date', periodStart)
-      .order('date');
-
-    // Fetch plan txs before period start (for dates after today)
-    const { data: planBefore } = await sb.from('plan')
-      .select('date, amount, account_from, account_to')
-      .lt('date', periodStart)
-      .order('date');
-
-    // Combine: fact for past dates, plan for future dates before period
     const todayStr = today.getFullYear() + '-' +
       String(today.getMonth()+1).padStart(2,'0') + '-' +
       String(today.getDate()).padStart(2,'0');
 
-    // All fact txs before period
-    let initBal = (txsBefore||[]).reduce((s,t) => {
-      if (operAccNames2.has(t.account_to))   s += +t.amount;
-      if (operAccNames2.has(t.account_from)) s -= +t.amount;
-      return s;
-    }, baseBal);
+    // currentBal = актуальный остаток по операционным счетам (уже правильный на сегодня)
+    const currentBal = (accounts_cache||[])
+      .filter(a => a.account_type === 'Актив' && a.include_in_balance)
+      .reduce((s,a) => s + (+a.current_balance||0), 0);
 
-    // Add plan txs that are after today but before period start
-    initBal = (planBefore||[])
-      .filter(p => p.date.substring(0,10) > todayStr)
-      .reduce((s,p) => {
-        if (operAccNames2.has(p.account_to))   s += +p.amount;
-        if (operAccNames2.has(p.account_from)) s -= +p.amount;
-        return s;
-      }, initBal);
+    // Fetch ALL plan for year
+    const { data: planAll2 } = await sb.from('plan')
+      .select('date, amount, account_from, account_to')
+      .eq('year', year);
+
+    // Дельта транзакции относительно операционного баланса
+    function txDelta(t, opNames) {
+      if (opNames.has(t.account_to) && !opNames.has(t.account_from)) return +t.amount;   // деньги пришли
+      if (opNames.has(t.account_from) && !opNames.has(t.account_to)) return -t.amount;   // деньги ушли
+      // перевод внутри операционных — нулевой эффект на суммарный баланс
+      return 0;
+    }
+
+    // balanceAtPeriodStart = currentBal - сумма факт-дельт за [periodStart..todayStr]
+    const txsInPeriodToday = (txs||[]).filter(t => {
+      const d = t.date.substring(0,10);
+      return d >= periodStart && d <= todayStr;
+    });
+    let initBal = currentBal;
+    txsInPeriodToday.forEach(t => { initBal -= txDelta(t, operAccNames2); });
 
 
     // Build day-by-day map
@@ -1724,7 +1776,8 @@ async function loadDashboard() {
 
     // Txs in selected period sorted by date
     const txsSorted = [...(txs||[])].sort((a,b) => new Date(a.date)-new Date(b.date));
-    const planSorted = [...(planFull||plan||[])].sort((a,b) => new Date(a.date)-new Date(b.date));
+    // planSorted — все плановые транзакции года (включая будущие месяцы)
+    const planSorted = [...(planAll2||[])].sort((a,b) => new Date(a.date)-new Date(b.date));
 
     // Compute running balance per day
     const lineLabels = [], factData = [], planData = [];
@@ -1736,23 +1789,20 @@ async function loadDashboard() {
     // Pre-compute fact daily deltas
     const factByDate = {};
     txsSorted.forEach(t => {
-      // Normalize date string (remove time component if present)
       const d = t.date.substring(0,10);
       if (!factByDate[d]) factByDate[d] = 0;
-      if (operAccNames.has(t.account_to))   factByDate[d] += +t.amount;
-      if (operAccNames.has(t.account_from)) factByDate[d] -= +t.amount;
+      factByDate[d] += txDelta(t, operAccNames);
     });
 
-    // Pre-compute plan daily deltas — future only within period (for forecast line)
+    // Pre-compute plan daily deltas — только будущие даты внутри периода
     const planByDate = {};
     planSorted.forEach(p => {
       const d = p.date.substring(0,10);
-      if (d < periodStart) return; // skip plan before period
+      if (d < periodStart) return;
       const pd = new Date(p.date); pd.setHours(0,0,0,0);
       if (pd > today) {
         if (!planByDate[d]) planByDate[d] = 0;
-        if (operAccNames.has(p.account_to))   planByDate[d] += +p.amount;
-        if (operAccNames.has(p.account_from)) planByDate[d] -= +p.amount;
+        planByDate[d] += txDelta(p, operAccNames);
       }
     });
 
@@ -1946,9 +1996,10 @@ async function loadDashboard() {
     if (ctxBar) {
       const byMonthP = {};
       (plan||[]).forEach(p => {
-        if (!byMonthP[p.month]) byMonthP[p.month] = {inc:0,exp:0};
-        if (p.account_from === 'Доход') byMonthP[p.month].inc += +p.amount;
-        if (p.account_to   === 'Расход') byMonthP[p.month].exp += +p.amount;
+        const mp = new Date(p.date).getMonth() + 1;
+        if (!byMonthP[mp]) byMonthP[mp] = {inc:0,exp:0};
+        if (p.account_from === 'Доход') byMonthP[mp].inc += +p.amount;
+        if (p.account_to   === 'Расход') byMonthP[mp].exp += +p.amount;
       });
       // Add obligations to byMonthP
       (plan||[]).forEach(p => {
@@ -3997,16 +4048,21 @@ async function schedTogglePaid(loanId, monthNum, isPaid) {
     return;
   }
 
-  // Save row first if not yet in DB
-  await schedSaveRow(loanId, monthNum);
+  // Save/update this row inline
+  const dateVal     = row?.querySelector('[data-field=date]')?.value || null;
+  const payVal      = parseFloat(row?.querySelector('[data-field=payment]')?.value) || null;
+  const princVal    = parseFloat(row?.querySelector('[data-field=principal]')?.value) || null;
+  const intVal      = parseFloat(row?.querySelector('[data-field=interest]')?.value) || null;
+  const balVal      = parseFloat(row?.querySelector('[data-field=balance]')?.value) || null;
+  const extraVal    = parseFloat(row?.querySelector('[data-field=extra_payment]')?.value) || null;
 
-  // Now update is_paid
-  const { data: existing } = await sb.from('loan_schedule')
-    .select('id').eq('loan_id', loanId).eq('month_num', monthNum).maybeSingle();
-
-  if (existing) {
-    await sb.from('loan_schedule').update({ is_paid: isPaid }).eq('id', existing.id);
-  }
+  // Upsert this row
+  await sb.from('loan_schedule').upsert([{
+    loan_id: loanId, month_num: monthNum,
+    date: dateVal, payment: payVal, principal: princVal,
+    interest: intVal, balance: balVal, extra_payment: extraVal,
+    is_paid: isPaid
+  }], { onConflict: 'loan_id,month_num' });
   if (row) row.className = isPaid ? 'paid' : '';
   await refreshLoanBalance(loanId);
   setSaveStatus('saved');
@@ -5030,11 +5086,14 @@ window.onload = async () => {
   document.getElementById('btnSaveConfig')?.addEventListener('click', saveConfig);
   document.getElementById('btnCancelConfig')?.addEventListener('click', closeConfig);
   initPeriod();
-  if (initClient()) {
-    document.getElementById('configModal').classList.remove('open');
-    await loadMeta();
-    loadPage('dashboard');
+  initSupabase();
+  const sessionCheck = await sb.auth.getSession();
+  if (!sessionCheck.data.session) {
+    loadLogin();
+    return;
   }
+  await loadMeta();
+  loadPage('dashboard');
 };
 </script>
 </body>
