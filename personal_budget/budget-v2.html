@@ -1037,6 +1037,8 @@ class QueryBuilder {
   single() { this._single = true; return this; }
   lt(col, val) { this._filters[`${col}__lt`] = val; return this; }
   gt(col, val) { this._filters[`${col}__gt`] = val; return this; }
+  gte(col, val) { this._filters[`${col}__gte`] = val; return this; }
+  lte(col, val) { this._filters[`${col}__lte`] = val; return this; }
 
   // Build URL
   _url() {
@@ -1062,6 +1064,10 @@ class QueryBuilder {
     if (this._table === 'plan' || this._isPlan) params.set('plan', 'true');
     if (this._filters.year)  params.set('year',  this._filters.year);
     if (this._filters.month) params.set('month', this._filters.month);
+    if (this._filters['date__lt'])  params.set('date_lt',  this._filters['date__lt']);
+    if (this._filters['date__gt'])  params.set('date_gt',  this._filters['date__gt']);
+    if (this._filters['date__lte']) params.set('date_lte', this._filters['date__lte']);
+    if (this._filters['date__gte']) params.set('date_gte', this._filters['date__gte']);
     if (this._limit) params.set('limit', this._limit);
     if (params.toString()) url += '?' + params.toString();
     return url;
@@ -1478,10 +1484,11 @@ async function loadDashboard() {
     // By month for chart
     const byMonth = {};
     txs.forEach(t => {
-      if (!byMonth[t.month]) byMonth[t.month] = {inc:0,exp:0,obl:0};
-      if (t.account_from === 'Доход')          byMonth[t.month].inc += +t.amount;
-      if (t.account_to   === 'Расход')         byMonth[t.month].exp += +t.amount;
-      if (t.account_to   === 'Обязательства')  byMonth[t.month].obl += +t.amount;
+      const m = new Date(t.date).getMonth() + 1;
+      if (!byMonth[m]) byMonth[m] = {inc:0,exp:0,obl:0};
+      if (t.account_from === 'Доход')          byMonth[m].inc += +t.amount;
+      if (t.account_to   === 'Расход')         byMonth[m].exp += +t.amount;
+      if (t.account_to   === 'Обязательства')  byMonth[m].obl += +t.amount;
     });
     const mLabels=[], mInc=[], mExp=[], mObl=[];
     for (let m=1; m<=12; m++) {
@@ -1683,17 +1690,17 @@ async function loadDashboard() {
       .filter(a => a.account_type === 'Актив' && a.include_in_balance)
       .reduce((s,a) => s + (+a.initial_balance||0), 0);
 
-    // Fetch fact txs before period start
-    const { data: txsBefore } = await sb.from('transactions')
+    // Fetch ALL fact txs for this year, then filter client-side
+    const { data: txsAll } = await sb.from('transactions')
       .select('date, amount, account_from, account_to')
-      .lt('date', periodStart)
-      .order('date');
+      .eq('year', year);
+    const txsBefore = (txsAll||[]).filter(t => t.date.substring(0,10) < periodStart);
 
-    // Fetch plan txs before period start (for dates after today)
-    const { data: planBefore } = await sb.from('plan')
+    // Fetch ALL plan for year, filter client-side
+    const { data: planAll2 } = await sb.from('plan')
       .select('date, amount, account_from, account_to')
-      .lt('date', periodStart)
-      .order('date');
+      .eq('year', year);
+    const planBefore = (planAll2||[]).filter(p => p.date.substring(0,10) < periodStart);
 
     // Combine: fact for past dates, plan for future dates before period
     const todayStr = today.getFullYear() + '-' +
@@ -1946,9 +1953,10 @@ async function loadDashboard() {
     if (ctxBar) {
       const byMonthP = {};
       (plan||[]).forEach(p => {
-        if (!byMonthP[p.month]) byMonthP[p.month] = {inc:0,exp:0};
-        if (p.account_from === 'Доход') byMonthP[p.month].inc += +p.amount;
-        if (p.account_to   === 'Расход') byMonthP[p.month].exp += +p.amount;
+        const mp = new Date(p.date).getMonth() + 1;
+        if (!byMonthP[mp]) byMonthP[mp] = {inc:0,exp:0};
+        if (p.account_from === 'Доход') byMonthP[mp].inc += +p.amount;
+        if (p.account_to   === 'Расход') byMonthP[mp].exp += +p.amount;
       });
       // Add obligations to byMonthP
       (plan||[]).forEach(p => {
