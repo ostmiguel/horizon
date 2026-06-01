@@ -1425,7 +1425,7 @@ async function loadDashboard() {
     const { data: planFull } = await qpFull;
 
     // Fetch accounts
-    const { data: accs } = await sb.from('account_balance').select('*');
+    const { data: accs } = await sb.from('accounts').select('*');
 
     // Aggregate
     const income  = txs.filter(t => t.account_from === 'Доход').reduce((s,t) => s + +t.amount, 0);
