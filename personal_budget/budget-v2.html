@@ -914,7 +914,7 @@ body {
 </div>
 
 <!-- CONFIG MODAL -->
-<div class="modal-overlay open" id="configModal">
+<div class="modal-overlay" id="configModal">
   <div class="modal">
     <div class="modal-title">Подключение к базе данных</div>
 
@@ -1289,27 +1289,13 @@ function openConfig() {
 }
 function closeConfig() { if (sb) document.getElementById('configModal').classList.remove('open'); }
 async function saveConfig() {
-  const url = document.getElementById('cfgUrl').value.trim();
-  const key = document.getElementById('cfgKey').value.trim();
-  if (!url || !key) return;
-  // Save as active connection (sb_url2 = current active)
-  localStorage.setItem('sb_url2', url);
-  localStorage.setItem('sb_key2', key);
-  // Auto-save to my_url if not demo and my_url not set yet
-  const saveMode = localStorage.getItem('db_mode') || 'my';
-  if (saveMode === 'my' && !localStorage.getItem('my_url')) {
-    localStorage.setItem('my_url', url);
-    localStorage.setItem('my_key', key);
-  }
-  sb = createClient(url, key);
+  // Not needed with our API
   document.getElementById('configModal').classList.remove('open');
-  window.location.reload();
 }
 function initClient() {
   const url = localStorage.getItem('sb_url2');
   const key = localStorage.getItem('sb_key2');
-  if (url && key) { sb = createClient(url, key); const m=localStorage.getItem('db_mode')||'my'; const ind=document.getElementById('dbIndicator'); if(ind) ind.textContent=m==='demo'?'🎬 демо-режим':'личные финансы'; return true; }
-  return false;
+  return true; // Always connected to our API
 }
 
 // ── META ──
