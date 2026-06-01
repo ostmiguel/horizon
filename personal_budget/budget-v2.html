@@ -1303,12 +1303,19 @@ function initClient() {
   return true; // Always connected to our API
 }
 
+function initSupabase() {
+  return true; // Always connected to our API
+}
+
 // ── META ──
 async function loadMeta() {
   try {
-    const { data: c } = await sb.from('categories').select('*').order('group_name').order('category').order('subcategory');
-    cats = c || [];
-    const { data: a } = await sb.from('accounts').select('*').order('account_type').order('name');
+    const [catRes, accRes] = await Promise.all([
+      sb.from('categories').select('*').order('group_name').order('category').order('subcategory'),
+      sb.from('accounts').select('*').order('account_type').order('name')
+    ]);
+    cats = catRes.data || [];
+    const a = accRes.data || [];
     // Apply custom sort order if saved
     const savedOrder = JSON.parse(localStorage.getItem('acc_order') || '[]');
     if (savedOrder.length) {
@@ -1321,8 +1328,9 @@ async function loadMeta() {
         return xi - yi;
       });
     }
-    accounts_cache = a || [];
-  } catch(e) { console.error('loadMeta', e); }
+    accounts_cache = a;
+    console.log('loadMeta: cats=' + cats.length + ' accounts=' + accounts_cache.length);
+  } catch(e) { console.error('loadMeta error:', e); }
 }
 
 // ── PERIOD ──
@@ -1431,6 +1439,7 @@ async function loadDashboard() {
 
     // Fetch accounts
     const { data: accs } = await sb.from('accounts').select('*');
+    if (accs) accounts_cache = accs; // Keep cache in sync
 
     // Aggregate
     const income  = txs.filter(t => t.account_from === 'Доход').reduce((s,t) => s + +t.amount, 0);
