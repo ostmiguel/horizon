@@ -5016,11 +5016,14 @@ window.onload = async () => {
   document.getElementById('btnSaveConfig')?.addEventListener('click', saveConfig);
   document.getElementById('btnCancelConfig')?.addEventListener('click', closeConfig);
   initPeriod();
-  if (initClient()) {
-    document.getElementById('configModal').classList.remove('open');
-    await loadMeta();
-    loadPage('dashboard');
+  initSupabase();
+  const sessionCheck = await sb.auth.getSession();
+  if (!sessionCheck.data.session) {
+    loadLogin();
+    return;
   }
+  await loadMeta();
+  loadPage('dashboard');
 };
 </script>
 </body>
