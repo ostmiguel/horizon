@@ -1303,7 +1303,7 @@ async function loadMeta() {
   try {
     const { data: c } = await sb.from('categories').select('*').order('group_name').order('category').order('subcategory');
     cats = c || [];
-    const { data: a } = await sb.from('accounts').select('*').eq('is_active', true).order('account_type').order('name');
+    const { data: a } = await sb.from('accounts').select('*').order('account_type').order('name');
     // Apply custom sort order if saved
     const savedOrder = JSON.parse(localStorage.getItem('acc_order') || '[]');
     if (savedOrder.length) {
