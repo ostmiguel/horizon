@@ -1050,6 +1050,11 @@ class QueryBuilder {
       recurring:    '/api/recurring',
       participants: '/api/participants',
     };
+    // Special case: loan_schedule with loan_id filter → /api/loans/{id}/schedule
+    if (this._table === 'loan_schedule' && this._filters.loan_id) {
+      return `${API_BASE}/api/loans/${this._filters.loan_id}/schedule`;
+    }
+
     let url = API_BASE + (map[this._table] || `/api/${this._table}`);
     if (this._id) url += `/${this._id}`;
 
