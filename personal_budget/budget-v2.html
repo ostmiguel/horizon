@@ -1032,9 +1032,12 @@ class QueryBuilder {
 
   select(cols) { this._select = cols; return this; }
   eq(col, val) { this._filters[col] = val; return this; }
+  neq(col, val) { this._filters[`${col}__neq`] = val; return this; }
+  not(col, op, val) { this._filters[`${col}__not_${op}`] = val === null ? 'null' : val; return this; }
   order(col, opts = {}) { this._order = { col, ...opts }; return this; }
   limit(n) { this._limit = n; return this; }
   single() { this._single = true; return this; }
+  maybeSingle() { this._single = true; this._maybe = true; return this; }
   lt(col, val) { this._filters[`${col}__lt`] = val; return this; }
   gt(col, val) { this._filters[`${col}__gt`] = val; return this; }
   gte(col, val) { this._filters[`${col}__gte`] = val; return this; }
@@ -1069,6 +1072,16 @@ class QueryBuilder {
     if (this._filters['date__lte']) params.set('date_lte', this._filters['date__lte']);
     if (this._filters['date__gte']) params.set('date_gte', this._filters['date__gte']);
     if (this._limit) params.set('limit', this._limit);
+    if (this._filters['id__neq'] !== undefined) params.set('id__neq', this._filters['id__neq']);
+    if (this._filters['balance__not_is'] !== undefined) params.set('balance__not_null', '1');
+    if (this._filters['is_active'] !== undefined) params.set('is_active', this._filters['is_active']);
+    if (this._filters['loan_id'] && this._table !== 'loan_schedule') params.set('loan_id', this._filters['loan_id']);
+    if (this._filters['month_num'] !== undefined) params.set('month_num', this._filters['month_num']);
+    if (this._filters['is_paid'] !== undefined) params.set('is_paid', this._filters['is_paid']);
+    if (this._order) {
+      params.set('order_by', this._order.col);
+      if (this._order.ascending === false) params.set('order_dir', 'desc');
+    }
     if (params.toString()) url += '?' + params.toString();
     return url;
   }
@@ -1144,6 +1157,14 @@ const horizonAPI = {
             else qb._filters[col] = val;
             return this;
           },
+          neq(col, val) {
+            qb._filters[`${col}__neq`] = val;
+            return this;
+          },
+          not(col, op, val) {
+            qb._filters[`${col}__not_${op}`] = val === null ? 'null' : val;
+            return this;
+          },
           then(resolve, reject) { return qb._exec().then(resolve, reject); },
         };
       },
@@ -1153,10 +1174,43 @@ const horizonAPI = {
         return {
           eq(col, val) {
             if (col === 'id') qb._id = val;
+            else qb._filters[col] = val;
             return this;
           },
           then(resolve, reject) { return qb._exec().then(resolve, reject); },
         };
+      },
+
+      upsert(body, opts = {}) {
+        qb._method = 'POST';
+        qb._body   = Array.isArray(body) ? body : [body];
+        qb._upsert = true;
+        qb._upsertOpts = opts;
+        // Build special upsert URL
+        const origExec = qb._exec.bind(qb);
+        qb._exec = async function() {
+          try {
+            const url = `${API_BASE}/api/${qb._table}/upsert`;
+            const res = await fetch(url, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ rows: qb._body, on_conflict: opts.onConflict || null })
+            });
+            if (!res.ok) { const e = await res.text(); return { data: null, error: { message: e } }; }
+            const data = await res.json();
+            return { data, error: null };
+          } catch(e) { return { data: null, error: { message: e.message } }; }
+        };
+        return {
+          then(resolve, reject) { return qb._exec().then(resolve, reject); },
+        };
+      },
+
+      // neq filter support
+      neq(col, val) {
+        qb._filters[`${col}__neq`] = val;
+        return this;
       },
     };
   },
@@ -1709,8 +1763,16 @@ async function loadDashboard() {
 
     // All fact txs before period
     let initBal = (txsBefore||[]).reduce((s,t) => {
-      if (operAccNames2.has(t.account_to))   s += +t.amount;
-      if (operAccNames2.has(t.account_from)) s -= +t.amount;
+      if (t.account_from === 'Доход' && operAccNames2.has(t.account_to)) {
+        s += +t.amount;
+      } else if (t.account_to === 'Расход' && operAccNames2.has(t.account_from)) {
+        s -= +t.amount;
+      } else if (t.account_to === 'Обязательства' && operAccNames2.has(t.account_from)) {
+        s -= +t.amount;
+      } else {
+        if (operAccNames2.has(t.account_to))   s += +t.amount;
+        if (operAccNames2.has(t.account_from)) s -= +t.amount;
+      }
       return s;
     }, baseBal);
 
@@ -1718,8 +1780,16 @@ async function loadDashboard() {
     initBal = (planBefore||[])
       .filter(p => p.date.substring(0,10) > todayStr)
       .reduce((s,p) => {
-        if (operAccNames2.has(p.account_to))   s += +p.amount;
-        if (operAccNames2.has(p.account_from)) s -= +p.amount;
+        if (p.account_from === 'Доход' && operAccNames2.has(p.account_to)) {
+          s += +p.amount;
+        } else if (p.account_to === 'Расход' && operAccNames2.has(p.account_from)) {
+          s -= +p.amount;
+        } else if (p.account_to === 'Обязательства' && operAccNames2.has(p.account_from)) {
+          s -= +p.amount;
+        } else {
+          if (operAccNames2.has(p.account_to))   s += +p.amount;
+          if (operAccNames2.has(p.account_from)) s -= +p.amount;
+        }
         return s;
       }, initBal);
 
@@ -1746,8 +1816,23 @@ async function loadDashboard() {
       // Normalize date string (remove time component if present)
       const d = t.date.substring(0,10);
       if (!factByDate[d]) factByDate[d] = 0;
-      if (operAccNames.has(t.account_to))   factByDate[d] += +t.amount;
-      if (operAccNames.has(t.account_from)) factByDate[d] -= +t.amount;
+      // Income: Доход → real account
+      if (t.account_from === 'Доход' && operAccNames.has(t.account_to)) {
+        factByDate[d] += +t.amount;
+      }
+      // Expense: real account → Расход
+      else if (t.account_to === 'Расход' && operAccNames.has(t.account_from)) {
+        factByDate[d] -= +t.amount;
+      }
+      // Obligation: real account → Обязательства
+      else if (t.account_to === 'Обязательства' && operAccNames.has(t.account_from)) {
+        factByDate[d] -= +t.amount;
+      }
+      // Transfer between real accounts
+      else {
+        if (operAccNames.has(t.account_to))   factByDate[d] += +t.amount;
+        if (operAccNames.has(t.account_from)) factByDate[d] -= +t.amount;
+      }
     });
 
     // Pre-compute plan daily deltas — future only within period (for forecast line)
@@ -1758,8 +1843,23 @@ async function loadDashboard() {
       const pd = new Date(p.date); pd.setHours(0,0,0,0);
       if (pd > today) {
         if (!planByDate[d]) planByDate[d] = 0;
-        if (operAccNames.has(p.account_to))   planByDate[d] += +p.amount;
-        if (operAccNames.has(p.account_from)) planByDate[d] -= +p.amount;
+        // Income: Доход → real account → balance goes up
+        if (p.account_from === 'Доход' && operAccNames.has(p.account_to)) {
+          planByDate[d] += +p.amount;
+        }
+        // Expense: real account → Расход → balance goes down
+        else if (p.account_to === 'Расход' && operAccNames.has(p.account_from)) {
+          planByDate[d] -= +p.amount;
+        }
+        // Obligation: real account → Обязательства → balance goes down
+        else if (p.account_to === 'Обязательства' && operAccNames.has(p.account_from)) {
+          planByDate[d] -= +p.amount;
+        }
+        // Transfer between real accounts (savings etc.)
+        else {
+          if (operAccNames.has(p.account_to))   planByDate[d] += +p.amount;
+          if (operAccNames.has(p.account_from)) planByDate[d] -= +p.amount;
+        }
       }
     });
 
@@ -4005,16 +4105,21 @@ async function schedTogglePaid(loanId, monthNum, isPaid) {
     return;
   }
 
-  // Save row first if not yet in DB
-  await schedSaveRow(loanId, monthNum);
+  // Save/update this row inline
+  const dateVal     = row?.querySelector('[data-field=date]')?.value || null;
+  const payVal      = parseFloat(row?.querySelector('[data-field=payment]')?.value) || null;
+  const princVal    = parseFloat(row?.querySelector('[data-field=principal]')?.value) || null;
+  const intVal      = parseFloat(row?.querySelector('[data-field=interest]')?.value) || null;
+  const balVal      = parseFloat(row?.querySelector('[data-field=balance]')?.value) || null;
+  const extraVal    = parseFloat(row?.querySelector('[data-field=extra_payment]')?.value) || null;
 
-  // Now update is_paid
-  const { data: existing } = await sb.from('loan_schedule')
-    .select('id').eq('loan_id', loanId).eq('month_num', monthNum).maybeSingle();
-
-  if (existing) {
-    await sb.from('loan_schedule').update({ is_paid: isPaid }).eq('id', existing.id);
-  }
+  // Upsert this row
+  await sb.from('loan_schedule').upsert([{
+    loan_id: loanId, month_num: monthNum,
+    date: dateVal, payment: payVal, principal: princVal,
+    interest: intVal, balance: balVal, extra_payment: extraVal,
+    is_paid: isPaid
+  }], { onConflict: 'loan_id,month_num' });
   if (row) row.className = isPaid ? 'paid' : '';
   await refreshLoanBalance(loanId);
   setSaveStatus('saved');
