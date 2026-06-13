@@ -1,0 +1,23 @@
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'releases/budget-v2.html'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: releases/budget-v2.html
+          target: /opt/horizon/personal_budget/horizon-api/static/
+          strip_components: 1
