@@ -13,11 +13,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: echo "connected"
+
+      - name: Copy file
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 109.71.247.58
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: releases/budget-v2.html
-          target: /opt/horizon/personal_budget/horizon-api/static/
+          target: /tmp/
           strip_components: 1
+
+      - name: Rename to index.html
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: mv /tmp/budget-v2.html /opt/horizon/personal_budget/horizon-api/static/index.html
