@@ -5979,8 +5979,13 @@ window.onload = async () => {
     localStorage.setItem('hz_consent_accepted', '2026-06-03');
   }
 
+  // Feature flags — только для владельца
+  const OWNER_ID = '084f18c0-927d-444e-a9d0-7313042d7163';
+  const isOwner = sessionCheck.data.session?.user?.id === OWNER_ID;
+  window.NEW_ARCH = isOwner && localStorage.getItem('hz_new_arch') === '1';
+
   // Show lab nav only for Maks
-  if (sessionCheck.data.session?.user?.id === '084f18c0-927d-444e-a9d0-7313042d7163') {
+  if (isOwner) {
     const navLab = document.getElementById('navLab');
     if (navLab) navLab.style.display = '';
   }
@@ -6090,3 +6095,4 @@ function openLabModalEpis(planCur) {
 
 </body>
 </html>
+ 
