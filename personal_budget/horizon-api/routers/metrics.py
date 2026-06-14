@@ -86,7 +86,8 @@ FIXED_CHARS = ('fixed', 'Фиксированный')
 
 
 async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
-    """Robust daily rate and σ from last 30 days of flow/everyday expenses."""
+    """Robust daily rate and σ from last 30 days of variable everyday expenses.
+    Only expense_type='variable' + character!='Эпизодический' — excludes fixed subscriptions."""
     cutoff = today - timedelta(days=30)
     rows = await db.fetch("""
         SELECT t.date, SUM(t.amount) AS daily_total
@@ -94,9 +95,10 @@ async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
           AND t.account_to = 'Расход'
-          AND c.character = ANY($4)
+          AND c.expense_type = 'variable'
+          AND c.character != 'Эпизодический'
         GROUP BY t.date ORDER BY t.date
-    """, user_id, cutoff, today, list(FLOW_CHARS))
+    """, user_id, cutoff, today)
     daily = [float(r["daily_total"]) for r in rows]
     return robust_rate(daily), robust_sigma(daily)
 
@@ -126,7 +128,8 @@ async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
 async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -> list:
     rows = await db.fetch("""
         SELECT p.date, p.amount, p.account_from, p.account_to,
-               c.character AS cat_character
+               c.character AS cat_character,
+               c.expense_type AS cat_expense_type
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1
@@ -170,19 +173,14 @@ async def get_metrics(request: Request):
     # ── Plan remaining ────────────────────────────────────────────────────────
     plan_rows = await plan_remaining(db, user_id, year, month, today)
     I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_from") == "Доход")
-    # F_remain: fixed + episodic plan outflows (flow/everyday is covered by V_remain statistically)
-    # If no flow-tagged categories yet, include ALL plan outflows to avoid underestimating
     plan_expenses = [r for r in plan_rows if r.get("account_to") == "Расход"]
-    has_flow_tagged = any(r.get("cat_character") in FLOW_CHARS for r in plan_expenses)
-    if has_flow_tagged:
-        # Proper split: fixed + episodic in F_remain, flow goes into V_remain
-        F_remain = sum(
-            float(r["amount"]) for r in plan_expenses
-            if r.get("cat_character") not in FLOW_CHARS
-        )
-    else:
-        # No flow tagging yet: use all plan expenses (V_remain will be 0)
-        F_remain = sum(float(r["amount"]) for r in plan_expenses)
+    # F_remain = fixed plan expenses (expense_type='fixed') + episodic (character='Эпизодический')
+    # Variable everyday (expense_type='variable', character!='Эпизодический') → covered by V_remain
+    F_remain = sum(
+        float(r["amount"]) for r in plan_expenses
+        if r.get("cat_expense_type") == "fixed"
+        or r.get("cat_character") in EPISODIC_CHARS
+    )
     F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
     R_topup = 0  # TODO: detect reserve accounts by name when _is_rsv accounts are in plan
 
@@ -256,8 +254,8 @@ async def get_metrics(request: Request):
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
           AND t.account_to = 'Расход'
-          AND c.character = ANY($4)
-    """, user_id, year, month, list(FIXED_CHARS)))
+          AND c.expense_type = 'fixed'
+    """, user_id, year, month))
 
     cur_expenses = float(await db.fetchval("""
         SELECT COALESCE(SUM(amount), 0) FROM transactions
@@ -306,21 +304,23 @@ async def get_metrics(request: Request):
 
     # ── §4.6 Categories ───────────────────────────────────────────────────────
     cat_rows = await db.fetch("""
-        SELECT c.category, c.character AS cat_char, SUM(t.amount) AS total
+        SELECT c.category, c.character AS cat_char, c.expense_type AS cat_expense_type,
+               SUM(t.amount) AS total
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
           AND t.account_to = 'Расход'
-        GROUP BY c.category, c.character
+        GROUP BY c.category, c.character, c.expense_type
         ORDER BY total DESC
     """, user_id, year, month)
 
     categories = []
     for r in cat_rows:
         fact = float(r["total"])
-        if r["cat_char"] == "flow" and d_left > 0:
+        is_variable_everyday = (r["cat_expense_type"] == "variable" and r["cat_char"] != "Эпизодический")
+        if is_variable_everyday and d_left > 0:
             cat_daily = await db.fetch("""
                 SELECT t.date, SUM(t.amount) AS dt
                 FROM transactions t
@@ -336,6 +336,7 @@ async def get_metrics(request: Request):
         categories.append({
             "category":        r["category"],
             "character":       r["cat_char"],
+            "expense_type":    r["cat_expense_type"],
             "amount_fact":     round(fact),
             "amount_forecast": round(forecast),
         })
@@ -349,7 +350,8 @@ async def get_metrics(request: Request):
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
           AND t.account_to = 'Расход'
-          AND (c.character = 'flow' OR c.character IS NULL)
+          AND c.expense_type = 'variable'
+          AND c.character != 'Эпизодический'
     """, user_id, year, month))
 
     # ── Response ──────────────────────────────────────────────────────────────
