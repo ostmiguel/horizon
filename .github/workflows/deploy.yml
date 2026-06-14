@@ -42,6 +42,15 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: mv /tmp/budget-v2.html /opt/horizon/personal_budget/horizon-api/static/index.html
 
+      - name: Copy chart.js
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: chart.js
+          target: /opt/horizon/personal_budget/horizon-api/static/
+
       - name: Copy forecast_cron.py
         uses: appleboy/scp-action@v0.1.7
         with:
