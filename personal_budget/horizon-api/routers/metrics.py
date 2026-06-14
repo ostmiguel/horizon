@@ -432,3 +432,133 @@ async def get_forecast(request: Request):
         points.append(point)
 
     return {"month": f"{year}-{month:02d}", "points": points}
+
+
+# ── /api/metrics/affordability — §4.8 Следующий шаг ─────────────────────────
+
+def norm_cdf(x: float) -> float:
+    return (1 + math.erf(x / math.sqrt(2))) / 2
+
+
+async def monthly_free_cash_history(db, user_id: str, today: date, n_months: int = 6) -> list[float]:
+    """Free cash per month for last n_months: income - expenses - reserve_contributions."""
+    results = []
+    for i in range(1, n_months + 1):
+        m, y = today.month - i, today.year
+        if m <= 0:
+            m += 12; y -= 1
+        inc = await db.fetchval("""
+            SELECT COALESCE(SUM(amount), 0) FROM transactions
+            WHERE user_id=$1 AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+              AND op_type='income'
+        """, user_id, y, m)
+        exp = await db.fetchval("""
+            SELECT COALESCE(SUM(amount), 0) FROM transactions
+            WHERE user_id=$1 AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+              AND op_type IN ('expense', 'debt_payment')
+        """, user_id, y, m)
+        res = await db.fetchval("""
+            SELECT COALESCE(SUM(amount), 0) FROM transactions
+            WHERE user_id=$1 AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+              AND op_type='reserve_contribution'
+        """, user_id, y, m)
+        free = float(inc) - float(exp) - float(res)
+        results.append(free)
+    return results
+
+
+def find_eta(remaining: float, monthly_fc: float, sigma_monthly: float, max_months: int = 60):
+    """Returns (months_to_goal, confidence_pct) or None if not achievable."""
+    if monthly_fc <= 0:
+        return None, 0.0
+    cfc = 0.0
+    for m in range(1, max_months + 1):
+        cfc += monthly_fc
+        if cfc >= remaining:
+            if sigma_monthly > 0:
+                sigma_cfc = sigma_monthly * math.sqrt(m)
+                conf = norm_cdf((cfc - remaining) / sigma_cfc) * 100
+            else:
+                conf = 99.0
+            return m, round(conf, 1)
+    return None, 0.0
+
+
+@router.get("/affordability")
+async def get_affordability(request: Request):
+    user_id = request.state.user_id
+    db = request.state.db
+    today = date.today()
+
+    # ── Monthly free cash history ─────────────────────────────────────────────
+    history = await monthly_free_cash_history(db, user_id, today)
+    avg_fc = statistics.mean(history) if history else 0.0
+    sigma_fc = statistics.stdev(history) if len(history) >= 2 else 0.0
+
+    # ── Goals ─────────────────────────────────────────────────────────────────
+    goal_rows = await db.fetch("""
+        SELECT g.id, g.name, g.target_amount, g.account_id, g.due_date,
+               COALESCE(
+                 a.initial_balance
+                 + COALESCE(SUM(CASE WHEN t.account_to   = a.name THEN t.amount ELSE 0 END), 0)
+                 - COALESCE(SUM(CASE WHEN t.account_from = a.name THEN t.amount ELSE 0 END), 0),
+                 0
+               ) AS current_balance
+        FROM goals g
+        LEFT JOIN accounts a ON a.id = g.account_id AND a.user_id = $1
+        LEFT JOIN transactions t
+            ON (t.account_from = a.name OR t.account_to = a.name) AND t.user_id = $1
+        WHERE g.user_id = $1
+        GROUP BY g.id, g.name, g.target_amount, g.account_id, g.due_date,
+                 a.initial_balance
+        ORDER BY g.target_amount
+    """, user_id)
+
+    goals = []
+    for r in goal_rows:
+        target = float(r["target_amount"])
+        current = float(r["current_balance"])
+        remaining = max(0.0, target - current)
+        done = current >= target
+        pct = round(min(100, current / target * 100)) if target > 0 else 0
+
+        months_to_goal, confidence = find_eta(remaining, avg_fc, sigma_fc)
+
+        if months_to_goal is not None:
+            eta_date = date(
+                today.year + (today.month + months_to_goal - 1) // 12,
+                (today.month + months_to_goal - 1) % 12 + 1,
+                1,
+            )
+            eta_label = eta_date.strftime("%B %Y")
+        else:
+            eta_label = None
+
+        due_date = r["due_date"]
+        if due_date and months_to_goal is not None:
+            months_due = (due_date.year - today.year) * 12 + (due_date.month - today.month)
+            on_track = months_to_goal <= months_due
+        else:
+            on_track = None
+
+        goals.append({
+            "id":           r["id"],
+            "name":         r["name"],
+            "target":       round(target),
+            "current":      round(current),
+            "remaining":    round(remaining),
+            "pct":          pct,
+            "done":         done,
+            "due_date":     due_date.isoformat() if due_date else None,
+            "eta_months":   months_to_goal,
+            "eta_label":    eta_label,
+            "confidence":   confidence,
+            "on_track":     on_track,
+        })
+
+    return {
+        "as_of":          today.isoformat(),
+        "monthly_fc_avg": round(avg_fc),
+        "monthly_fc_sigma": round(sigma_fc),
+        "goals":          goals,
+    }
