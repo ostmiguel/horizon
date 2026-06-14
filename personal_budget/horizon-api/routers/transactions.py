@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date
+import datetime
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 class TxCreate(BaseModel):
-    date: date
+    date: datetime.date
     amount: float
     account_from: str
     account_to: str
@@ -16,7 +16,7 @@ class TxCreate(BaseModel):
     source: Optional[str] = "manual"
 
 class TxUpdate(BaseModel):
-    date: Optional[date] = None
+    date: Optional[datetime.date] = None
     amount: Optional[float] = None
     account_from: Optional[str] = None
     account_to: Optional[str] = None
