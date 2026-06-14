@@ -139,7 +139,13 @@ async def get_metrics(request: Request):
     # ── Balances ──────────────────────────────────────────────────────────────
     accs = await account_balances(db, user_id)
 
-    B0 = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
+    b0_accounts = [
+        {"name": a["name"], "balance": round(float(a["balance"])),
+         "type": a["account_type"], "include_in_balance": a.get("include_in_balance"),
+         "is_operational": a.get("is_operational"), "is_active": a.get("is_active")}
+        for a in accs.values() if _is_op(a)
+    ]
+    B0 = sum(a["balance"] for a in b0_accounts)
     C_cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
     reserve_balance = sum(float(a["balance"]) for a in accs.values() if _is_rsv(a))
     liabilities = sum(
@@ -212,6 +218,7 @@ async def get_metrics(request: Request):
         behavioral_exps.append(await monthly_expense_sum(db, user_id, y, m))
     avg_exp = statistics.mean(behavioral_exps) if behavioral_exps else 1
     behavioral_runway = liquid / avg_exp if avg_exp > 0 else 99.0
+    behavioral_runway = max(behavioral_runway, 0.0)  # guard against negative
 
     if behavioral_runway >= 6:
         runway_status = "green"
@@ -373,6 +380,19 @@ async def get_metrics(request: Request):
             "flow_forecast_month": round(flow_fact + V_remain),
         },
         "categories": categories,
+        "_debug": {
+            "b0_accounts": b0_accounts,
+            "all_accounts": [
+                {"name": a["name"], "balance": round(float(a["balance"])),
+                 "type": a["account_type"],
+                 "include_in_balance": a.get("include_in_balance"),
+                 "is_operational": a.get("is_operational"),
+                 "is_reserve": a.get("is_reserve"),
+                 "is_cushion": a.get("is_cushion"),
+                 "in_b0": _is_op(a)}
+                for a in accs.values()
+            ],
+        },
     }
 
 

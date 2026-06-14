@@ -5803,6 +5803,15 @@ async function loadDashboardNew() {
         </span></div>`;
     }).join('');
 
+    const dbgAccs = (m._debug?.b0_accounts || []);
+    const wfAccs = dbgAccs.length ? `
+      <div style="margin-top:8px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Счета в Балансе сейчас</div>
+      ${dbgAccs.map(a => `
+        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px">
+          <span style="color:var(--text2)">${a.name} <span style="color:var(--text3)">(${a.type})</span></span>
+          <span style="color:var(--text)">${f(a.balance)} ₽</span>
+        </div>`).join('')}` : '';
+
     // ── Health KPIs ──────────────────────────────────────────────────────────
     const kpis = [
       { label: 'Чистый капитал',    val: f(Math.abs(m.net_capital.value)) + ' ₽', color: C[m.net_capital.status],
@@ -5879,7 +5888,7 @@ async function loadDashboardNew() {
         </div>
         <details style="margin-top:12px">
           <summary style="font-size:11px;color:var(--text3);cursor:pointer;list-style:none;user-select:none">▸ Как считается</summary>
-          <div style="margin-top:8px">${wfRows}</div>
+          <div style="margin-top:8px">${wfRows}${wfAccs}</div>
         </details>
       </div>
 
