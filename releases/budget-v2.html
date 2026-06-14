@@ -5788,12 +5788,12 @@ async function loadDashboardNew() {
     const wf       = sts.waterfall;
 
     const wfRows = [
-      ['Баланс сейчас',       wf.b0,        '+'],
-      ['Ожидаемые доходы',    wf.i_remain,  '+'],
-      ['Обязательные расходы',wf.f_remain,  '−'],
-      ['Прогноз потока',      wf.v_remain,  '−'],
-      ['Взносы в резервы',    wf.r_topup,   '−'],
-      ['Подушка',             wf.c_cushion, '−'],
+      ['Баланс сейчас',         wf.b0,        '+'],
+      ['Ожидаемые доходы',      wf.i_remain,  '+'],
+      ['Расходы по плану',      wf.f_remain,  '−'],
+      ['Сверхплановый поток',   wf.v_remain,  '−'],
+      ['Взносы в резервы',      wf.r_topup,   '−'],
+      ['Подушка',               wf.c_cushion, '−'],
     ].map(([lbl, val, sign]) => {
       const col = sign === '+' ? '#059669' : '#DC2626';
       return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:.5px solid var(--border)">

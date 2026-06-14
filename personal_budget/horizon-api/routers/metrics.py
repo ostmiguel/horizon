@@ -81,7 +81,8 @@ async def account_balances(db, user_id: str) -> dict:
 
 
 async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
-    """Robust daily rate and σ from last 30 days of flow (variable) expenses."""
+    """Robust daily rate and σ from last 30 days.
+    Tries flow-tagged expenses first; falls back to all expenses if categories lack flow tagging."""
     cutoff = today - timedelta(days=30)
     rows = await db.fetch("""
         SELECT t.date, SUM(t.amount) AS daily_total
@@ -89,8 +90,19 @@ async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
           AND t.account_to = 'Расход'
-          AND (c.character = 'flow' OR c.character IS NULL)
+          AND c.character = 'flow'
         GROUP BY t.date ORDER BY t.date
+    """, user_id, cutoff, today)
+    if rows:
+        daily = [float(r["daily_total"]) for r in rows]
+        return robust_rate(daily), robust_sigma(daily)
+    # Fallback: all expenses (no flow tagging in categories yet)
+    rows = await db.fetch("""
+        SELECT date, SUM(amount) AS daily_total
+        FROM transactions
+        WHERE user_id=$1 AND date >= $2 AND date < $3
+          AND account_to = 'Расход'
+        GROUP BY date ORDER BY date
     """, user_id, cutoff, today)
     daily = [float(r["daily_total"]) for r in rows]
     return robust_rate(daily), robust_sigma(daily)
@@ -165,12 +177,12 @@ async def get_metrics(request: Request):
     # ── Plan remaining ────────────────────────────────────────────────────────
     plan_rows = await plan_remaining(db, user_id, year, month, today)
     I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_from") == "Доход")
-    F_remain = sum(
-        float(r["amount"]) for r in plan_rows
-        if r.get("account_to") == "Расход" and r.get("cat_character") == "fixed"
-    )
+    # All planned outflows: fixed + flow + episodic from plan, plus obligations
+    # V_remain (statistical flow) is additive on top only when categories are properly tagged 'flow'
+    F_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Расход")
     F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
-    R_topup = 0  # populated when plan has reserve_contribution entries
+    # R_topup: reserve contributions in plan (account_to = reserve account)
+    R_topup = 0  # TODO: detect reserve accounts by name when _is_rsv accounts are in plan
 
     # ── §4.1 Safe to spend ────────────────────────────────────────────────────
     sts = B0 + I_remain - F_remain - V_remain - R_topup - C_cushion
