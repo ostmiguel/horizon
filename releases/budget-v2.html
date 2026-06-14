@@ -5794,10 +5794,12 @@ function openEditGoal(id) {
 async function saveGoal(btn) {
   const name = document.getElementById('goalName')?.value.trim();
   const target = parseFloat(document.getElementById('goalTarget')?.value) || 0;
-  const accId = document.getElementById('goalAccount')?.value || null;
-  const due = document.getElementById('goalDue')?.value || null;
+  const accVal = document.getElementById('goalAccount')?.value;
+  const accId = accVal && accVal !== '' ? +accVal : null;
+  const dueVal = document.getElementById('goalDue')?.value;
+  const due = dueVal && dueVal !== '' ? dueVal : null;
   if (!name || target <= 0) { toast('Укажи название и сумму', false); return; }
-  const { error } = await sb.from('goals').insert({ name, target_amount: target, account_id: accId ? +accId : null, due_date: due || null });
+  const { error } = await sb.from('goals').insert({ name, target_amount: target, account_id: accId, due_date: due });
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   btn.closest('.modal-overlay').remove();
   toast('✓ Цель создана');
@@ -5807,10 +5809,12 @@ async function saveGoal(btn) {
 async function updateGoal(id, btn) {
   const name = document.getElementById('goalName')?.value.trim();
   const target = parseFloat(document.getElementById('goalTarget')?.value) || 0;
-  const accId = document.getElementById('goalAccount')?.value || null;
-  const due = document.getElementById('goalDue')?.value || null;
+  const accVal = document.getElementById('goalAccount')?.value;
+  const accId = accVal && accVal !== '' ? +accVal : null;
+  const dueVal = document.getElementById('goalDue')?.value;
+  const due = dueVal && dueVal !== '' ? dueVal : null;
   if (!name || target <= 0) { toast('Укажи название и сумму', false); return; }
-  const { error } = await sb.from('goals').update({ name, target_amount: target, account_id: accId ? +accId : null, due_date: due || null }).eq('id', id);
+  const { error } = await sb.from('goals').update({ name, target_amount: target, account_id: accId, due_date: due }).eq('id', id);
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   btn.closest('.modal-overlay').remove();
   toast('✓ Сохранено');
