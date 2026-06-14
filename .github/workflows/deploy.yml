@@ -8,6 +8,7 @@ on:
       - 'personal_budget/horizon-api/forecast_cron.py'
       - 'personal_budget/horizon-api/routers/metrics.py'
       - 'personal_budget/horizon-api/main.py'
+      - '.github/workflows/deploy.yml'
 
 jobs:
   deploy:
