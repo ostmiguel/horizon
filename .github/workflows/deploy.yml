@@ -8,6 +8,7 @@ on:
       - 'personal_budget/horizon-api/forecast_cron.py'
       - 'personal_budget/horizon-api/routers/metrics.py'
       - 'personal_budget/horizon-api/main.py'
+      - 'personal_budget/horizon-api/routers/goals.py'
       - '.github/workflows/deploy.yml'
 
 jobs:
@@ -67,7 +68,7 @@ jobs:
           host: 109.71.247.58
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "personal_budget/horizon-api/routers/metrics.py,personal_budget/horizon-api/main.py"
+          source: "personal_budget/horizon-api/routers/metrics.py,personal_budget/horizon-api/routers/goals.py,personal_budget/horizon-api/main.py"
           target: /opt/horizon/personal_budget/horizon-api/
           strip_components: 2
 
