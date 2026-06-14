@@ -6492,12 +6492,13 @@ async function loadOperations(yr, mo) {
     const factDates   = Object.keys(factsByDate).sort().reverse();
     const planDates   = Object.keys(planByDate).sort();
 
-    function typeBadge(t) {
-      const c = t.categories;
+    function typeBadge(type, c) {
+      // Только для расходов и обязательств
+      if (type !== 'expense' && type !== 'obligation') return '';
       if (!c) return '';
-      if (c.expense_type === 'fixed')         return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1E3A5F;color:#60A5FA;font-weight:500;display:inline-block;margin-bottom:2px">fixed</span>';
-      if (c.character   === 'Эпизодический') return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1B69;color:#A78BFA;font-weight:500;display:inline-block;margin-bottom:2px">эпизод</span>';
-      if (c.expense_type === 'variable')      return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1010;color:#F87171;font-weight:500;display:inline-block;margin-bottom:2px">var</span>';
+      if (c.expense_type === 'fixed')         return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1E3A5F;color:#60A5FA;font-weight:500">fixed</span>';
+      if (c.character   === 'Эпизодический') return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1B69;color:#A78BFA;font-weight:500">эпизод</span>';
+      if (c.expense_type === 'variable')      return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1010;color:#F87171;font-weight:500">var</span>';
       return '';
     }
 
@@ -6507,20 +6508,32 @@ async function loadOperations(yr, mo) {
       const amtColor = type === 'income' ? 'var(--income)' : type === 'expense' ? 'var(--expense)' : type === 'obligation' ? '#EA580C' : 'var(--text2)';
       const c = t.categories;
       const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : t.account_to);
-      const sub  = (c?.category && c?.subcategory ? c.category : '') || (type === 'income' ? t.account_to : type === 'expense' ? t.account_from : `${t.account_from} → ${t.account_to}`);
-      const noteStr  = t.note ? ` · ${t.note}` : '';
+      // Подзаголовок: категория (если отличается от подкатегории), иначе — счёт
+      let sub = '';
+      if (c?.category && c?.subcategory && c.category !== c.subcategory) {
+        sub = c.category;
+      } else if (type === 'income') {
+        sub = t.account_to;
+      } else if (type === 'expense') {
+        sub = t.account_from;
+      } else if (type === 'obligation') {
+        sub = t.account_from;
+      } else {
+        sub = `${t.account_from} → ${t.account_to}`;
+      }
+      const badge     = typeBadge(type, c);
+      const noteStr   = t.note ? ` · ${t.note}` : '';
       const planLabel = isPlan ? '<span style="font-size:9px;color:var(--text3);background:var(--bg2);padding:1px 5px;border-radius:3px;margin-right:4px">план</span>' : '';
       const delBtn    = isPlan ? '' : `<button onclick="event.stopPropagation();deleteOpsTx(${t.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 2px;line-height:1;opacity:0.4" title="Удалить">×</button>`;
+      // Строка подзаголовка: текст + бейдж (inline, одна строка)
+      const subContent = [sub + noteStr, badge].filter(Boolean).join(' ');
       return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--border);${isPlan?'opacity:0.5':''}">
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${planLabel}${name}</div>
-          ${(sub||noteStr) ? `<div style="font-size:11px;color:var(--text3);margin-top:1px">${sub}${noteStr}</div>` : ''}
+          ${subContent ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">${sub+noteStr ? `<span>${sub}${noteStr}</span>` : ''}${badge}</div>` : ''}
         </div>
         <div style="flex-shrink:0;display:flex;align-items:center;gap:4px">
-          <div style="text-align:right">
-            ${typeBadge(t)}
-            <div style="font-size:14px;font-weight:600;color:${amtColor}">${sign}${f(t.amount)} ₽</div>
-          </div>
+          <span style="font-size:14px;font-weight:600;color:${amtColor}">${sign}${f(t.amount)} ₽</span>
           ${delBtn}
         </div>
       </div>`;
