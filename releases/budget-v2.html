@@ -1475,7 +1475,10 @@ async function loadDashboard() {
           <div class="page-title">Дашборд</div>
           <div class="page-sub">${periodLabel}</div>
         </div>
-        <button class="fab-add" onclick="openQuickModal('expense')" title="Добавить транзакцию" aria-label="Добавить транзакцию">+</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${window._isOwner ? '<button onclick="localStorage.setItem(\'hz_new_arch\',\'1\');window.NEW_ARCH=true;loadDashboardNew();" style="font-size:11px;color:var(--accent);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer">Новый вид →</button>' : ''}
+          <button class="fab-add" onclick="openQuickModal('expense')" title="Добавить транзакцию" aria-label="Добавить транзакцию">+</button>
+        </div>
       </div>
 
       <div class="kpi-row">
@@ -5859,6 +5862,10 @@ async function loadDashboardNew() {
           <div class="page-title">Обзор</div>
           <div class="page-sub">${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})}</div>
         </div>
+        <button onclick="localStorage.setItem('hz_new_arch','0');window.NEW_ARCH=false;loadDashboard();"
+          style="font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer">
+          ← Старый вид
+        </button>
       </div>
 
       <div class="card" style="padding:18px;border-left:4px solid ${stsColor};margin-bottom:4px">
@@ -6313,6 +6320,7 @@ window.onload = async () => {
   // Feature flags — только для владельца
   const OWNER_ID = '084f18c0-927d-444e-a9d0-7313042d7163';
   const isOwner = sessionCheck.data.session?.user?.id === OWNER_ID;
+  window._isOwner = isOwner;
   window.NEW_ARCH = isOwner && localStorage.getItem('hz_new_arch') === '1';
 
   // Show lab nav only for Maks

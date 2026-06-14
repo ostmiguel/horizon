@@ -11,7 +11,7 @@ Z_80 = 1.2816
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def month_context(d: date | None = None):
+def month_context(d=None):
     today = d or date.today()
     year, month = today.year, today.month
     days_in_month = monthrange(year, month)[1]
@@ -37,14 +37,28 @@ def robust_sigma(values: list[float]) -> float:
     return 1.4826 * mad
 
 
+def _is_op(a: dict) -> bool:
+    """Operational account: explicit flag OR Актив + include_in_balance=True."""
+    if a.get("is_operational") is True:
+        return True
+    return a["account_type"] == "Актив" and a.get("include_in_balance", True) and not a.get("is_cushion")
+
+
+def _is_rsv(a: dict) -> bool:
+    """Reserve/savings account: explicit flag OR Актив + include_in_balance=False."""
+    if a.get("is_reserve") is True:
+        return True
+    return a["account_type"] == "Актив" and not a.get("include_in_balance", True)
+
+
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 async def account_balances(db, user_id: str) -> dict:
-    """Dynamic balances for all active accounts."""
     rows = await db.fetch("""
         SELECT
             a.id, a.name, a.account_type,
             a.is_reserve, a.is_operational, a.is_cushion,
+            a.include_in_balance, a.initial_balance,
             a.initial_balance
             + COALESCE(SUM(CASE WHEN t.account_to   = a.name THEN t.amount ELSE 0 END), 0)
             - COALESCE(SUM(CASE WHEN t.account_from = a.name THEN t.amount ELSE 0 END), 0)
@@ -55,20 +69,23 @@ async def account_balances(db, user_id: str) -> dict:
             AND t.user_id = $1
         WHERE a.user_id = $1 AND a.is_active = true
         GROUP BY a.id, a.name, a.account_type,
-                 a.is_reserve, a.is_operational, a.is_cushion, a.initial_balance
+                 a.is_reserve, a.is_operational, a.is_cushion,
+                 a.include_in_balance, a.initial_balance
     """, user_id)
     return {r["name"]: dict(r) for r in rows}
 
 
 async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
-    """Robust daily rate and σ from last 30 days of flow expenses."""
+    """Robust daily rate and σ from last 30 days of flow (variable) expenses."""
     cutoff = today - timedelta(days=30)
     rows = await db.fetch("""
-        SELECT date, SUM(amount) AS daily_total
-        FROM transactions
-        WHERE user_id=$1 AND date >= $2 AND date < $3
-          AND op_type='expense' AND character='flow'
-        GROUP BY date ORDER BY date
+        SELECT t.date, SUM(t.amount) AS daily_total
+        FROM transactions t
+        LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
+          AND t.account_to = 'Расход'
+          AND (c.character = 'flow' OR c.character IS NULL)
+        GROUP BY t.date ORDER BY t.date
     """, user_id, cutoff, today)
     daily = [float(r["daily_total"]) for r in rows]
     return robust_rate(daily), robust_sigma(daily)
@@ -80,7 +97,7 @@ async def monthly_income_sum(db, user_id: str, year: int, month: int) -> float:
         WHERE user_id=$1
           AND EXTRACT(YEAR  FROM date)=$2
           AND EXTRACT(MONTH FROM date)=$3
-          AND op_type='income'
+          AND account_from = 'Доход'
     """, user_id, year, month)
     return float(val)
 
@@ -91,16 +108,17 @@ async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
         WHERE user_id=$1
           AND EXTRACT(YEAR  FROM date)=$2
           AND EXTRACT(MONTH FROM date)=$3
-          AND op_type IN ('expense', 'debt_payment')
+          AND account_to IN ('Расход', 'Обязательства')
     """, user_id, year, month)
     return float(val)
 
 
 async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -> list:
-    """Planned transactions after today in the current month."""
     rows = await db.fetch("""
-        SELECT p.date, p.amount, p.op_type, p.character
+        SELECT p.date, p.amount, p.account_from, p.account_to,
+               c.character AS cat_character
         FROM plan p
+        LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1
           AND EXTRACT(YEAR  FROM p.date)=$2
           AND EXTRACT(MONTH FROM p.date)=$3
@@ -121,19 +139,11 @@ async def get_metrics(request: Request):
     # ── Balances ──────────────────────────────────────────────────────────────
     accs = await account_balances(db, user_id)
 
-    B0 = sum(
-        float(a["balance"]) for a in accs.values()
-        if a["is_operational"] and not a["is_reserve"] and not a["is_cushion"]
-    )
-    C_cushion = sum(float(a["balance"]) for a in accs.values() if a["is_cushion"])
-    reserve_balance = sum(float(a["balance"]) for a in accs.values() if a["is_reserve"])
+    B0 = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
+    C_cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
+    reserve_balance = sum(float(a["balance"]) for a in accs.values() if _is_rsv(a))
     liabilities = sum(
         abs(float(a["balance"])) for a in accs.values() if a["account_type"] == "Пассив"
-    )
-    savings_balance = sum(
-        float(a["balance"]) for a in accs.values()
-        if not a["is_operational"] and not a["is_reserve"] and not a["is_cushion"]
-        and a["account_type"] == "Актив"
     )
 
     # ── Flow rate ─────────────────────────────────────────────────────────────
@@ -143,13 +153,13 @@ async def get_metrics(request: Request):
 
     # ── Plan remaining ────────────────────────────────────────────────────────
     plan_rows = await plan_remaining(db, user_id, year, month, today)
-    I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("op_type") == "income")
+    I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_from") == "Доход")
     F_remain = sum(
         float(r["amount"]) for r in plan_rows
-        if r.get("op_type") == "expense" and r.get("character") == "fixed"
+        if r.get("account_to") == "Расход" and r.get("cat_character") == "fixed"
     )
-    F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("op_type") == "debt_payment")
-    R_topup = sum(float(r["amount"]) for r in plan_rows if r.get("op_type") == "reserve_contribution")
+    F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
+    R_topup = 0  # populated when plan has reserve_contribution entries
 
     # ── §4.1 Safe to spend ────────────────────────────────────────────────────
     sts = B0 + I_remain - F_remain - V_remain - R_topup - C_cushion
@@ -192,7 +202,7 @@ async def get_metrics(request: Request):
         dsr_status = "red"
 
     # ── §4.7 Runway ───────────────────────────────────────────────────────────
-    liquid = B0 + reserve_balance + savings_balance
+    liquid = B0 + reserve_balance
 
     behavioral_exps = []
     for i in range(1, 4):
@@ -212,17 +222,22 @@ async def get_metrics(request: Request):
 
     # ── §4.5 Resilience ───────────────────────────────────────────────────────
     monthly_fixed_exp = float(await db.fetchval("""
-        SELECT COALESCE(SUM(amount), 0) FROM transactions
-        WHERE user_id=$1
-          AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-          AND character='fixed'
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM transactions t
+        LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id=$1
+          AND EXTRACT(YEAR  FROM t.date)=$2
+          AND EXTRACT(MONTH FROM t.date)=$3
+          AND t.account_to = 'Расход'
+          AND c.character = 'fixed'
     """, user_id, year, month))
 
     cur_expenses = float(await db.fetchval("""
         SELECT COALESCE(SUM(amount), 0) FROM transactions
         WHERE user_id=$1
-          AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-          AND op_type='expense'
+          AND EXTRACT(YEAR  FROM date)=$2
+          AND EXTRACT(MONTH FROM date)=$3
+          AND account_to IN ('Расход', 'Обязательства')
     """, user_id, year, month))
 
     savings_rate = max((cur_income - cur_expenses) / max(cur_income, 1), 0)
@@ -270,7 +285,7 @@ async def get_metrics(request: Request):
         WHERE t.user_id=$1
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
-          AND t.op_type='expense'
+          AND t.account_to = 'Расход'
         GROUP BY c.category, c.character
         ORDER BY total DESC
     """, user_id, year, month)
@@ -284,6 +299,7 @@ async def get_metrics(request: Request):
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
                 WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3 AND c.category=$4
+                  AND t.account_to = 'Расход'
                 GROUP BY t.date
             """, user_id, today - timedelta(days=30), today, r["category"])
             cat_rate = robust_rate([float(x["dt"]) for x in cat_daily])
@@ -291,18 +307,22 @@ async def get_metrics(request: Request):
         else:
             forecast = fact
         categories.append({
-            "category": r["category"],
-            "character": r["cat_char"],
-            "amount_fact": round(fact),
+            "category":        r["category"],
+            "character":       r["cat_char"],
+            "amount_fact":     round(fact),
             "amount_forecast": round(forecast),
         })
 
     # ── Flow fact this month ──────────────────────────────────────────────────
     flow_fact = float(await db.fetchval("""
-        SELECT COALESCE(SUM(amount), 0) FROM transactions
-        WHERE user_id=$1
-          AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-          AND op_type='expense' AND character='flow'
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM transactions t
+        LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id=$1
+          AND EXTRACT(YEAR  FROM t.date)=$2
+          AND EXTRACT(MONTH FROM t.date)=$3
+          AND t.account_to = 'Расход'
+          AND (c.character = 'flow' OR c.character IS NULL)
     """, user_id, year, month))
 
     # ── Response ──────────────────────────────────────────────────────────────
@@ -314,11 +334,11 @@ async def get_metrics(request: Request):
             "high":    round(sts_high),
             "status":  sts_status,
             "waterfall": {
-                "b0":       round(B0),
-                "i_remain": round(I_remain),
-                "f_remain": round(F_remain),
-                "v_remain": round(V_remain),
-                "r_topup":  round(R_topup),
+                "b0":        round(B0),
+                "i_remain":  round(I_remain),
+                "f_remain":  round(F_remain),
+                "v_remain":  round(V_remain),
+                "r_topup":   round(R_topup),
                 "c_cushion": round(C_cushion),
             },
         },
@@ -347,9 +367,9 @@ async def get_metrics(request: Request):
             },
         },
         "flow_rate": {
-            "daily":            round(r_var),
-            "daily_sigma":      round(sigma_day),
-            "flow_fact_month":  round(flow_fact),
+            "daily":               round(r_var),
+            "daily_sigma":         round(sigma_day),
+            "flow_fact_month":     round(flow_fact),
             "flow_forecast_month": round(flow_fact + V_remain),
         },
         "categories": categories,
@@ -365,44 +385,43 @@ async def get_forecast(request: Request):
 
     today, year, month, d_now, d_left, days_in_month, month_start, month_end = month_context()
 
-    # Balance at start of month
     accs = await account_balances(db, user_id)
-    B0_now = sum(
-        float(a["balance"]) for a in accs.values()
-        if a["is_operational"] and not a["is_reserve"] and not a["is_cushion"]
-    )
+    op_names = [a["name"] for a in accs.values() if _is_op(a)]
 
-    # Fact daily flows (for days 1..d_now)
-    daily_fact = await db.fetch("""
-        SELECT date,
-               SUM(CASE WHEN account_to   IN (SELECT name FROM accounts WHERE user_id=$1 AND is_operational=true AND is_reserve=false AND is_cushion=false) THEN amount ELSE 0 END)
-             - SUM(CASE WHEN account_from IN (SELECT name FROM accounts WHERE user_id=$1 AND is_operational=true AND is_reserve=false AND is_cushion=false) THEN amount ELSE 0 END)
-               AS net
-        FROM transactions
-        WHERE user_id=$1
-          AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-        GROUP BY date ORDER BY date
-    """, user_id, year, month)
+    B0_now = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
 
-    # Build cumulative fact
+    if op_names:
+        name_list = "'" + "','".join(n.replace("'", "''") for n in op_names) + "'"
+        daily_fact = await db.fetch(f"""
+            SELECT date,
+                   SUM(CASE WHEN account_to   IN ({name_list}) THEN amount ELSE 0 END)
+                 - SUM(CASE WHEN account_from IN ({name_list}) THEN amount ELSE 0 END)
+                   AS net
+            FROM transactions
+            WHERE user_id=$1
+              AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+            GROUP BY date ORDER BY date
+        """, user_id, year, month)
+    else:
+        daily_fact = []
+
     fact_by_day = {r["date"].day: float(r["net"]) for r in daily_fact}
 
-    # Start-of-month balance (B0_now - cumulative net for the month so far)
     month_net_so_far = sum(fact_by_day.get(d, 0) for d in range(1, d_now + 1))
     B_month_start = B0_now - month_net_so_far
 
     r_var, sigma_day = await flow_daily_rate(db, user_id, today)
 
-    # Planned schedule (remaining)
     plan_rows = await plan_remaining(db, user_id, year, month, today)
     plan_by_day: dict[int, float] = {}
     for r in plan_rows:
         day = r["date"].day
         amount = float(r["amount"])
-        op = r.get("op_type", "")
-        if op == "income":
+        af = r.get("account_from", "")
+        at = r.get("account_to", "")
+        if af == "Доход":
             plan_by_day[day] = plan_by_day.get(day, 0) + amount
-        elif op in ("expense", "debt_payment", "reserve_contribution"):
+        elif at in ("Расход", "Обязательства"):
             plan_by_day[day] = plan_by_day.get(day, 0) - amount
 
     points = []
@@ -419,7 +438,7 @@ async def get_forecast(request: Request):
         else:
             point["fact"] = None
             running_forecast -= r_var
-            running_forecast += plan_by_day.get(d, 0)  # income side only affects forecast via plan
+            running_forecast += plan_by_day.get(d, 0)
             days_ahead = d - d_now
             sigma = sigma_day * math.sqrt(days_ahead)
             point["forecast"] = round(running_forecast)
@@ -434,41 +453,25 @@ async def get_forecast(request: Request):
     return {"month": f"{year}-{month:02d}", "points": points}
 
 
-# ── /api/metrics/affordability — §4.8 Следующий шаг ─────────────────────────
+# ── /api/metrics/affordability — §4.8 ────────────────────────────────────────
 
 def norm_cdf(x: float) -> float:
     return (1 + math.erf(x / math.sqrt(2))) / 2
 
 
 async def monthly_free_cash_history(db, user_id: str, today: date, n_months: int = 6) -> list[float]:
-    """Free cash per month for last n_months: income - expenses - reserve_contributions."""
     results = []
     for i in range(1, n_months + 1):
         m, y = today.month - i, today.year
         if m <= 0:
             m += 12; y -= 1
-        inc = await db.fetchval("""
-            SELECT COALESCE(SUM(amount), 0) FROM transactions
-            WHERE user_id=$1 AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-              AND op_type='income'
-        """, user_id, y, m)
-        exp = await db.fetchval("""
-            SELECT COALESCE(SUM(amount), 0) FROM transactions
-            WHERE user_id=$1 AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-              AND op_type IN ('expense', 'debt_payment')
-        """, user_id, y, m)
-        res = await db.fetchval("""
-            SELECT COALESCE(SUM(amount), 0) FROM transactions
-            WHERE user_id=$1 AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-              AND op_type='reserve_contribution'
-        """, user_id, y, m)
-        free = float(inc) - float(exp) - float(res)
-        results.append(free)
+        inc = await monthly_income_sum(db, user_id, y, m)
+        exp = await monthly_expense_sum(db, user_id, y, m)
+        results.append(inc - exp)
     return results
 
 
 def find_eta(remaining: float, monthly_fc: float, sigma_monthly: float, max_months: int = 60):
-    """Returns (months_to_goal, confidence_pct) or None if not achievable."""
     if monthly_fc <= 0:
         return None, 0.0
     cfc = 0.0
@@ -490,12 +493,10 @@ async def get_affordability(request: Request):
     db = request.state.db
     today = date.today()
 
-    # ── Monthly free cash history ─────────────────────────────────────────────
     history = await monthly_free_cash_history(db, user_id, today)
     avg_fc = statistics.mean(history) if history else 0.0
     sigma_fc = statistics.stdev(history) if len(history) >= 2 else 0.0
 
-    # ── Goals ─────────────────────────────────────────────────────────────────
     goal_rows = await db.fetch("""
         SELECT g.id, g.name, g.target_amount, g.account_id, g.due_date,
                COALESCE(
@@ -516,11 +517,11 @@ async def get_affordability(request: Request):
 
     goals = []
     for r in goal_rows:
-        target = float(r["target_amount"])
+        target  = float(r["target_amount"])
         current = float(r["current_balance"])
         remaining = max(0.0, target - current)
         done = current >= target
-        pct = round(min(100, current / target * 100)) if target > 0 else 0
+        pct  = round(min(100, current / target * 100)) if target > 0 else 0
 
         months_to_goal, confidence = find_eta(remaining, avg_fc, sigma_fc)
 
@@ -542,23 +543,23 @@ async def get_affordability(request: Request):
             on_track = None
 
         goals.append({
-            "id":           r["id"],
-            "name":         r["name"],
-            "target":       round(target),
-            "current":      round(current),
-            "remaining":    round(remaining),
-            "pct":          pct,
-            "done":         done,
-            "due_date":     due_date.isoformat() if due_date else None,
-            "eta_months":   months_to_goal,
-            "eta_label":    eta_label,
-            "confidence":   confidence,
-            "on_track":     on_track,
+            "id":         r["id"],
+            "name":       r["name"],
+            "target":     round(target),
+            "current":    round(current),
+            "remaining":  round(remaining),
+            "pct":        pct,
+            "done":       done,
+            "due_date":   due_date.isoformat() if due_date else None,
+            "eta_months": months_to_goal,
+            "eta_label":  eta_label,
+            "confidence": confidence,
+            "on_track":   on_track,
         })
 
     return {
-        "as_of":          today.isoformat(),
-        "monthly_fc_avg": round(avg_fc),
+        "as_of":            today.isoformat(),
+        "monthly_fc_avg":   round(avg_fc),
         "monthly_fc_sigma": round(sigma_fc),
-        "goals":          goals,
+        "goals":            goals,
     }
