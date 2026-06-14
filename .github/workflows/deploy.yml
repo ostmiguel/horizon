@@ -67,4 +67,4 @@ jobs:
           host: 109.71.247.58
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: systemctl restart horizon-api
+          script: systemctl restart horizon
