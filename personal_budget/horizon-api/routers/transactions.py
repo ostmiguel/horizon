@@ -49,7 +49,7 @@ async def get_transactions(
     where = " AND ".join(conditions)
     rows = await db.fetch(f"""
         SELECT t.*,
-               c.group_name, c.category, c.subcategory, c.character
+               c.group_name, c.category, c.subcategory, c.character, c.expense_type
         FROM {table} t
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE {where}
@@ -62,13 +62,14 @@ async def get_transactions(
         d = dict(r)
         if d.get('group_name'):
             d['categories'] = {
-                'group_name': d.pop('group_name'),
-                'category':   d.pop('category'),
-                'subcategory':d.pop('subcategory'),
-                'character':  d.pop('character'),
+                'group_name':   d.pop('group_name'),
+                'category':     d.pop('category'),
+                'subcategory':  d.pop('subcategory'),
+                'character':    d.pop('character'),
+                'expense_type': d.pop('expense_type'),
             }
         else:
-            for k in ['group_name','category','subcategory','character']:
+            for k in ['group_name','category','subcategory','character','expense_type']:
                 d.pop(k, None)
             d['categories'] = None
         result.append(d)

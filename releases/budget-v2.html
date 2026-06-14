@@ -966,6 +966,7 @@ body {
     <div class="nav-item" data-page="plan"><span class="nav-icon">◷</span>План</div>
     <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Кредиты</div>
     <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-icon">◆</span>Цели</div>
+    <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-icon">▤</span>Операции</div>
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
     <div class="nav-item" data-page="references"><span class="nav-icon">◉</span>Справочники</div>
@@ -1344,6 +1345,7 @@ function loadPage(page) {
   else if (page === 'profile')       loadProfile();
   else if (page === 'lab')           loadLab();
   else if (page === 'goals')         loadGoals();
+  else if (page === 'operations')    loadOperations();
 }
 
 // ── HELPERS ──
@@ -6340,10 +6342,12 @@ window.onload = async () => {
     if (navLab) navLab.style.display = '';
   }
 
-  // Show goals nav only with NEW_ARCH flag
+  // Show goals/operations nav only with NEW_ARCH flag
   if (window.NEW_ARCH) {
     const navGoals = document.getElementById('navGoals');
     if (navGoals) navGoals.style.display = '';
+    const navOps = document.getElementById('navOps');
+    if (navOps) navOps.style.display = '';
   }
 
   await loadMeta();
@@ -6435,6 +6439,291 @@ function openLabModalEpis(planCur) {
     planMap[k].fact += +t.amount;
   });
   openLabModalPF('Эпизодические', Object.values(planMap).sort((a,b)=>b.plan-a.plan), 'Запланированные разовые расходы. В операционный прогноз не входят.');
+}
+
+// ── ОПЕРАЦИИ (Фаза 3) ─────────────────────────────────────────────────────────
+let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense';
+
+async function loadOperations(yr, mo) {
+  const now = new Date();
+  if (yr == null) yr = _opsYear ?? now.getFullYear();
+  if (mo == null) mo = _opsMonth ?? (now.getMonth() + 1);
+  _opsYear = yr; _opsMonth = mo;
+
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+  try {
+    const todayStr = now.toISOString().split('T')[0];
+    const f = n => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
+
+    const [factRes, planRes] = await Promise.all([
+      sb.from('transactions').select('*').eq('year', yr).eq('month', mo),
+      sb.from('plan').select('*').eq('year', yr).eq('month', mo),
+    ]);
+
+    const facts = factRes.data || [];
+    const plans = planRes.data || [];
+
+    // Итоги всегда от полного факта (не зависят от фильтра)
+    const income  = facts.filter(t => t.account_from === 'Доход').reduce((s,t) => s + +t.amount, 0);
+    const expense = facts.filter(t => t.account_to   === 'Расход').reduce((s,t) => s + +t.amount, 0);
+    const debt    = facts.filter(t => t.account_to   === 'Обязательства').reduce((s,t) => s + +t.amount, 0);
+
+    function matchFilter(t) {
+      if (_opsFilter === 'income')   return t.account_from === 'Доход';
+      if (_opsFilter === 'expense')  return t.account_to   === 'Расход';
+      if (_opsFilter === 'debt')     return t.account_to   === 'Обязательства';
+      if (_opsFilter === 'transfer') return t.account_from !== 'Доход' && t.account_to !== 'Расход' && t.account_to !== 'Обязательства';
+      return true;
+    }
+
+    const filteredFacts = facts.filter(matchFilter);
+    const futurePlan    = plans.filter(p => p.date > todayStr).filter(matchFilter);
+
+    function groupByDate(txs) {
+      const map = {};
+      txs.forEach(t => { if (!map[t.date]) map[t.date] = []; map[t.date].push(t); });
+      return map;
+    }
+
+    const factsByDate = groupByDate(filteredFacts);
+    const planByDate  = groupByDate(futurePlan);
+    const factDates   = Object.keys(factsByDate).sort().reverse();
+    const planDates   = Object.keys(planByDate).sort();
+
+    function typeBadge(t) {
+      const c = t.categories;
+      if (!c) return '';
+      if (c.expense_type === 'fixed')         return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1E3A5F;color:#60A5FA;font-weight:500;display:inline-block;margin-bottom:2px">fixed</span>';
+      if (c.character   === 'Эпизодический') return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1B69;color:#A78BFA;font-weight:500;display:inline-block;margin-bottom:2px">эпизод</span>';
+      if (c.expense_type === 'variable')      return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1010;color:#F87171;font-weight:500;display:inline-block;margin-bottom:2px">var</span>';
+      return '';
+    }
+
+    function txRow(t, isPlan) {
+      const type = getFlowType(t.account_from, t.account_to);
+      const sign = type === 'income' ? '+' : '−';
+      const amtColor = type === 'income' ? 'var(--income)' : type === 'expense' ? 'var(--expense)' : type === 'obligation' ? '#EA580C' : 'var(--text2)';
+      const c = t.categories;
+      const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : t.account_to);
+      const sub  = (c?.category && c?.subcategory ? c.category : '') || (type === 'income' ? t.account_to : type === 'expense' ? t.account_from : `${t.account_from} → ${t.account_to}`);
+      const noteStr  = t.note ? ` · ${t.note}` : '';
+      const planLabel = isPlan ? '<span style="font-size:9px;color:var(--text3);background:var(--bg2);padding:1px 5px;border-radius:3px;margin-right:4px">план</span>' : '';
+      const delBtn    = isPlan ? '' : `<button onclick="event.stopPropagation();deleteOpsTx(${t.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 2px;line-height:1;opacity:0.4" title="Удалить">×</button>`;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--border);${isPlan?'opacity:0.5':''}">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${planLabel}${name}</div>
+          ${(sub||noteStr) ? `<div style="font-size:11px;color:var(--text3);margin-top:1px">${sub}${noteStr}</div>` : ''}
+        </div>
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:4px">
+          <div style="text-align:right">
+            ${typeBadge(t)}
+            <div style="font-size:14px;font-weight:600;color:${amtColor}">${sign}${f(t.amount)} ₽</div>
+          </div>
+          ${delBtn}
+        </div>
+      </div>`;
+    }
+
+    function dateHeader(dateStr) {
+      const d = new Date(dateStr + 'T00:00:00');
+      return `<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:12px 0 2px">${d.toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'})}</div>`;
+    }
+
+    let listHTML = '';
+    if (factDates.length === 0 && planDates.length === 0) {
+      listHTML = '<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:13px">Нет операций за период</div>';
+    } else {
+      factDates.forEach(date => {
+        listHTML += dateHeader(date);
+        factsByDate[date].forEach(t => { listHTML += txRow(t, false); });
+      });
+      const isPastMonth = yr < now.getFullYear() || (yr === now.getFullYear() && mo < now.getMonth() + 1);
+      if (planDates.length > 0 && !isPastMonth) {
+        listHTML += `<div style="display:flex;align-items:center;gap:8px;margin:14px 0 2px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:10px;color:var(--accent);white-space:nowrap;padding:0 8px">план · ${futurePlan.length} позиций</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div></div>`;
+        planDates.forEach(date => {
+          listHTML += dateHeader(date);
+          planByDate[date].forEach(t => { listHTML += txRow(t, true); });
+        });
+      }
+    }
+
+    const filterDefs = [{k:'all',label:'Все'},{k:'income',label:'Доходы'},{k:'expense',label:'Расходы'},{k:'debt',label:'Долги'},{k:'transfer',label:'Переводы'}];
+    const filterBtns = filterDefs.map(({k,label}) =>
+      `<button onclick="_opsFilter='${k}';loadOperations(${yr},${mo})" style="padding:4px 11px;border-radius:16px;border:none;cursor:pointer;font-size:12px;background:${_opsFilter===k?'var(--accent)':'var(--bg2)'};color:${_opsFilter===k?'white':'var(--text2)'}">${label}</button>`
+    ).join('');
+
+    const prevY = mo===1?yr-1:yr, prevM = mo===1?12:mo-1;
+    const nextY = mo===12?yr+1:yr, nextM = mo===12?1:mo+1;
+
+    main.innerHTML = `
+      <div style="max-width:640px;margin:0 auto;padding:0 0 48px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div class="page-title">Операции</div>
+          <button class="btn-primary" onclick="openOpsForm()">+ Добавить</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:16px">
+          <button onclick="loadOperations(${prevY},${prevM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:0;line-height:1">‹</button>
+          <span style="font-size:14px;font-weight:500;color:var(--text);min-width:130px;text-align:center">${MONTHS[mo]} ${yr}</span>
+          <button onclick="loadOperations(${nextY},${nextM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:0;line-height:1">›</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+          <div class="card" style="padding:10px 12px;text-align:center">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Доходы</div>
+            <div style="font-size:15px;font-weight:600;color:var(--income)">+${f(income)}</div>
+          </div>
+          <div class="card" style="padding:10px 12px;text-align:center">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Расходы</div>
+            <div style="font-size:15px;font-weight:600;color:var(--expense)">−${f(expense)}</div>
+          </div>
+          <div class="card" style="padding:10px 12px;text-align:center">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Долги</div>
+            <div style="font-size:15px;font-weight:600;color:#EA580C">−${f(debt)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${filterBtns}</div>
+        <div class="card" style="padding:0 16px">${listHTML}</div>
+        <div id="opsFormContainer" style="display:none;margin-top:12px">
+          <div class="card" style="padding:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <span style="font-size:14px;font-weight:500;color:var(--text)">Новая операция</span>
+              <button onclick="closeOpsForm()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:20px;line-height:1;padding:0">×</button>
+            </div>
+            <div id="opsFormPanel"></div>
+          </div>
+        </div>
+      </div>`;
+  } catch(e) {
+    main.innerHTML = `<div style="padding:24px;color:var(--expense)">Ошибка: ${e.message}</div>`;
+  }
+}
+
+function _buildOpsForm(type) {
+  _opsFormType = type;
+  const realAccs = accounts_cache.filter(a => a.account_type === 'Актив');
+  const today    = new Date().toISOString().split('T')[0];
+  const catsForType = cats.filter(c => {
+    if (type === 'income')   return c.group_name === 'Доходы';
+    if (type === 'expense')  return c.group_name.startsWith('Расходы');
+    if (type === 'debt')     return c.group_name === 'Обязательства' || c.group_name === 'Дебиторка';
+    return false;
+  }).sort((a,b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
+
+  const catOpts  = `<option value="">— выбери —</option>` + catsForType.map(c => `<option value="${c.id}">${c.subcategory}</option>`).join('');
+  let fromOpts = '', toOpts = '';
+  if (type === 'income') {
+    fromOpts = `<option value="Доход">Доход</option>`;
+    toOpts   = realAccs.map(a => `<option>${a.name}</option>`).join('');
+  } else if (type === 'expense') {
+    fromOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    toOpts   = `<option value="Расход">Расход</option>`;
+  } else if (type === 'debt') {
+    fromOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    toOpts   = `<option value="Обязательства">Обязательства</option>`;
+  } else {
+    fromOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    toOpts   = realAccs.map(a => `<option>${a.name}</option>`).join('');
+  }
+
+  const typeBtns = [
+    {k:'income',label:'Доход',cls:'active-inc'},{k:'expense',label:'Расход',cls:'active-exp'},
+    {k:'debt',label:'Долг',cls:'active-obl'},{k:'transfer',label:'Перевод',cls:'active-tr'},
+  ].map(t => `<button class="type-btn ${t.k===type?t.cls:''}" onclick="_renderOpsForm('${t.k}')">${t.label}</button>`).join('');
+
+  return `<div class="type-grid">${typeBtns}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
+        <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Сумма, ₽</div>
+        <input class="field-input" type="number" id="opsFAmount" placeholder="0" min="0.01" step="0.01"></div>
+    </div>
+    ${type !== 'transfer' ? `<div class="field"><div class="field-label">Категория</div>
+      <select class="field-select" id="opsFCat">${catOpts}</select></div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Откуда</div>
+        <select class="field-select" id="opsFFrom">${fromOpts}</select></div>
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Куда</div>
+        <select class="field-select" id="opsFTo">${toOpts}</select></div>
+    </div>
+    <div class="field"><div class="field-label">Комментарий</div>
+      <input class="field-input" type="text" id="opsFNote" placeholder="необязательно"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="save-btn" style="flex:1" onclick="saveOpsTx()">Сохранить</button>
+      <button class="btn-ghost" onclick="closeOpsForm()">Отмена</button>
+    </div>`;
+}
+
+function _renderOpsForm(type) {
+  const prevDate = document.getElementById('opsFDate')?.value;
+  const prevAmt  = document.getElementById('opsFAmount')?.value;
+  const prevNote = document.getElementById('opsFNote')?.value;
+  const panel = document.getElementById('opsFormPanel');
+  if (!panel) return;
+  panel.innerHTML = _buildOpsForm(type);
+  if (prevDate) document.getElementById('opsFDate').value = prevDate;
+  if (prevAmt)  document.getElementById('opsFAmount').value = prevAmt;
+  if (prevNote) document.getElementById('opsFNote').value = prevNote;
+}
+
+function openOpsForm() {
+  const c = document.getElementById('opsFormContainer');
+  if (!c) return;
+  c.style.display = '';
+  _renderOpsForm(_opsFormType);
+  setTimeout(() => { document.getElementById('opsFAmount')?.focus(); c.scrollIntoView({behavior:'smooth',block:'nearest'}); }, 60);
+}
+
+function closeOpsForm() {
+  const c = document.getElementById('opsFormContainer');
+  if (c) c.style.display = 'none';
+}
+
+async function saveOpsTx() {
+  const btn = document.querySelector('#opsFormPanel .save-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const date  = document.getElementById('opsFDate')?.value;
+    const amt   = parseFloat(document.getElementById('opsFAmount')?.value);
+    const from  = document.getElementById('opsFFrom')?.value;
+    const to    = document.getElementById('opsFTo')?.value;
+    const note  = document.getElementById('opsFNote')?.value || null;
+    const catId = parseInt(document.getElementById('opsFCat')?.value) || null;
+
+    if (!date || !amt || amt <= 0 || !from || !to) {
+      toast('Заполни обязательные поля', false); if (btn) btn.disabled = false; return;
+    }
+    if (from === to) {
+      toast('Счёт откуда и куда не могут совпадать', false); if (btn) btn.disabled = false; return;
+    }
+    const res = await fetch('/api/transactions', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({date, amount: amt, account_from: from, account_to: to, category_id: catId, note, source: 'manual'})
+    });
+    if (!res.ok) throw new Error(await res.text());
+    toast('✓ Сохранено');
+    await loadMeta();
+    loadOperations(_opsYear, _opsMonth);
+  } catch(e) {
+    toast('Ошибка: ' + e.message, false);
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function deleteOpsTx(id) {
+  if (!confirm('Удалить операцию?')) return;
+  try {
+    const res = await fetch('/api/transactions/' + id, {method:'DELETE', credentials:'include'});
+    if (!res.ok) throw new Error(await res.text());
+    toast('✓ Удалено');
+    loadOperations(_opsYear, _opsMonth);
+  } catch(e) {
+    toast('Ошибка: ' + e.message, false);
+  }
 }
 
 </script>
