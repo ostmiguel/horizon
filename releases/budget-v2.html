@@ -3,24 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<!-- ===== Horizon — иконки и мета ===== -->
-<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1A1A2E">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Horizon">
-<link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#0C1828">
-<meta property="og:title" content="Horizon">
-<meta property="og:description" content="Прогнозирование личных финансов">
-<meta property="og:image" content="/og-image.png">
-<meta property="og:type" content="website">
-<meta name="twitter:card" content="summary_large_image">
-<title>Horizon</title>
+<meta name="apple-mobile-web-app-title" content="horizon">
+<title>horizon</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="chart.js"></script>
 <style>
@@ -955,7 +945,8 @@ body {
 <!-- SIDEBAR -->
 <nav class="sidebar">
   <div class="logo">
-    <img src="/horizon-lockup-horizontal-dark.svg" alt="Horizon" style="height:28px;width:122px;display:block">
+    <div class="logo-title">Бюджет</div>
+    <div class="logo-sub" id="dbIndicator">личные финансы</div>
   </div>
   <div class="nav">
     <div class="nav-section">Обзор</div>
@@ -1270,7 +1261,6 @@ const CAT_COLORS = {
   'Кредиты - процент':'#CD5C5C','Подписки':'#20B2AA','Прочее':'#888'
 };
 
-
 // ── META ──
 async function loadMeta() {
   try {
@@ -1535,6 +1525,11 @@ async function loadDashboard() {
           <div class="card">
             <div class="card-head">
               <span class="card-title">Расходы — план / факт</span>
+          })()}
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Расходы — план / факт</span>
               <span class="card-hint">${MONTHS[month]} ${year}</span>
             </div>
             <div class="card-body">
@@ -1773,6 +1768,7 @@ async function loadDashboard() {
         .select('date, amount, account_from, account_to')
         .eq('year', year).eq('month', month);
       planAll2 = _pmd || [];
+      // Если период в будущем — догружаем план предыдущего месяца для расчёта initBal
       if (periodStart > todayStr) {
         const prevMonth = month === 1 ? 12 : month - 1;
         const prevYear  = month === 1 ? year - 1 : year;
@@ -1801,19 +1797,24 @@ async function loadDashboard() {
     }
 
     // balanceAtPeriodStart = currentBal - сумма факт-дельт за [periodStart..todayStr]
+    // Для будущих месяцев — продолжаем от прогноза конца предыдущего периода
     const txsInPeriodToday = (txs||[]).filter(t => {
       const d = t.date.substring(0,10);
       return d >= periodStart && d <= todayStr;
     });
     let initBal = currentBal;
     txsInPeriodToday.forEach(t => { initBal -= txDelta(t, operAccNames2); });
-    // Если период в будущем — добавляем плановые дельты от сегодня до начала периода
+
+    // Если период начинается в будущем — добавляем плановые дельты от сегодня до начала периода
     if (periodStart > todayStr) {
       (planAll2||[]).forEach(p => {
         const d = p.date.substring(0,10);
-        if (d >= todayStr && d < periodStart) initBal += txDelta(p, operAccNames2);
+        if (d >= todayStr && d < periodStart) {
+          initBal += txDelta(p, operAccNames2);
+        }
       });
     }
+    // initBal готов
 
 
     // Build day-by-day map
@@ -1949,7 +1950,10 @@ async function loadDashboard() {
     const lineWrapEl = document.getElementById('chartLineWrap');
     if (lineWrapEl) lineWrapEl.style.height = (isYear ? 380 : 320) + 'px';
     const barWrapEl = document.getElementById('chartBarWrap');
-    if (barWrapEl) barWrapEl.style.height = (isYear ? 720 : 220) + 'px';
+    if (barWrapEl) {
+      // In year view: up to 12 months × 2 rows × ~30px per row + padding
+      barWrapEl.style.height = (isYear ? 720 : 220) + 'px';
+    }
 
     const ctxLine = document.getElementById('chartLine')?.getContext('2d');
     if (ctxLine) {
@@ -2978,10 +2982,12 @@ async function editTx(id, isPlan) {
           if (ue) throw ue;
           toast('✓ Обновлено');
           window._savedFilters = {
-            group:  document.getElementById('fltGroup')?.value  || '',
-            cat:    document.getElementById('fltCat')?.value    || '',
-            subcat: document.getElementById('fltSubcat')?.value || '',
-            acc:    document.getElementById('fltAcc')?.value    || '',
+            group:   document.getElementById('fltGroup')?.value   || '',
+            char:    document.getElementById('fltChar')?.value    || '',
+            expType: document.getElementById('fltExpType')?.value || '',
+            cat:     document.getElementById('fltCat')?.value     || '',
+            subcat:  document.getElementById('fltSubcat')?.value  || '',
+            acc:     document.getElementById('fltAcc')?.value     || '',
           };
           loadTransactions(isPlan);
         } catch(e) { toast('Ошибка: '+e.message, false); btn.disabled=false; }
@@ -3036,7 +3042,6 @@ async function loadReferences() {
               <th class="sortable" onclick="sortAccTable(2)">Тип</th>
               <th class="sortable" style="text-align:right" onclick="sortAccTable(3)">Нач. остаток</th>
               <th style="text-align:center">В балансе</th>
-              <th style="text-align:center">Резерв</th>
               <th></th>
             </tr></thead>
             <tbody id="accBody">${renderAccRows(accs||[])}</tbody>
@@ -3099,7 +3104,7 @@ async function loadReferences() {
 }
 
 function renderAccRows(rows) {
-  if (!rows.length) return '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
+  if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
   return rows.map((a, idx) => `<tr class="draggable-row" draggable="true" data-id="${a.id}"
     ondragstart="onAccDragStart(event,${a.id})"
     ondragover="onAccDragOver(event)"
@@ -3114,12 +3119,6 @@ function renderAccRows(rows) {
         <input type="checkbox" ${a.include_in_balance?'checked':''} onchange="toggleBalance(${a.id},this.checked)">
         <span class="toggle-slider"></span>
       </label>
-    </td>
-    <td style="text-align:center">
-      ${a.account_type === 'Актив' ? `<label class="toggle" title="Резервный счёт (для эпизодических трат)">
-        <input type="checkbox" ${a.is_reserve?'checked':''} onchange="toggleReserve(${a.id},this.checked)">
-        <span class="toggle-slider"></span>
-      </label>` : '—'}
     </td>
     <td style="white-space:nowrap">
       <button class="edit-btn" onclick="editAccount(${a.id})" style="margin-right:3px">ред.</button>
@@ -3226,18 +3225,6 @@ async function toggleBalance(id, val) {
   toast(val ? '✓ Включён в баланс' : '✓ Исключён из баланса');
 }
 
-async function toggleReserve(id, val) {
-  const updates = { is_reserve: val };
-  // Резервный счёт не должен быть в операционном балансе
-  if (val) updates.include_in_balance = false;
-  const { error } = await sb.from('accounts').update(updates).eq('id', id);
-  if (error) { toast('Ошибка: ' + error.message, false); return; }
-  const acc = accounts_cache.find(a => a.id === id);
-  if (acc) { acc.is_reserve = val; if (val) acc.include_in_balance = false; }
-  toast(val ? '✓ Помечен как резервный' : '✓ Снята пометка резервного');
-  loadReferences();
-}
-
 function editParticipant(id) { toast('Редактирование участника — скоро'); }
 
 async function toggleParticipantDefault(id, val) {
@@ -3312,13 +3299,7 @@ async function editAccount(id) {
         <label class="toggle"><input type="checkbox" id="eAccInBal" ${acc.include_in_balance?'checked':''}><span class="toggle-slider"></span></label>
         <span class="toggle-label">Включать в расчёт баланса</span>
       </div>
-    </div>
-    ${acc.account_type === 'Актив' ? `<div class="field"><div class="field-label">Резервный счёт</div>
-      <div class="toggle-wrap">
-        <label class="toggle"><input type="checkbox" id="eAccIsReserve" ${acc.is_reserve?'checked':''}><span class="toggle-slider"></span></label>
-        <span class="toggle-label">Используется для эпизодических трат</span>
-      </div>
-    </div>` : ''}` : `<input type="hidden" id="eAccInBal" value="${acc.include_in_balance}"><input type="hidden" id="eAccIsReserve" value="false">`}
+    </div>` : `<input type="hidden" id="eAccInBal" value="${acc.include_in_balance}">`}
     <div class="modal-btns">
       <button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
       <button class="btn-primary" onclick="updateAccount(${id},this)">Сохранить</button>
@@ -3332,10 +3313,7 @@ async function updateAccount(id, btn) {
   const bal   = parseFloat(document.getElementById('eAccBal')?.value) || 0;
   const color = document.getElementById('eAccColor')?.value;
   const inBal = document.getElementById('eAccInBal')?.checked ?? true;
-  const isReserve = document.getElementById('eAccIsReserve')?.checked ?? false;
-  // Резервный счёт не может быть в операционном балансе
-  const finalInBal = isReserve ? false : inBal;
-  const { error } = await sb.from('accounts').update({ name, initial_balance: bal, color, include_in_balance: finalInBal, is_reserve: isReserve }).eq('id', id);
+  const { error } = await sb.from('accounts').update({ name, initial_balance: bal, color, include_in_balance: inBal }).eq('id', id);
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   btn.closest('.modal-overlay').remove();
   toast('✓ Сохранено');
@@ -5823,11 +5801,14 @@ async function loadLab() {
     const isEpis=t=>t.categories?.character==='Эпизодический';
     const f=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
     const tip=text=>'<span class="has-tooltip" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;border:1px solid var(--border2);font-size:9px;color:var(--text3);cursor:help;flex-shrink:0;margin-left:3px">?<span class="tooltip-text">'+text+'</span></span>';
+    window._labTxs=txsCur; window._labPlan=planCur;
     const varFact=(txsCur||[]).filter(t=>isExp(t)&&isVar(t)&&notEpis(t)&&notUncat(t)).reduce((s,t)=>s+ +t.amount,0);
+    const varMonthly=dP>0?varFact/dP*daysInMonth:0;
     const varPerDay=dP>0?varFact/dP:0;
     const cutoff=new Date(today); cutoff.setDate(cutoff.getDate()-30);
     const var30=(allTxs||[]).filter(t=>isExp(t)&&isVar(t)&&notEpis(t)&&notUncat(t)&&new Date(t.date)>=cutoff&&new Date(t.date)<today).reduce((s,t)=>s+ +t.amount,0);
     const normPerDay=var30>0?var30/30:varPerDay;
+    // Вариант Б: смешанный прогноз — вес текущего месяца растёт с 0% до 100% к 21-му дню
     const weight=Math.min(dP/21,1);
     const blendedPerDay=varPerDay*weight+normPerDay*(1-weight);
     const varMonthlyBlended=blendedPerDay*daysInMonth;
@@ -5848,7 +5829,6 @@ async function loadLab() {
     const paceBg=pctVsNorm<=0?'rgba(5,150,105,0.1)':'rgba(220,38,38,0.1)';
     const paceIcon=pctVsNorm<=0?'↓':'↑';
     const totalIfAll=operForecast+episTotal;
-    window._labTxs=txsCur; window._labPlan=planCur;
     return '<div class="card" style="margin-bottom:14px;padding:16px 20px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span class="card-title">Прогноз расходов</span><span style="font-size:11px;color:var(--text3)">'+(isCurrent ? dP+' дней прошло из '+daysInMonth : isPast ? 'месяц завершён' : 'будущий месяц')+'</span></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:0.5px solid var(--border)">'
@@ -5884,8 +5864,7 @@ async function loadLab() {
     +'</div>';
   })()}
 
-  <div style="font-size:11px;color:var(--text3);padding:8px 0;line-height:1.6">
-    ⚗ Экспериментальная страница. Следующие блоки: Pattern Detector, Scenario Simulator, Точность прогноза.
+  ⚗ Экспериментальная страница. Следующие блоки: Pattern Detector, Scenario Simulator, Точность прогноза.
   </div>
 
 </div>`;
@@ -5902,7 +5881,7 @@ function loadLogin() {
   mc.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:center;min-height:80vh">
       <div style="text-align:center;max-width:360px;padding:40px">
-        <img src="/horizon-lockup-horizontal-light.svg" alt="Horizon" style="height:48px;width:209px;display:block;margin:0 auto 8px">
+        <div style="font-size:28px;font-weight:500;color:var(--text);margin-bottom:8px;letter-spacing:-0.5px">Horizon</div>
         <div style="font-size:13px;color:var(--text3);margin-bottom:40px">личные финансы</div>
         <a href="/api/auth/google" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 24px;border-radius:var(--radius-sm);border:1px solid var(--border);background:white;color:var(--text);text-decoration:none;font-size:14px;font-weight:500;margin-bottom:10px">
           <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -5929,14 +5908,11 @@ function loadLogin() {
 
   // Auto-check if already accepted before
   const prevConsent = localStorage.getItem('hz_consent_accepted');
-  const CURRENT_VERSION = '2026-06-03';
-  if (prevConsent === CURRENT_VERSION) {
-    setTimeout(() => {
-      const chkT = document.getElementById('chkTerms');
-      const chkP = document.getElementById('chkPrivacy');
-      if (chkT) chkT.checked = true;
-      if (chkP) chkP.checked = true;
-    }, 0);
+  if (prevConsent) {
+    const chkT = document.getElementById('chkTerms');
+    const chkP = document.getElementById('chkPrivacy');
+    if (chkT) chkT.checked = true;
+    if (chkP) chkP.checked = true;
   }
 
   // Block OAuth links until checkboxes are checked
@@ -5974,9 +5950,8 @@ window.onload = async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ privacy_version: '2026-06-03', terms_version: '2026-06-03', consent_version: '2026-06-03' })
       });
+      localStorage.setItem('hz_consent_accepted', '2026-06-03');
     }
-    // Всегда сохраняем в localStorage — чтобы галочки не сбрасывались при выходе
-    localStorage.setItem('hz_consent_accepted', '2026-06-03');
   }
 
   // Show lab nav only for Maks
@@ -5989,9 +5964,105 @@ window.onload = async () => {
   const savedPage = localStorage.getItem('hz_page') || 'dashboard';
   loadPage(savedPage);
 };
+
 // ── LAB FORECAST MODAL ──────────────────────────────────────────────────────
 function closeLabModal() {
   document.getElementById('labForecastModal').classList.remove('open');
+}
+
+function openLabModal(title, rows, note) {
+  // rows: [{sub, amount, count, date?}]
+  document.getElementById('labModalTitle').textContent = title;
+  const f = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
+  const total = rows.reduce((s,r) => s + r.amount, 0);
+  let html = '';
+  if (note) html += '<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding-bottom:10px;border-bottom:0.5px solid var(--border)">' + note + '</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:0">';
+  rows.forEach(r => {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">'
+      + '<div>'
+        + '<div style="font-size:13px;color:var(--text)">' + r.sub + '</div>'
+        + (r.count ? '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + r.count + ' ' + (r.count === 1 ? 'операция' : r.count < 5 ? 'операции' : 'операций') + (r.date ? ' · ' + r.date : '') + '</div>' : '')
+        + (r.date && !r.count ? '<div style="font-size:11px;color:var(--text3);margin-top:1px">' + r.date + '</div>' : '')
+      + '</div>'
+      + '<div style="font-size:14px;font-weight:500;color:var(--text);text-align:right">' + f(r.amount) + ' ₽</div>'
+    + '</div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:2px">'
+    + '<span style="font-size:13px;font-weight:500;color:var(--text)">Итого</span>'
+    + '<span style="font-size:15px;font-weight:600;color:var(--text)">' + f(total) + ' ₽</span>'
+  + '</div>';
+  document.getElementById('labModalBody').innerHTML = html;
+  document.getElementById('labForecastModal').classList.add('open');
+}
+
+function openLabModalVar(txsCur) {
+  const factMap = {};
+  (txsCur||[]).filter(t => t.account_to==='Расход'
+    && t.categories?.expense_type==='variable'
+    && t.categories?.character!=='Эпизодический'
+    && t.categories?.subcategory!=='Не учтено'
+  ).forEach(t => {
+    const k = t.categories?.subcategory || 'Прочее';
+    if (!factMap[k]) factMap[k] = {sub:k, fact:0, plan:0, count:0};
+    factMap[k].fact += +t.amount;
+    factMap[k].count++;
+  });
+  const planCur = window._labPlan || [];
+  planCur.filter(p => p.account_to==='Расход'
+    && p.categories?.expense_type==='variable'
+    && p.categories?.character!=='Эпизодический'
+    && p.categories?.subcategory!=='Не учтено'
+  ).forEach(p => {
+    const k = p.categories?.subcategory || 'Прочее';
+    if (!factMap[k]) factMap[k] = {sub:k, fact:0, plan:0, count:0};
+    factMap[k].plan += +p.amount;
+  });
+  const rows = Object.values(factMap).sort((a,b) => b.fact - a.fact);
+  openLabModalPF('Повседневные переменные', rows, 'Фактические транзакции vs план. Прогноз = темп × оставшиеся дни.');
+}
+
+function openLabModalFix(planCur) {
+  const planMap = {};
+  (planCur||[]).filter(p =>
+    (p.account_to==='Расход' && p.categories?.expense_type==='fixed' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено')
+    || p.account_to==='Обязательства'
+  ).forEach(p => {
+    const k = p.categories?.subcategory || 'Прочее';
+    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
+    planMap[k].plan += +p.amount;
+  });
+  const txsCur = window._labTxs || [];
+  txsCur.filter(t =>
+    (t.account_to==='Расход' && t.categories?.expense_type==='fixed' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено')
+    || t.account_to==='Обязательства'
+  ).forEach(t => {
+    const k = t.categories?.subcategory || 'Прочее';
+    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
+    planMap[k].fact += +t.amount;
+  });
+  const rows = Object.values(planMap).sort((a,b) => b.plan - a.plan);
+  openLabModalPF('Фиксированные и обязательства', rows, 'Плановые фиксированные расходы и обязательства vs факт.');
+}
+
+function openLabModalEpis(planCur) {
+  const planMap = {};
+  (planCur||[]).filter(p => p.account_to==='Расход' && p.categories?.character==='Эпизодический')
+  .forEach(p => {
+    const k = p.categories?.subcategory || 'Прочее';
+    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
+    planMap[k].plan += +p.amount;
+  });
+  const txsCur = window._labTxs || [];
+  txsCur.filter(t => t.account_to==='Расход' && t.categories?.character==='Эпизодический')
+  .forEach(t => {
+    const k = t.categories?.subcategory || 'Прочее';
+    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
+    planMap[k].fact += +t.amount;
+  });
+  const rows = Object.values(planMap).sort((a,b) => b.plan - a.plan);
+  openLabModalPF('Эпизодические', rows, 'Запланированные разовые расходы. В операционный прогноз не входят.');
 }
 
 function openLabModalPF(title, rows, note) {
@@ -6001,13 +6072,18 @@ function openLabModalPF(title, rows, note) {
   document.getElementById('labModalTitle').textContent = title;
   let html = '';
   if (note) html += '<div style="font-size:11px;color:var(--text3);margin-bottom:12px;padding-bottom:10px;border-bottom:0.5px solid var(--border)">' + note + '</div>';
+
+  // Header
   html += '<div style="display:grid;grid-template-columns:1fr 80px 80px;gap:8px;padding-bottom:6px;border-bottom:0.5px solid var(--border);margin-bottom:2px">'
     + '<span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Категория</span>'
     + '<span style="font-size:10px;color:var(--text3);text-align:right;text-transform:uppercase;letter-spacing:.04em">Факт</span>'
     + '<span style="font-size:10px;color:var(--text3);text-align:right;text-transform:uppercase;letter-spacing:.04em">План</span>'
   + '</div>';
+
   rows.forEach(r => {
+    const pct = r.plan > 0 ? Math.round(r.fact / r.plan * 100) : null;
     const over = r.fact > r.plan && r.plan > 0;
+    const done = r.fact > 0 && r.plan === 0;
     const factColor = over ? 'var(--expense)' : r.fact > 0 ? 'var(--income)' : 'var(--text3)';
     const barW = r.plan > 0 ? Math.min(100, Math.round(r.fact / r.plan * 100)) : (r.fact > 0 ? 100 : 0);
     const barColor = over ? 'var(--expense)' : 'var(--income)';
@@ -6017,65 +6093,24 @@ function openLabModalPF(title, rows, note) {
         + '<span style="font-size:13px;font-weight:500;color:' + factColor + ';text-align:right">' + (r.fact > 0 ? f(r.fact) : '—') + '</span>'
         + '<span style="font-size:13px;color:var(--text3);text-align:right">' + (r.plan > 0 ? f(r.plan) : '—') + '</span>'
       + '</div>'
-      + (r.plan > 0 ? '<div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:' + barW + '%;background:' + barColor + ';border-radius:2px"></div></div>' : '')
+      + (r.plan > 0 ? '<div style="height:3px;background:var(--border);border-radius:2px;overflow:hidden">'
+        + '<div style="height:100%;width:' + barW + '%;background:' + barColor + ';border-radius:2px"></div>'
+      + '</div>' : '')
     + '</div>';
   });
+
+  // Total
   const totalPct = totalPlan > 0 ? Math.round(totalFact / totalPlan * 100) : null;
   const totalOver = totalFact > totalPlan && totalPlan > 0;
-  html += '<div style="display:grid;grid-template-columns:1fr 80px 80px;gap:8px;align-items:center;padding-top:8px">'
+  html += '<div style="display:grid;grid-template-columns:1fr 80px 80px;gap:8px;align-items:center;padding-top:8px;margin-top:2px">'
     + '<span style="font-size:13px;font-weight:500;color:var(--text)">Итого' + (totalPct !== null ? ' <span style="font-size:11px;font-weight:400;color:' + (totalOver?'var(--expense)':'var(--income)') + '">'+totalPct+'%</span>' : '') + '</span>'
     + '<span style="font-size:14px;font-weight:600;color:' + (totalOver?'var(--expense)':'var(--text)') + ';text-align:right">' + f(totalFact) + '</span>'
     + '<span style="font-size:14px;font-weight:600;color:var(--text3);text-align:right">' + f(totalPlan) + '</span>'
   + '</div>';
+
   document.getElementById('labModalBody').innerHTML = html;
   document.getElementById('labForecastModal').classList.add('open');
 }
-
-function openLabModalVar(txsCur) {
-  const factMap = {};
-  (txsCur||[]).filter(t => t.account_to==='Расход' && t.categories?.expense_type==='variable' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено').forEach(t => {
-    const k = t.categories?.subcategory || 'Прочее';
-    if (!factMap[k]) factMap[k] = {sub:k, fact:0, plan:0, count:0};
-    factMap[k].fact += +t.amount; factMap[k].count++;
-  });
-  (window._labPlan||[]).filter(p => p.account_to==='Расход' && p.categories?.expense_type==='variable' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено').forEach(p => {
-    const k = p.categories?.subcategory || 'Прочее';
-    if (!factMap[k]) factMap[k] = {sub:k, fact:0, plan:0, count:0};
-    factMap[k].plan += +p.amount;
-  });
-  openLabModalPF('Повседневные переменные', Object.values(factMap).sort((a,b)=>b.fact-a.fact), 'Фактические транзакции vs план. Прогноз = темп × оставшиеся дни.');
-}
-
-function openLabModalFix(planCur) {
-  const planMap = {};
-  (planCur||[]).filter(p => (p.account_to==='Расход' && p.categories?.expense_type==='fixed' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено') || p.account_to==='Обязательства').forEach(p => {
-    const k = p.categories?.subcategory || 'Прочее';
-    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
-    planMap[k].plan += +p.amount;
-  });
-  (window._labTxs||[]).filter(t => (t.account_to==='Расход' && t.categories?.expense_type==='fixed' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено') || t.account_to==='Обязательства').forEach(t => {
-    const k = t.categories?.subcategory || 'Прочее';
-    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
-    planMap[k].fact += +t.amount;
-  });
-  openLabModalPF('Фиксированные и обязательства', Object.values(planMap).sort((a,b)=>b.plan-a.plan), 'Плановые фиксированные расходы и обязательства vs факт.');
-}
-
-function openLabModalEpis(planCur) {
-  const planMap = {};
-  (planCur||[]).filter(p => p.account_to==='Расход' && p.categories?.character==='Эпизодический').forEach(p => {
-    const k = p.categories?.subcategory || 'Прочее';
-    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
-    planMap[k].plan += +p.amount;
-  });
-  (window._labTxs||[]).filter(t => t.account_to==='Расход' && t.categories?.character==='Эпизодический').forEach(t => {
-    const k = t.categories?.subcategory || 'Прочее';
-    if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
-    planMap[k].fact += +t.amount;
-  });
-  openLabModalPF('Эпизодические', Object.values(planMap).sort((a,b)=>b.plan-a.plan), 'Запланированные разовые расходы. В операционный прогноз не входят.');
-}
-
 </script>
 <!-- LAB FORECAST MODAL -->
 <div class="modal-overlay" id="labForecastModal" onclick="if(event.target===this)closeLabModal()">
