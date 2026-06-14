@@ -38,17 +38,22 @@ def robust_sigma(values: list[float]) -> float:
 
 
 def _is_op(a: dict) -> bool:
-    """Operational account: explicit flag OR Актив + include_in_balance=True."""
-    if a.get("is_operational") is True:
-        return True
-    return a["account_type"] == "Актив" and a.get("include_in_balance", True) and not a.get("is_cushion")
+    """Operational: Актив + include_in_balance=True.
+    Ignores is_operational flag — it is set to True for virtual accounts (Доход, Расход, Обязательства)."""
+    return (
+        a["account_type"] == "Актив"
+        and a.get("include_in_balance") is True
+        and not a.get("is_cushion")
+    )
 
 
 def _is_rsv(a: dict) -> bool:
-    """Reserve/savings account: explicit flag OR Актив + include_in_balance=False."""
-    if a.get("is_reserve") is True:
-        return True
-    return a["account_type"] == "Актив" and not a.get("include_in_balance", True)
+    """Reserve/savings: Актив + NOT operational (include_in_balance != True)."""
+    return (
+        a["account_type"] == "Актив"
+        and a.get("include_in_balance") is not True
+        and not a.get("is_cushion")
+    )
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -181,7 +186,8 @@ async def get_metrics(request: Request):
         sts_status = "green"
 
     # ── §4.3 Net capital ──────────────────────────────────────────────────────
-    total_assets = sum(float(a["balance"]) for a in accs.values() if a["account_type"] != "Пассив")
+    # Only Актив accounts count as assets; virtual Поток accounts are excluded
+    total_assets = sum(float(a["balance"]) for a in accs.values() if a["account_type"] == "Актив")
     net_capital = total_assets - liabilities
 
     # ── §4.4 DSR ──────────────────────────────────────────────────────────────
