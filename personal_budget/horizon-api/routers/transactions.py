@@ -23,6 +23,35 @@ class TxUpdate(BaseModel):
     category_id: Optional[int] = None
     note: Optional[str] = None
 
+@router.get("/{tx_id}")
+async def get_transaction(tx_id: int, request: Request, plan: bool = False):
+    user_id = request.state.user_id
+    db = request.state.db
+    table = "plan" if plan else "transactions"
+    row = await db.fetchrow(f"""
+        SELECT t.*,
+               c.group_name, c.category, c.subcategory, c.character, c.expense_type
+        FROM {table} t
+        LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.id=$1 AND t.user_id=$2
+    """, tx_id, user_id)
+    if not row:
+        raise HTTPException(404)
+    d = dict(row)
+    if d.get('group_name'):
+        d['categories'] = {
+            'group_name':   d.pop('group_name'),
+            'category':     d.pop('category'),
+            'subcategory':  d.pop('subcategory'),
+            'character':    d.pop('character'),
+            'expense_type': d.pop('expense_type'),
+        }
+    else:
+        for k in ['group_name','category','subcategory','character','expense_type']:
+            d.pop(k, None)
+        d['categories'] = None
+    return d
+
 @router.get("")
 async def get_transactions(
     request: Request,

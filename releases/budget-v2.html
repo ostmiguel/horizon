@@ -6442,7 +6442,7 @@ function openLabModalEpis(planCur) {
 }
 
 // ── ОПЕРАЦИИ (Фаза 3) ─────────────────────────────────────────────────────────
-let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense';
+let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense', _editingOpsTxId = null;
 
 async function loadOperations(yr, mo) {
   const now = new Date();
@@ -6465,7 +6465,6 @@ async function loadOperations(yr, mo) {
     const facts = factRes.data || [];
     const plans = planRes.data || [];
 
-    // Итоги всегда от полного факта (не зависят от фильтра)
     const income  = facts.filter(t => t.account_from === 'Доход').reduce((s,t) => s + +t.amount, 0);
     const expense = facts.filter(t => t.account_to   === 'Расход').reduce((s,t) => s + +t.amount, 0);
     const debt    = facts.filter(t => t.account_to   === 'Обязательства').reduce((s,t) => s + +t.amount, 0);
@@ -6478,141 +6477,165 @@ async function loadOperations(yr, mo) {
       return true;
     }
 
-    const filteredFacts = facts.filter(matchFilter);
-    const futurePlan    = plans.filter(p => p.date > todayStr).filter(matchFilter);
+    const filteredFacts = facts.filter(matchFilter).sort((a,b) => b.date.localeCompare(a.date));
+    const futurePlan    = plans.filter(p => p.date > todayStr).filter(matchFilter).sort((a,b) => a.date.localeCompare(b.date));
 
-    function groupByDate(txs) {
-      const map = {};
-      txs.forEach(t => { if (!map[t.date]) map[t.date] = []; map[t.date].push(t); });
-      return map;
+    function fmtDate(d) {
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
     }
 
-    const factsByDate = groupByDate(filteredFacts);
-    const planByDate  = groupByDate(futurePlan);
-    const factDates   = Object.keys(factsByDate).sort().reverse();
-    const planDates   = Object.keys(planByDate).sort();
+    function typeBadge(type) {
+      if (type === 'income')     return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:var(--income-bg);color:var(--income)">Доход</span>';
+      if (type === 'expense')    return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:#F3F4F6;color:var(--text2)">Расход</span>';
+      if (type === 'obligation') return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:#FEF3C7;color:#92400E">Долг</span>';
+      return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:#EFF6FF;color:#1D4ED8">Перевод</span>';
+    }
 
-    function typeBadge(type, c) {
-      // Только для расходов и обязательств
-      if (type !== 'expense' && type !== 'obligation') return '';
-      if (!c) return '';
-      if (c.expense_type === 'fixed')         return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1E3A5F;color:#60A5FA;font-weight:500">fixed</span>';
-      if (c.character   === 'Эпизодический') return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1B69;color:#A78BFA;font-weight:500">эпизод</span>';
-      if (c.expense_type === 'variable')      return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#2D1010;color:#F87171;font-weight:500">var</span>';
-      return '';
+    function charChip(type, c) {
+      if (!c || type === 'income' || type === 'transfer') return '<span style="color:var(--text3)">—</span>';
+      if (c.character === 'Эпизодический') return '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:#FAF5FF;color:#7C3AED">эпизод</span>';
+      if (c.expense_type === 'fixed')       return '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:#EFF6FF;color:#1D4ED8">фикс</span>';
+      if (c.expense_type === 'variable')    return '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:#F0FDF4;color:#166534">поток</span>';
+      return '<span style="color:var(--text3)">—</span>';
     }
 
     function txRow(t, isPlan) {
       const type = getFlowType(t.account_from, t.account_to);
       const sign = type === 'income' ? '+' : '−';
-      const amtColor = type === 'income' ? 'var(--income)' : type === 'expense' ? 'var(--expense)' : type === 'obligation' ? '#EA580C' : 'var(--text2)';
+      const amtColor = type === 'income' ? 'var(--income)' : type === 'expense' ? 'var(--expense)' : type === 'obligation' ? '#B45309' : 'var(--text2)';
       const c = t.categories;
       const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : t.account_to);
-      // Подзаголовок: категория (если отличается от подкатегории), иначе — счёт
       let sub = '';
-      if (c?.category && c?.subcategory && c.category !== c.subcategory) {
-        sub = c.category;
-      } else if (type === 'income') {
-        sub = t.account_to;
-      } else if (type === 'expense') {
-        sub = t.account_from;
-      } else if (type === 'obligation') {
-        sub = t.account_from;
-      } else {
-        sub = `${t.account_from} → ${t.account_to}`;
-      }
-      const badge     = typeBadge(type, c);
-      const noteStr   = t.note ? ` · ${t.note}` : '';
-      const planLabel = isPlan ? '<span style="font-size:9px;color:var(--text3);background:var(--bg2);padding:1px 5px;border-radius:3px;margin-right:4px">план</span>' : '';
-      const delBtn    = isPlan ? '' : `<button onclick="event.stopPropagation();deleteOpsTx(${t.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0 2px;line-height:1;opacity:0.4" title="Удалить">×</button>`;
-      // Строка подзаголовка: текст + бейдж (inline, одна строка)
-      const subContent = [sub + noteStr, badge].filter(Boolean).join(' ');
-      return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid var(--border);${isPlan?'opacity:0.5':''}">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${planLabel}${name}</div>
-          ${subContent ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">${sub+noteStr ? `<span>${sub}${noteStr}</span>` : ''}${badge}</div>` : ''}
-        </div>
-        <div style="flex-shrink:0;display:flex;align-items:center;gap:4px">
-          <span style="font-size:14px;font-weight:600;color:${amtColor}">${sign}${f(t.amount)} ₽</span>
-          ${delBtn}
-        </div>
-      </div>`;
+      if (c?.category && c?.subcategory && c.category !== c.subcategory) sub = c.category;
+      else if (type === 'income') sub = t.account_to;
+      else if (type === 'expense' || type === 'obligation') sub = t.account_from;
+      else sub = `${t.account_from} → ${t.account_to}`;
+      const noteStr = t.note ? ` · ${t.note}` : '';
+      const searchKey = [name, sub, t.note, c?.group_name].filter(Boolean).join(' ').toLowerCase();
+      const dateCell = isPlan
+        ? `<td style="padding:11px 14px;color:var(--text3);font-size:12px;white-space:nowrap;vertical-align:middle"><span style="font-size:10px;background:#EFF6FF;color:#1D4ED8;padding:1px 5px;border-radius:4px;display:block;margin-bottom:3px">план</span>${fmtDate(t.date)}</td>`
+        : `<td style="padding:11px 14px;color:var(--text3);font-size:12px;white-space:nowrap;vertical-align:middle">${fmtDate(t.date)}</td>`;
+      const actions = isPlan ? '<td style="padding:11px 14px"></td>'
+        : `<td style="padding:11px 14px;text-align:right;white-space:nowrap;vertical-align:middle">
+            <button onclick="openEditOpsTx(${t.id})" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--text2);cursor:pointer;margin-right:4px">ред.</button>
+            <button onclick="deleteOpsTx(${t.id})" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;line-height:1;padding:0 2px">×</button>
+          </td>`;
+      return `<tr data-search="${searchKey}" style="border-bottom:1px solid var(--border);${isPlan?'opacity:0.5':''}transition:.1s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+        ${dateCell}
+        <td style="padding:11px 14px;vertical-align:middle">
+          <div style="font-size:13px;font-weight:500;color:var(--text)">${name}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">${sub}${noteStr}</div>
+        </td>
+        <td style="padding:11px 14px;white-space:nowrap;vertical-align:middle">${typeBadge(type)}</td>
+        <td style="padding:11px 14px;white-space:nowrap;vertical-align:middle">${charChip(type, c)}</td>
+        <td style="padding:11px 14px;text-align:right;font-size:14px;font-weight:600;color:${amtColor};white-space:nowrap;vertical-align:middle">${sign}${f(t.amount)} ₽</td>
+        ${actions}
+      </tr>`;
     }
 
-    function dateHeader(dateStr) {
-      const d = new Date(dateStr + 'T00:00:00');
-      return `<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:12px 0 2px">${d.toLocaleDateString('ru-RU',{day:'numeric',month:'short',weekday:'short'})}</div>`;
-    }
-
-    let listHTML = '';
-    if (factDates.length === 0 && planDates.length === 0) {
-      listHTML = '<div style="text-align:center;padding:36px 0;color:var(--text3);font-size:13px">Нет операций за период</div>';
-    } else {
-      factDates.forEach(date => {
-        listHTML += dateHeader(date);
-        factsByDate[date].forEach(t => { listHTML += txRow(t, false); });
-      });
-      const isPastMonth = yr < now.getFullYear() || (yr === now.getFullYear() && mo < now.getMonth() + 1);
-      if (planDates.length > 0 && !isPastMonth) {
-        listHTML += `<div style="display:flex;align-items:center;gap:8px;margin:14px 0 2px">
+    function sectionDivider(label) {
+      return `<tr><td colspan="6" style="padding:10px 14px 4px;background:var(--bg)">
+        <div style="display:flex;align-items:center;gap:8px">
           <div style="flex:1;height:1px;background:var(--border)"></div>
-          <span style="font-size:10px;color:var(--accent);white-space:nowrap;padding:0 8px">план · ${futurePlan.length} позиций</span>
-          <div style="flex:1;height:1px;background:var(--border)"></div></div>`;
-        planDates.forEach(date => {
-          listHTML += dateHeader(date);
-          planByDate[date].forEach(t => { listHTML += txRow(t, true); });
-        });
-      }
+          <span style="font-size:10px;font-weight:600;color:var(--accent);white-space:nowrap;text-transform:uppercase;letter-spacing:.05em">${label}</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+      </td></tr>`;
     }
+
+    let rows = filteredFacts.map(t => txRow(t, false)).join('');
+    const isPastMonth = yr < now.getFullYear() || (yr === now.getFullYear() && mo < now.getMonth() + 1);
+    if (futurePlan.length > 0 && !isPastMonth) {
+      rows += sectionDivider(`план · ${futurePlan.length} позиций`);
+      rows += futurePlan.map(t => txRow(t, true)).join('');
+    }
+    if (!rows) rows = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Нет операций за период</td></tr>`;
 
     const filterDefs = [{k:'all',label:'Все'},{k:'income',label:'Доходы'},{k:'expense',label:'Расходы'},{k:'debt',label:'Долги'},{k:'transfer',label:'Переводы'}];
     const filterBtns = filterDefs.map(({k,label}) =>
-      `<button onclick="_opsFilter='${k}';loadOperations(${yr},${mo})" style="padding:4px 11px;border-radius:16px;border:none;cursor:pointer;font-size:12px;background:${_opsFilter===k?'var(--accent)':'var(--bg2)'};color:${_opsFilter===k?'white':'var(--text2)'}">${label}</button>`
+      `<button onclick="_opsFilter='${k}';loadOperations(${yr},${mo})" style="padding:5px 13px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;background:${_opsFilter===k?'var(--accent)':'transparent'};color:${_opsFilter===k?'white':'var(--text2)'}">${label}</button>`
     ).join('');
 
     const prevY = mo===1?yr-1:yr, prevM = mo===1?12:mo-1;
     const nextY = mo===12?yr+1:yr, nextM = mo===12?1:mo+1;
 
     main.innerHTML = `
-      <div style="max-width:640px;margin:0 auto;padding:0 0 48px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <div class="page-title">Операции</div>
-          <button class="btn-primary" onclick="openOpsForm()">+ Добавить</button>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:16px">
-          <button onclick="loadOperations(${prevY},${prevM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:0;line-height:1">‹</button>
-          <span style="font-size:14px;font-weight:500;color:var(--text);min-width:130px;text-align:center">${MONTHS[mo]} ${yr}</span>
-          <button onclick="loadOperations(${nextY},${nextM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:22px;padding:0;line-height:1">›</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
-          <div class="card" style="padding:10px 12px;text-align:center">
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Доходы</div>
-            <div style="font-size:15px;font-weight:600;color:var(--income)">+${f(income)}</div>
+      <div style="padding:0 0 48px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+          <div>
+            <div class="page-title">Операции</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">план и факт за месяц</div>
           </div>
-          <div class="card" style="padding:10px 12px;text-align:center">
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Расходы</div>
-            <div style="font-size:15px;font-weight:600;color:var(--expense)">−${f(expense)}</div>
-          </div>
-          <div class="card" style="padding:10px 12px;text-align:center">
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em">Долги</div>
-            <div style="font-size:15px;font-weight:600;color:#EA580C">−${f(debt)}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${filterBtns}</div>
-        <div class="card" style="padding:0 16px">${listHTML}</div>
-        <div id="opsFormContainer" style="display:none;margin-top:12px">
-          <div class="card" style="padding:16px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-              <span style="font-size:14px;font-weight:500;color:var(--text)">Новая операция</span>
-              <button onclick="closeOpsForm()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:20px;line-height:1;padding:0">×</button>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;box-shadow:var(--shadow)">
+              <button onclick="loadOperations(${prevY},${prevM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:16px;padding:0;line-height:1">‹</button>
+              <span style="font-size:13px;font-weight:500;color:var(--text);min-width:90px;text-align:center">${MONTHS[mo]} ${yr}</span>
+              <button onclick="loadOperations(${nextY},${nextM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:16px;padding:0;line-height:1">›</button>
             </div>
-            <div id="opsFormPanel"></div>
+            <button class="btn-primary" onclick="openOpsModal()">+ Добавить</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+          <div class="card" style="padding:14px 16px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Доходы · факт</div>
+            <div style="font-size:20px;font-weight:600;color:var(--income)">+${f(income)} ₽</div>
+          </div>
+          <div class="card" style="padding:14px 16px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Расходы · факт</div>
+            <div style="font-size:20px;font-weight:600;color:var(--expense)">−${f(expense)} ₽</div>
+          </div>
+          <div class="card" style="padding:14px 16px">
+            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Долги · факт</div>
+            <div style="font-size:20px;font-weight:600;color:#B45309">−${f(debt)} ₽</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <div style="display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;box-shadow:var(--shadow)">${filterBtns}</div>
+          <input type="text" id="opsSearch" placeholder="Поиск…" oninput="opsFilterRows(this.value)"
+            style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12px;background:var(--bg2);color:var(--text);box-shadow:var(--shadow)">
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg)">
+                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Дата</th>
+                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Операция</th>
+                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Тип</th>
+                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Характер</th>
+                <th style="padding:9px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Сумма</th>
+                <th style="padding:9px 14px;width:90px"></th>
+              </tr>
+            </thead>
+            <tbody id="opsTbody">${rows}</tbody>
+          </table>
+        </div>
+
+        <div id="opsModalOverlay" onclick="if(event.target===this)closeOpsModal()"
+             style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:200;align-items:center;justify-content:center">
+          <div style="background:var(--bg2);border-radius:var(--radius);padding:24px;width:460px;max-width:calc(100vw - 24px);max-height:90vh;overflow-y:auto;box-shadow:var(--shadow2)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+              <div style="font-size:15px;font-weight:600;color:var(--text)" id="opsModalTitle">Новая операция</div>
+              <button onclick="closeOpsModal()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:22px;line-height:1;padding:0">×</button>
+            </div>
+            <div id="opsModalForm"></div>
           </div>
         </div>
       </div>`;
+
   } catch(e) {
     main.innerHTML = `<div style="padding:24px;color:var(--expense)">Ошибка: ${e.message}</div>`;
   }
+}
+
+function opsFilterRows(q) {
+  const s = q.toLowerCase().trim();
+  document.querySelectorAll('#opsTbody tr[data-search]').forEach(tr => {
+    tr.style.display = (!s || tr.dataset.search.includes(s)) ? '' : 'none';
+  });
 }
 
 function _buildOpsForm(type) {
@@ -6647,7 +6670,7 @@ function _buildOpsForm(type) {
     {k:'debt',label:'Долг',cls:'active-obl'},{k:'transfer',label:'Перевод',cls:'active-tr'},
   ].map(t => `<button class="type-btn ${t.k===type?t.cls:''}" onclick="_renderOpsForm('${t.k}')">${t.label}</button>`).join('');
 
-  return `<div class="type-grid">${typeBtns}</div>
+  return `<div class="type-grid" style="margin-bottom:14px">${typeBtns}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
         <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
@@ -6664,9 +6687,9 @@ function _buildOpsForm(type) {
     </div>
     <div class="field"><div class="field-label">Комментарий</div>
       <input class="field-input" type="text" id="opsFNote" placeholder="необязательно"></div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button class="save-btn" style="flex:1" onclick="saveOpsTx()">Сохранить</button>
-      <button class="btn-ghost" onclick="closeOpsForm()">Отмена</button>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button class="save-btn" style="flex:1" id="opsSubmitBtn" onclick="saveOpsTx()">Сохранить</button>
+      <button class="btn-ghost" onclick="closeOpsModal()">Отмена</button>
     </div>`;
 }
 
@@ -6674,29 +6697,60 @@ function _renderOpsForm(type) {
   const prevDate = document.getElementById('opsFDate')?.value;
   const prevAmt  = document.getElementById('opsFAmount')?.value;
   const prevNote = document.getElementById('opsFNote')?.value;
-  const panel = document.getElementById('opsFormPanel');
+  const panel    = document.getElementById('opsModalForm');
   if (!panel) return;
   panel.innerHTML = _buildOpsForm(type);
   if (prevDate) document.getElementById('opsFDate').value = prevDate;
   if (prevAmt)  document.getElementById('opsFAmount').value = prevAmt;
   if (prevNote) document.getElementById('opsFNote').value = prevNote;
+  if (_editingOpsTxId) {
+    const btn = document.getElementById('opsSubmitBtn');
+    if (btn) { btn.textContent = 'Обновить'; btn.onclick = () => updateOpsTx(_editingOpsTxId); }
+  }
 }
 
-function openOpsForm() {
-  const c = document.getElementById('opsFormContainer');
-  if (!c) return;
-  c.style.display = '';
-  _renderOpsForm(_opsFormType);
-  setTimeout(() => { document.getElementById('opsFAmount')?.focus(); c.scrollIntoView({behavior:'smooth',block:'nearest'}); }, 60);
+function openOpsModal(tx) {
+  _editingOpsTxId = tx ? tx.id : null;
+  const overlay = document.getElementById('opsModalOverlay');
+  const title   = document.getElementById('opsModalTitle');
+  if (!overlay) return;
+  title.textContent = tx ? 'Редактировать операцию' : 'Новая операция';
+  const type = tx ? getFlowType(tx.account_from, tx.account_to) : _opsFormType;
+  const panel = document.getElementById('opsModalForm');
+  panel.innerHTML = _buildOpsForm(type);
+  if (tx) {
+    if (document.getElementById('opsFDate'))   document.getElementById('opsFDate').value   = tx.date;
+    if (document.getElementById('opsFAmount')) document.getElementById('opsFAmount').value = tx.amount;
+    if (document.getElementById('opsFNote'))   document.getElementById('opsFNote').value   = tx.note || '';
+    if (document.getElementById('opsFFrom'))   document.getElementById('opsFFrom').value   = tx.account_from;
+    if (document.getElementById('opsFTo'))     document.getElementById('opsFTo').value     = tx.account_to;
+    if (document.getElementById('opsFCat') && tx.category_id) document.getElementById('opsFCat').value = tx.category_id;
+    const btn = document.getElementById('opsSubmitBtn');
+    if (btn) { btn.textContent = 'Обновить'; btn.onclick = () => updateOpsTx(tx.id); }
+  }
+  overlay.style.display = 'flex';
+  setTimeout(() => document.getElementById('opsFAmount')?.focus(), 60);
 }
 
-function closeOpsForm() {
-  const c = document.getElementById('opsFormContainer');
-  if (c) c.style.display = 'none';
+function closeOpsModal() {
+  const overlay = document.getElementById('opsModalOverlay');
+  if (overlay) overlay.style.display = 'none';
+  _editingOpsTxId = null;
+}
+
+async function openEditOpsTx(id) {
+  try {
+    const res = await fetch('/api/transactions/' + id, {credentials:'include'});
+    if (!res.ok) throw new Error('Ошибка загрузки');
+    const tx = await res.json();
+    openOpsModal(tx);
+  } catch(e) {
+    toast('Ошибка: ' + e.message, false);
+  }
 }
 
 async function saveOpsTx() {
-  const btn = document.querySelector('#opsFormPanel .save-btn');
+  const btn = document.getElementById('opsSubmitBtn');
   if (btn) btn.disabled = true;
   try {
     const date  = document.getElementById('opsFDate')?.value;
@@ -6719,7 +6773,37 @@ async function saveOpsTx() {
     });
     if (!res.ok) throw new Error(await res.text());
     toast('✓ Сохранено');
+    closeOpsModal();
     await loadMeta();
+    loadOperations(_opsYear, _opsMonth);
+  } catch(e) {
+    toast('Ошибка: ' + e.message, false);
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function updateOpsTx(id) {
+  const btn = document.getElementById('opsSubmitBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const date  = document.getElementById('opsFDate')?.value;
+    const amt   = parseFloat(document.getElementById('opsFAmount')?.value);
+    const from  = document.getElementById('opsFFrom')?.value;
+    const to    = document.getElementById('opsFTo')?.value;
+    const note  = document.getElementById('opsFNote')?.value || null;
+    const catId = parseInt(document.getElementById('opsFCat')?.value) || null;
+
+    if (!date || !amt || amt <= 0) {
+      toast('Заполни обязательные поля', false); if (btn) btn.disabled = false; return;
+    }
+    const res = await fetch('/api/transactions/' + id, {
+      method: 'PATCH', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({date, amount: amt, account_from: from, account_to: to, category_id: catId, note})
+    });
+    if (!res.ok) throw new Error(await res.text());
+    toast('✓ Обновлено');
+    closeOpsModal();
     loadOperations(_opsYear, _opsMonth);
   } catch(e) {
     toast('Ошибка: ' + e.message, false);
