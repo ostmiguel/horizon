@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 from middleware import AuthMiddleware
-from routers import accounts, transactions, categories, loans, auth, metrics, goals
+from routers import accounts, transactions, categories, loans, auth, metrics, goals, plan_rules, category_budgets
 
 load_dotenv()
 
@@ -31,6 +31,8 @@ app.include_router(categories.router)
 app.include_router(loans.router)
 app.include_router(metrics.router)
 app.include_router(goals.router)
+app.include_router(plan_rules.router)
+app.include_router(category_budgets.router)
 
 @app.get("/health")
 async def health():
