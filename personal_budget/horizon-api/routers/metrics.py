@@ -80,9 +80,13 @@ async def account_balances(db, user_id: str) -> dict:
     return {r["name"]: dict(r) for r in rows}
 
 
+FLOW_CHARS = ('flow', 'Повседневный')       # supported character values for flow
+EPISODIC_CHARS = ('episodic', 'Эпизодический')
+FIXED_CHARS = ('fixed', 'Фиксированный')
+
+
 async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
-    """Robust daily rate and σ from last 30 days.
-    Tries flow-tagged expenses first; falls back to all expenses if categories lack flow tagging."""
+    """Robust daily rate and σ from last 30 days of flow/everyday expenses."""
     cutoff = today - timedelta(days=30)
     rows = await db.fetch("""
         SELECT t.date, SUM(t.amount) AS daily_total
@@ -90,20 +94,9 @@ async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
           AND t.account_to = 'Расход'
-          AND c.character = 'flow'
+          AND c.character = ANY($4)
         GROUP BY t.date ORDER BY t.date
-    """, user_id, cutoff, today)
-    if rows:
-        daily = [float(r["daily_total"]) for r in rows]
-        return robust_rate(daily), robust_sigma(daily)
-    # Fallback: all expenses (no flow tagging in categories yet)
-    rows = await db.fetch("""
-        SELECT date, SUM(amount) AS daily_total
-        FROM transactions
-        WHERE user_id=$1 AND date >= $2 AND date < $3
-          AND account_to = 'Расход'
-        GROUP BY date ORDER BY date
-    """, user_id, cutoff, today)
+    """, user_id, cutoff, today, list(FLOW_CHARS))
     daily = [float(r["daily_total"]) for r in rows]
     return robust_rate(daily), robust_sigma(daily)
 
@@ -177,11 +170,20 @@ async def get_metrics(request: Request):
     # ── Plan remaining ────────────────────────────────────────────────────────
     plan_rows = await plan_remaining(db, user_id, year, month, today)
     I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_from") == "Доход")
-    # All planned outflows: fixed + flow + episodic from plan, plus obligations
-    # V_remain (statistical flow) is additive on top only when categories are properly tagged 'flow'
-    F_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Расход")
+    # F_remain: fixed + episodic plan outflows (flow/everyday is covered by V_remain statistically)
+    # If no flow-tagged categories yet, include ALL plan outflows to avoid underestimating
+    plan_expenses = [r for r in plan_rows if r.get("account_to") == "Расход"]
+    has_flow_tagged = any(r.get("cat_character") in FLOW_CHARS for r in plan_expenses)
+    if has_flow_tagged:
+        # Proper split: fixed + episodic in F_remain, flow goes into V_remain
+        F_remain = sum(
+            float(r["amount"]) for r in plan_expenses
+            if r.get("cat_character") not in FLOW_CHARS
+        )
+    else:
+        # No flow tagging yet: use all plan expenses (V_remain will be 0)
+        F_remain = sum(float(r["amount"]) for r in plan_expenses)
     F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
-    # R_topup: reserve contributions in plan (account_to = reserve account)
     R_topup = 0  # TODO: detect reserve accounts by name when _is_rsv accounts are in plan
 
     # ── §4.1 Safe to spend ────────────────────────────────────────────────────
@@ -254,8 +256,8 @@ async def get_metrics(request: Request):
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
           AND t.account_to = 'Расход'
-          AND c.character = 'fixed'
-    """, user_id, year, month))
+          AND c.character = ANY($4)
+    """, user_id, year, month, list(FIXED_CHARS)))
 
     cur_expenses = float(await db.fetchval("""
         SELECT COALESCE(SUM(amount), 0) FROM transactions
