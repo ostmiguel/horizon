@@ -5814,12 +5814,12 @@ async function loadDashboardNew() {
 
     // ── Health KPIs ──────────────────────────────────────────────────────────
     const kpis = [
-      { label: 'Чистый капитал',    val: f(Math.abs(m.net_capital.value)) + ' ₽', color: C[m.net_capital.status],
-        sub: m.net_capital.value >= 0 ? 'активы > обязательства' : 'обязательства > активы' },
+      { label: 'Чистый капитал',    val: (m.net_capital.value < 0 ? '−' : '') + f(m.net_capital.value) + ' ₽', color: C[m.net_capital.status],
+        sub: m.net_capital.delta_pct != null ? (m.net_capital.delta_pct >= 0 ? '▲' : '▼') + ' ' + Math.abs(m.net_capital.delta_pct) + '% за 30 дней' : (m.net_capital.value >= 0 ? 'активы > обязательства' : 'обязательства > активы') },
       { label: 'Долговая нагрузка', val: m.dsr.value + '%',                        color: C[m.dsr.status],
         sub: f(m.dsr.monthly_payments) + ' ₽/мес на долги' },
       { label: 'Runway',            val: m.runway.behavioral_months + ' мес',      color: C[m.runway.status],
-        sub: 'без дохода на ликвидных' },
+        sub: 'план: ' + m.runway.planned_months + ' мес · факт: ' + m.runway.behavioral_months + ' мес' },
       { label: 'Устойчивость',      val: m.resilience.value + ' / 10',             color: C[m.resilience.status],
         sub: { green: 'высокая', yellow: 'средняя', red: 'низкая' }[m.resilience.status] },
     ];
@@ -5833,16 +5833,18 @@ async function loadDashboardNew() {
     // ── Categories ───────────────────────────────────────────────────────────
     const cats    = (m.categories || []).slice(0, 7);
     const maxCat  = cats[0]?.amount_forecast || 1;
-    const catColors = { fixed: '#2563EB', episodic: '#8B5CF6', flow: '#DC2626' };
+    const catColors = { fixed: '#2563EB', variable: '#DC2626' };
+    const catCharColor = { 'Эпизодический': '#8B5CF6' };
     const catHtml = cats.map(c => {
       const w = Math.round(c.amount_forecast / maxCat * 100);
+      const barColor = c.character === 'Эпизодический' ? '#8B5CF6' : (catColors[c.expense_type] || '#6B7280');
       return `<div style="margin-bottom:9px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
           <span style="color:var(--text)">${c.category}</span>
           <span style="color:var(--text2)">${f(c.amount_fact)} <span style="color:var(--text3);font-size:11px">→ ${f(c.amount_forecast)} ₽</span></span>
         </div>
         <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-          <div style="height:100%;width:${w}%;background:${catColors[c.character] || '#6B7280'};border-radius:2px"></div>
+          <div style="height:100%;width:${w}%;background:${barColor};border-radius:2px"></div>
         </div></div>`;
     }).join('');
 
@@ -5881,8 +5883,8 @@ async function loadDashboardNew() {
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
             <div class="kpi-label">Свободно до конца месяца</div>
-            <div style="font-size:38px;font-weight:700;color:${stsColor};font-family:'Space Grotesk',sans-serif;line-height:1.1">${f(sts.value)} ₽</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px">коридор ${f(sts.low)} — ${f(sts.high)} ₽</div>
+            <div style="font-size:38px;font-weight:700;color:${stsColor};font-family:'Space Grotesk',sans-serif;line-height:1.1">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽</div>
           </div>
           <span style="font-size:11px;font-weight:600;color:${stsColor};background:${stsColor}1a;padding:3px 10px;border-radius:12px;white-space:nowrap">${stsLabel}</span>
         </div>

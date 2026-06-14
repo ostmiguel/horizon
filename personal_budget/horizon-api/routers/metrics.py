@@ -48,10 +48,11 @@ def _is_op(a: dict) -> bool:
 
 
 def _is_rsv(a: dict) -> bool:
-    """Reserve/savings: Актив + NOT operational (include_in_balance != True)."""
+    """True reserve accounts only (is_reserve=True). Used for s_reserve and runway liquid.
+    Excludes non-operational investments (Брокерский) — those are capital but not liquid runway."""
     return (
         a["account_type"] == "Актив"
-        and a.get("include_in_balance") is not True
+        and a.get("is_reserve") is True
         and not a.get("is_cushion")
     )
 
@@ -87,7 +88,8 @@ FIXED_CHARS = ('fixed', 'Фиксированный')
 
 async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
     """Robust daily rate and σ from last 30 days of variable everyday expenses.
-    Only expense_type='variable' + character!='Эпизодический' — excludes fixed subscriptions."""
+    §3.3: медиана + MAD-фильтр (отсев дней с отклонением >3·MAD от медианы).
+    Only expense_type='variable' + character!='Эпизодический'."""
     cutoff = today - timedelta(days=30)
     rows = await db.fetch("""
         SELECT t.date, SUM(t.amount) AS daily_total
@@ -100,6 +102,11 @@ async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
         GROUP BY t.date ORDER BY t.date
     """, user_id, cutoff, today)
     daily = [float(r["daily_total"]) for r in rows]
+    if len(daily) >= 4:
+        med = statistics.median(daily)
+        mad = statistics.median([abs(x - med) for x in daily])
+        threshold = 3 * mad
+        daily = [x for x in daily if abs(x - med) <= threshold] or daily
     return robust_rate(daily), robust_sigma(daily)
 
 
@@ -182,7 +189,13 @@ async def get_metrics(request: Request):
         or r.get("cat_character") in EPISODIC_CHARS
     )
     F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
-    R_topup = 0  # TODO: detect reserve accounts by name when _is_rsv accounts are in plan
+
+    # §4.1 R_topup: плановые пополнения резерва в оставшиеся дни месяца
+    reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
+    R_topup = sum(
+        float(r["amount"]) for r in plan_rows
+        if r.get("account_to") in reserve_names
+    )
 
     # ── §4.1 Safe to spend ────────────────────────────────────────────────────
     sts = B0 + I_remain - F_remain - V_remain - R_topup - C_cushion
@@ -197,10 +210,39 @@ async def get_metrics(request: Request):
     else:
         sts_status = "green"
 
-    # ── §4.3 Net capital ──────────────────────────────────────────────────────
-    # Only Актив accounts count as assets; virtual Поток accounts are excluded
+    # ── §4.3 Net capital + Δ% ────────────────────────────────────────────────
     total_assets = sum(float(a["balance"]) for a in accs.values() if a["account_type"] == "Актив")
     net_capital = total_assets - liabilities
+
+    # Δ% = (капитал_сегодня − капитал_месяц_назад) / |капитал_месяц_назад|
+    month_ago = today - timedelta(days=30)
+    assets_30d = await db.fetchval("""
+        SELECT COALESCE(SUM(
+            a.initial_balance
+            + COALESCE((SELECT SUM(t.amount) FROM transactions t
+               WHERE (t.account_to=a.name) AND t.user_id=$1 AND t.date <= $2), 0)
+            - COALESCE((SELECT SUM(t.amount) FROM transactions t
+               WHERE (t.account_from=a.name) AND t.user_id=$1 AND t.date <= $2), 0)
+        ), 0)
+        FROM accounts a
+        WHERE a.user_id=$1 AND a.is_active=true AND a.account_type='Актив'
+    """, user_id, month_ago)
+    liabilities_30d = await db.fetchval("""
+        SELECT COALESCE(SUM(ABS(
+            a.initial_balance
+            + COALESCE((SELECT SUM(t.amount) FROM transactions t
+               WHERE (t.account_to=a.name) AND t.user_id=$1 AND t.date <= $2), 0)
+            - COALESCE((SELECT SUM(t.amount) FROM transactions t
+               WHERE (t.account_from=a.name) AND t.user_id=$1 AND t.date <= $2), 0)
+        )), 0)
+        FROM accounts a
+        WHERE a.user_id=$1 AND a.is_active=true AND a.account_type='Пассив'
+    """, user_id, month_ago)
+    net_capital_30d = float(assets_30d) - float(liabilities_30d)
+    if net_capital_30d != 0:
+        net_capital_delta_pct = round((net_capital - net_capital_30d) / abs(net_capital_30d) * 100, 1)
+    else:
+        net_capital_delta_pct = None
 
     # ── §4.4 DSR ──────────────────────────────────────────────────────────────
     monthly_payments = float(await db.fetchval("""
@@ -225,7 +267,7 @@ async def get_metrics(request: Request):
     else:
         dsr_status = "red"
 
-    # ── §4.7 Runway ───────────────────────────────────────────────────────────
+    # ── §4.7 Runway (behavioral + planned) ───────────────────────────────────
     liquid = B0 + reserve_balance
 
     behavioral_exps = []
@@ -235,8 +277,33 @@ async def get_metrics(request: Request):
             m += 12; y -= 1
         behavioral_exps.append(await monthly_expense_sum(db, user_id, y, m))
     avg_exp = statistics.mean(behavioral_exps) if behavioral_exps else 1
-    behavioral_runway = liquid / avg_exp if avg_exp > 0 else 99.0
-    behavioral_runway = max(behavioral_runway, 0.0)  # guard against negative
+    behavioral_runway = max(liquid / avg_exp if avg_exp > 0 else 99.0, 0.0)
+
+    # Плановый runway: liquid / (F_remain_month_full + V_plan_month)
+    # F_remain_month_full = все плановые обязательные за месяц (не только остаток)
+    plan_month_all = await db.fetch("""
+        SELECT p.account_to, c.expense_type AS cat_expense_type, c.character AS cat_character,
+               SUM(p.amount) AS total
+        FROM plan p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1
+          AND EXTRACT(YEAR FROM p.date)=$2 AND EXTRACT(MONTH FROM p.date)=$3
+        GROUP BY p.account_to, c.expense_type, c.character
+    """, user_id, year, month)
+    plan_fixed_month = sum(
+        float(r["total"]) for r in plan_month_all
+        if r["account_to"] == "Обязательства"
+        or r["cat_expense_type"] == "fixed"
+        or r["cat_character"] == "Эпизодический"
+    )
+    plan_variable_month = sum(
+        float(r["total"]) for r in plan_month_all
+        if r["account_to"] == "Расход"
+        and r["cat_expense_type"] == "variable"
+        and r["cat_character"] != "Эпизодический"
+    )
+    e_plan = plan_fixed_month + plan_variable_month
+    planned_runway = max(liquid / e_plan if e_plan > 0 else 99.0, 0.0)
 
     if behavioral_runway >= 6:
         runway_status = "green"
@@ -372,8 +439,14 @@ async def get_metrics(request: Request):
             },
         },
         "net_capital": {
-            "value":  round(net_capital),
-            "status": "green" if net_capital >= 0 else "red",
+            "value":     round(net_capital),
+            "delta_pct": net_capital_delta_pct,
+            "status":    "green" if net_capital >= 0 else "red",
+            "delta_status": (
+                "green" if net_capital_delta_pct is not None and net_capital_delta_pct >= 0
+                else "red" if net_capital_delta_pct is not None
+                else None
+            ),
         },
         "dsr": {
             "value":            round(dsr * 100, 1),
@@ -382,6 +455,7 @@ async def get_metrics(request: Request):
         },
         "runway": {
             "behavioral_months": round(behavioral_runway, 1),
+            "planned_months":    round(planned_runway, 1),
             "status":            runway_status,
         },
         "resilience": {
