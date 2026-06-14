@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date
+from calendar import monthrange
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
+
+# category_ids для плановых записей кредита
+CAT_PRINCIPAL = 179  # Кредиты - тело  (→ Обязательства)
+CAT_INTEREST  = 144  # Кредиты - процент (→ Расход)
 
 class LoanCreate(BaseModel):
     name: str
@@ -99,3 +104,129 @@ async def update_schedule_row(loan_id: int, month_num: int, request: Request):
         loan_id, month_num, *updates.values()
     )
     return {"ok": True}
+
+
+@router.post("/generate-plan")
+async def generate_plan_from_loans(
+    request: Request,
+    year:  int = Query(...),
+    month: int = Query(...),
+):
+    """Генерирует записи в plan из loan_schedule для заданного месяца.
+    Тело → Обязательства, процент → Расход. Upsert по (user_id, date, account_from, account_to, category_id).
+    Вызывается вручную или кроном в начале месяца."""
+    user_id = request.state.user_id
+    db = request.state.db
+
+    rows = await db.fetch("""
+        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.name
+        FROM loan_schedule ls
+        JOIN loans l ON ls.loan_id = l.id
+        WHERE l.user_id = $1
+          AND EXTRACT(YEAR  FROM ls.date) = $2
+          AND EXTRACT(MONTH FROM ls.date) = $3
+          AND ls.is_paid = false
+          AND l.is_active = true
+          AND ls.principal IS NOT NULL
+    """, user_id, year, month)
+
+    async with db.transaction():
+        # Удаляем старые авто-записи за этот месяц перед повторной генерацией
+        await db.execute("""
+            DELETE FROM plan
+            WHERE user_id=$1 AND source='loan_schedule'
+              AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+        """, user_id, year, month)
+
+        created = 0
+        for r in rows:
+            pay_date = r["date"]
+            if r["principal"] and float(r["principal"]) > 0:
+                await db.execute("""
+                    INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
+                    VALUES ($1,$2,$3,'Карта Тбанк','Обязательства',$4,'loan_schedule')
+                """, user_id, pay_date, float(r["principal"]), CAT_PRINCIPAL)
+                created += 1
+            if r["interest"] and float(r["interest"]) > 0:
+                await db.execute("""
+                    INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
+                    VALUES ($1,$2,$3,'Карта Тбанк','Расход',$4,'loan_schedule')
+                """, user_id, pay_date, float(r["interest"]), CAT_INTEREST)
+                created += 1
+
+    return {"ok": True, "created": created, "year": year, "month": month}
+
+
+@router.post("/{loan_id}/recalculate")
+async def recalculate_loan(
+    loan_id: int,
+    request: Request,
+    from_month: int = Query(..., description="month_num начиная с которого пересчитать"),
+):
+    """Пересчитывает оставшийся график аннуитета после досрочного платежа.
+    Берёт баланс из loan_schedule[from_month-1].balance и пересчитывает вперёд."""
+    user_id = request.state.user_id
+    db = request.state.db
+
+    loan = await db.fetchrow(
+        "SELECT * FROM loans WHERE id=$1 AND user_id=$2", loan_id, user_id
+    )
+    if not loan:
+        raise HTTPException(404)
+
+    # Баланс после предыдущего платежа
+    prev = await db.fetchrow(
+        "SELECT balance FROM loan_schedule WHERE loan_id=$1 AND month_num=$2",
+        loan_id, from_month - 1
+    )
+    if not prev:
+        raise HTTPException(400, f"month_num {from_month-1} not found")
+
+    balance = float(prev["balance"])
+    monthly_rate = float(loan["rate"]) / 12
+    payment = float(loan["monthly_payment"])
+
+    # Все будущие строки начиная с from_month
+    future = await db.fetch("""
+        SELECT month_num, date, extra_payment
+        FROM loan_schedule
+        WHERE loan_id=$1 AND month_num >= $2
+        ORDER BY month_num
+    """, loan_id, from_month)
+
+    updated = 0
+    async with db.transaction():
+        for row in future:
+            if balance <= 0:
+                # Кредит погашен досрочно — обнуляем остаток строк
+                await db.execute("""
+                    UPDATE loan_schedule
+                    SET principal=0, interest=0, payment=0, balance=0
+                    WHERE loan_id=$1 AND month_num=$2
+                """, loan_id, row["month_num"])
+                updated += 1
+                continue
+
+            extra = float(row["extra_payment"] or 0)
+            interest   = round(balance * monthly_rate, 2)
+            principal  = round(min(payment - interest + extra, balance), 2)
+            new_balance = round(balance - principal, 2)
+            total_pay  = round(interest + principal, 2)
+
+            await db.execute("""
+                UPDATE loan_schedule
+                SET interest=$3, principal=$4, payment=$5, balance=$6
+                WHERE loan_id=$1 AND month_num=$2
+            """, loan_id, row["month_num"],
+                interest, principal, total_pay, max(new_balance, 0))
+
+            balance = max(new_balance, 0)
+            updated += 1
+
+        # Обновляем current_balance в loans
+        await db.execute(
+            "UPDATE loans SET current_balance=$2, updated_at=now() WHERE id=$1",
+            loan_id, balance
+        )
+
+    return {"ok": True, "updated": updated, "final_balance": balance}

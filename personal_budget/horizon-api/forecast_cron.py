@@ -107,6 +107,39 @@ async def run():
         # ── actual_b0: в последний день месяца B0 и есть финальный баланс ──
         actual_b0 = b0 if today == month_end else None
 
+        # ── Генерация плана из loan_schedule в первый день месяца ──
+        if today.day == 1:
+            loan_rows = await conn.fetch("""
+                SELECT ls.loan_id, ls.date, ls.principal, ls.interest
+                FROM loan_schedule ls
+                JOIN loans l ON ls.loan_id = l.id
+                WHERE l.user_id = $1
+                  AND EXTRACT(YEAR  FROM ls.date) = $2
+                  AND EXTRACT(MONTH FROM ls.date) = $3
+                  AND ls.is_paid = false
+                  AND l.is_active = true
+                  AND ls.principal IS NOT NULL
+            """, OWNER_ID, year, month)
+
+            if loan_rows:
+                await conn.execute("""
+                    DELETE FROM plan
+                    WHERE user_id=$1 AND source='loan_schedule'
+                      AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+                """, OWNER_ID, year, month)
+                for lr in loan_rows:
+                    if lr["principal"] and float(lr["principal"]) > 0:
+                        await conn.execute("""
+                            INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
+                            VALUES ($1,$2,$3,'Карта Тбанк','Обязательства',179,'loan_schedule')
+                        """, OWNER_ID, lr["date"], float(lr["principal"]))
+                    if lr["interest"] and float(lr["interest"]) > 0:
+                        await conn.execute("""
+                            INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
+                            VALUES ($1,$2,$3,'Карта Тбанк','Расход',144,'loan_schedule')
+                        """, OWNER_ID, lr["date"], float(lr["interest"]))
+                print(f"[{today}] loan plan generated: {len(loan_rows)} schedule rows → plan")
+
         # ── Upsert снапшота ──
         await conn.execute("""
             INSERT INTO forecast_snapshots
