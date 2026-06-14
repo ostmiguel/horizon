@@ -1334,7 +1334,7 @@ function loadPage(page) {
     if (icon)  icon.classList.toggle('act',  p === page);
     if (label) label.classList.toggle('act', p === page);
   });
-  if (page === 'dashboard')     loadDashboard();
+  if (page === 'dashboard')     (window.NEW_ARCH ? loadDashboardNew() : loadDashboard());
   else if (page === 'transactions') loadTransactions(false);
   else if (page === 'plan')         loadTransactions(true);
   else if (page === 'references')   loadReferences();
@@ -5754,6 +5754,193 @@ async function loadGoals() {
         ? '<div class="card" style="padding:40px;text-align:center"><div style="font-size:14px;color:var(--text3);margin-bottom:16px">Пока нет целей. Создай первую — например «Новый ноутбук» или «Отпуск».</div><button class="btn-primary" onclick="openAddGoal()" style="display:inline-block;width:auto;padding:10px 20px">Создать цель</button></div>'
         : '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">' + cards + '</div>'
       );
+  } catch(e) {
+    main.innerHTML = '<div class="error-box">Ошибка: ' + e.message + '</div>';
+  }
+}
+
+// ── NEW ARCH DASHBOARD ───────────────────────────────────────────────────────
+async function loadDashboardNew() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="loading"><div class="spinner"></div> Загружаю данные...</div>';
+  destroyCharts();
+
+  try {
+    const [mRes, fRes, aRes] = await Promise.all([
+      fetch('/api/metrics',             { credentials: 'include' }),
+      fetch('/api/metrics/forecast',    { credentials: 'include' }),
+      fetch('/api/metrics/affordability', { credentials: 'include' }),
+    ]);
+    const m  = await mRes.json();
+    const fc = await fRes.json();
+    const af = await aRes.json();
+
+    const f  = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(n)));
+    const C = { green: '#059669', yellow: '#F59E0B', red: '#DC2626' };
+
+    // ── Safe to spend ────────────────────────────────────────────────────────
+    const sts      = m.safe_to_spend;
+    const stsColor = C[sts.status];
+    const stsLabel = { green: 'В графике', yellow: 'На грани', red: 'Перерасход' }[sts.status];
+    const wf       = sts.waterfall;
+
+    const wfRows = [
+      ['Баланс сейчас',       wf.b0,        '+'],
+      ['Ожидаемые доходы',    wf.i_remain,  '+'],
+      ['Обязательные расходы',wf.f_remain,  '−'],
+      ['Прогноз потока',      wf.v_remain,  '−'],
+      ['Взносы в резервы',    wf.r_topup,   '−'],
+      ['Подушка',             wf.c_cushion, '−'],
+    ].map(([lbl, val, sign]) => {
+      const col = sign === '+' ? '#059669' : '#DC2626';
+      return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:.5px solid var(--border)">
+        <span style="font-size:12px;color:var(--text2)">${lbl}</span>
+        <span style="font-size:12px;font-weight:500;color:${val > 0 ? col : 'var(--text3)'}">
+          ${val > 0 ? sign + ' ' : ''}${f(val)} ₽
+        </span></div>`;
+    }).join('');
+
+    // ── Health KPIs ──────────────────────────────────────────────────────────
+    const kpis = [
+      { label: 'Чистый капитал',    val: f(Math.abs(m.net_capital.value)) + ' ₽', color: C[m.net_capital.status],
+        sub: m.net_capital.value >= 0 ? 'активы > обязательства' : 'обязательства > активы' },
+      { label: 'Долговая нагрузка', val: m.dsr.value + '%',                        color: C[m.dsr.status],
+        sub: f(m.dsr.monthly_payments) + ' ₽/мес на долги' },
+      { label: 'Runway',            val: m.runway.behavioral_months + ' мес',      color: C[m.runway.status],
+        sub: 'без дохода на ликвидных' },
+      { label: 'Устойчивость',      val: m.resilience.value + ' / 10',             color: C[m.resilience.status],
+        sub: { green: 'высокая', yellow: 'средняя', red: 'низкая' }[m.resilience.status] },
+    ];
+    const kpiHtml = kpis.map(k => `
+      <div class="card" style="padding:14px 16px">
+        <div class="kpi-label">${k.label}</div>
+        <div style="font-size:22px;font-weight:700;color:${k.color};font-family:'Space Grotesk',sans-serif;line-height:1.15">${k.val}</div>
+        <div class="kpi-sub">${k.sub}</div>
+      </div>`).join('');
+
+    // ── Categories ───────────────────────────────────────────────────────────
+    const cats    = (m.categories || []).slice(0, 7);
+    const maxCat  = cats[0]?.amount_forecast || 1;
+    const catColors = { fixed: '#2563EB', episodic: '#8B5CF6', flow: '#DC2626' };
+    const catHtml = cats.map(c => {
+      const w = Math.round(c.amount_forecast / maxCat * 100);
+      return `<div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+          <span style="color:var(--text)">${c.category}</span>
+          <span style="color:var(--text2)">${f(c.amount_fact)} <span style="color:var(--text3);font-size:11px">→ ${f(c.amount_forecast)} ₽</span></span>
+        </div>
+        <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${w}%;background:${catColors[c.character] || '#6B7280'};border-radius:2px"></div>
+        </div></div>`;
+    }).join('');
+
+    // ── Next step (цель) ─────────────────────────────────────────────────────
+    const goal = (af.goals || []).filter(g => !g.done).sort((a,b) => (a.eta_months||999) - (b.eta_months||999))[0];
+    const goalHtml = goal ? `
+      <div class="card" style="padding:14px 16px;border-left:3px solid #2563EB">
+        <div class="kpi-label">Следующий шаг</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin:4px 0">${goal.name}</div>
+        <div style="font-size:12px;color:var(--text2)">
+          По силам к <b>${goal.eta_label || '—'}</b>
+          ${goal.confidence ? `<span style="color:var(--text3)"> · ${goal.confidence}% уверенность</span>` : ''}
+        </div>
+        <div style="height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden">
+          <div style="height:100%;width:${goal.pct}%;background:#2563EB;border-radius:2px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:3px">
+          <span>${f(goal.current)} ₽</span><span>${goal.pct}% из ${f(goal.target)} ₽</span>
+        </div>
+      </div>` : '';
+
+    // ── Render ───────────────────────────────────────────────────────────────
+    main.innerHTML = `
+      <div class="topbar">
+        <div>
+          <div class="page-title">Обзор</div>
+          <div class="page-sub">${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})}</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:18px;border-left:4px solid ${stsColor};margin-bottom:4px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div class="kpi-label">Свободно до конца месяца</div>
+            <div style="font-size:38px;font-weight:700;color:${stsColor};font-family:'Space Grotesk',sans-serif;line-height:1.1">${f(sts.value)} ₽</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px">коридор ${f(sts.low)} — ${f(sts.high)} ₽</div>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:${stsColor};background:${stsColor}1a;padding:3px 10px;border-radius:12px;white-space:nowrap">${stsLabel}</span>
+        </div>
+        <details style="margin-top:12px">
+          <summary style="font-size:11px;color:var(--text3);cursor:pointer;list-style:none;user-select:none">▸ Как считается</summary>
+          <div style="margin-top:8px">${wfRows}</div>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Прогноз баланса</span>
+          <span class="card-hint">
+            <span style="color:#059669">━</span> факт &nbsp;
+            <span style="color:#2563EB">╌</span> прогноз &nbsp;
+            <span style="color:#9CA3AF">╌</span> план
+          </span>
+        </div>
+        <div class="card-body"><canvas id="chartFcNew" height="110"></canvas></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:4px">${kpiHtml}</div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Расходы по категориям</span>
+          <span class="card-hint">факт → прогноз месяца</span>
+        </div>
+        <div class="card-body">${catHtml || '<span style="font-size:12px;color:var(--text3)">Нет данных</span>'}</div>
+      </div>
+
+      ${goalHtml}
+    `;
+
+    // ── Forecast chart ───────────────────────────────────────────────────────
+    const ctx = document.getElementById('chartFcNew')?.getContext('2d');
+    if (ctx && fc.points?.length) {
+      const pts  = fc.points;
+      const lbl  = pts.map(p => p.day);
+      chartLine  = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: lbl,
+          datasets: [
+            { label:'Коридор верх', data: pts.map(p => p.high ?? null),
+              borderColor:'transparent', backgroundColor:'rgba(37,99,235,0.07)',
+              fill:'+1', pointRadius:0, tension:0.3, spanGaps:false },
+            { label:'Коридор низ',  data: pts.map(p => p.low  ?? null),
+              borderColor:'transparent', fill:false,
+              pointRadius:0, tension:0.3, spanGaps:false },
+            { label:'Факт',     data: pts.map(p => p.fact     ?? null),
+              borderColor:'#059669', borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false, fill:false },
+            { label:'Прогноз',  data: pts.map(p => p.forecast ?? null),
+              borderColor:'#2563EB', borderWidth:2, borderDash:[5,3],
+              pointRadius:0, tension:0.3, spanGaps:false, fill:false },
+            { label:'План',     data: pts.map(p => p.plan     ?? null),
+              borderColor:'#9CA3AF', borderWidth:1.5, borderDash:[2,4],
+              pointRadius:0, tension:0.3, spanGaps:false, fill:false },
+          ],
+        },
+        options: {
+          responsive:true,
+          interaction:{ mode:'index', intersect:false },
+          plugins:{ legend:{ display:false },
+            tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + f(ctx.parsed.y) + ' ₽' } } },
+          scales:{
+            x:{ grid:{ color:'rgba(0,0,0,0.04)' }, ticks:{ color:'#9CA3AF', font:{ size:10 } } },
+            y:{ grid:{ color:'rgba(0,0,0,0.04)' }, ticks:{ color:'#9CA3AF', font:{ size:10 },
+              callback: v => f(v) + ' ₽' } },
+          },
+        },
+      });
+    }
+
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + e.message + '</div>';
   }
