@@ -805,7 +805,17 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .hero-right { display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .pill { display:inline-flex; align-items:center; padding:3px 12px; border-radius:20px; font-size:11px; font-weight:600; margin:8px 0 4px; width:fit-content; }
 .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
-.chip { font-size:11px; font-weight:500; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+.chip { font-size:11px; color:var(--text2); padding:4px 10px; border-radius:8px; background:var(--bg3); border:1px solid var(--border); white-space:nowrap; }
+.chip b { color:var(--text); font-weight:600; }
+.levers { counter-reset:l; }
+.lever { display:flex; gap:12px; padding:12px 0; border-top:1px solid var(--border); }
+.lever:first-child { border-top:0; padding-top:2px; }
+.lnum { flex:none; width:26px; height:26px; border-radius:8px; display:grid; place-items:center; font-family:Sora,sans-serif; font-weight:600; font-size:13px; color:#06202b; background:linear-gradient(135deg,var(--accent),var(--lm)); }
+.ltxt { font-size:13px; line-height:1.5; }
+.ltag { font-size:11px; font-weight:600; color:var(--accent2); background:rgba(31,164,151,.12); padding:2px 7px; border-radius:5px; margin-left:6px; display:inline-block; }
+.muted { font-size:12px; color:var(--text3); line-height:1.5; margin-top:4px; display:block; }
+.warnote { font-size:13px; color:var(--text); margin-top:10px; line-height:1.55; }
+.warnote b { font-weight:600; }
 .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px; }
 .stats .card { padding:16px; }
 .lower { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
@@ -1007,12 +1017,13 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <img src="/horizon-lockup-horizontal-light.svg" alt="Horizon" style="height:28px;width:122px;display:block">
   </div>
   <div class="nav">
-    <div class="nav-section">Обзор</div>
-    <div class="nav-item active" data-page="dashboard"><span class="nav-icon">◈</span>Дашборд</div>
-    <div class="nav-item" data-page="summary"><span class="nav-icon">◑</span>Сводка</div>
-    <div class="nav-section">Операции</div>
-    <div class="nav-item" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
-    <div class="nav-item" data-page="plan"><span class="nav-icon">◷</span>План</div>
+    <div class="nav-section" id="navSectionOld">Обзор</div>
+    <div class="nav-item active" id="navDashboard" data-page="dashboard"><span class="nav-icon">◈</span><span id="navDashboardLabel">Дашборд</span></div>
+    <div class="nav-item" id="navForecast" data-page="forecast" style="display:none"><span class="nav-icon">◌</span>Прогноз</div>
+    <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-icon">◑</span>Сводка</div>
+    <div class="nav-section" id="navSectionOps">Операции</div>
+    <div class="nav-item" id="navTx" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
+    <div class="nav-item" id="navPlan" data-page="plan"><span class="nav-icon">◷</span>План</div>
     <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Кредиты</div>
     <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-icon">◆</span>Цели</div>
     <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-icon">▤</span>Операции</div>
@@ -1386,6 +1397,7 @@ function loadPage(page) {
     if (label) label.classList.toggle('act', p === page);
   });
   if (page === 'dashboard')     (window.NEW_ARCH ? loadDashboardNew() : loadDashboard());
+  else if (page === 'forecast')     loadForecastStub();
   else if (page === 'transactions') loadTransactions(false);
   else if (page === 'plan')         loadTransactions(true);
   else if (page === 'references')   loadReferences();
@@ -1397,6 +1409,16 @@ function loadPage(page) {
   else if (page === 'goals')         loadGoals();
   else if (page === 'operations')    loadOperations();
   else if (page === 'budget')        loadBudget();
+}
+
+function loadForecastStub() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = `<div class="topbar"><div><div class="page-title">Прогноз</div><div class="page-sub">Скоро</div></div></div>
+    <div class="card" style="padding:32px;text-align:center;color:var(--text3)">
+      <div style="font-size:32px;margin-bottom:12px">◌</div>
+      <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:6px">Страница в разработке</div>
+      <div style="font-size:12px">Здесь будет детальный прогноз баланса, доходов и расходов</div>
+    </div>`;
 }
 
 // ── HELPERS ──
@@ -6179,6 +6201,37 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
   const today = `<line x1="${todX}" y1="${y1}" x2="${todX}" y2="${y2}" stroke="#B9C6D6" stroke-dasharray="3 3"/>
     <text x="${todX}" y="${y1 - 8}" fill="#5A6B82" font-size="11" text-anchor="middle">сегодня</text>`;
 
+  // Zero line + deficit zone (only when zero is in visible range)
+  let zeroLine = '', deficitZone = '', zeroCrossMarker = '';
+  if (minP < 0 && maxP > 0) {
+    const zy = +vY(0);
+    deficitZone = `<rect x="${x1}" y="${zy}" width="${plotW}" height="${(y2 - zy).toFixed(1)}" fill="#D6785A" fill-opacity="0.08"/>`;
+    zeroLine = `<line x1="${x1}" y1="${zy}" x2="${x2}" y2="${zy}" stroke="#C28A3A" stroke-width="1.5" stroke-dasharray="5 4"/>
+      <text x="${x1 + 4}" y="${(zy - 4).toFixed(0)}" fill="#B07A1E" font-size="11" font-weight="600">0 ₽</text>`;
+    // Find zero-crossing day (fact→forecast transition or within forecast)
+    let crossDay = null;
+    const allSeq = [...factPts.map(p => ({d: p.day, v: p.fact})), ...fcstPts.map(p => ({d: p.day, v: p.forecast}))];
+    for (let i = 1; i < allSeq.length; i++) {
+      const prev = allSeq[i - 1], curr = allSeq[i];
+      if (prev.v >= 0 && curr.v < 0) {
+        const t = prev.v / (prev.v - curr.v);
+        crossDay = prev.d + t * (curr.d - prev.d);
+        break;
+      }
+    }
+    if (crossDay) {
+      const cx = (x1 + (crossDay - 1) / N * plotW).toFixed(1);
+      const mons = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+      const mName = mons[new Date().getMonth()];
+      const labelDay = Math.round(crossDay);
+      const labelX = +cx + 6 > x2 - 140 ? +cx - 6 : +cx + 6;
+      const labelAnchor = +cx + 6 > x2 - 140 ? 'end' : 'start';
+      zeroCrossMarker = `<line x1="${cx}" y1="${(zy + 2).toFixed(0)}" x2="${cx}" y2="${y2}" stroke="#C0561A" stroke-dasharray="3 3" opacity="0.7"/>
+        <circle cx="${cx}" cy="${zy}" r="4.5" fill="#C0561A"/>
+        <text x="${labelX}" y="${(zy - 7).toFixed(0)}" fill="#C0561A" font-size="11" font-weight="600" text-anchor="${labelAnchor}">деньги заканчиваются ≈${labelDay} ${mName}</text>`;
+    }
+  }
+
   // Gradient fill for fact area
   const gId = 'fg' + Math.random().toString(36).slice(2, 7);
   const grad = `<defs><linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
@@ -6228,7 +6281,7 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
 
   return `<svg viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="${ariaLabel || 'График прогноза баланса'}">
   <title>Прогноз баланса</title><desc>Синий — факт, бирюзовый — прогноз, зелёный пунктир — план</desc>
-  ${grad}${grid}${yLbl}${xLbl}${today}${band}${factArea}${factLine}${planLine}${fcstLine}${dots}
+  ${grad}${grid}${deficitZone}${yLbl}${xLbl}${today}${zeroLine}${band}${factArea}${factLine}${planLine}${fcstLine}${zeroCrossMarker}${dots}
 </svg>`;
 }
 
@@ -6328,7 +6381,7 @@ async function loadDashboardNew() {
     const PILL = {
       green:  { bg: 'linear-gradient(90deg,rgba(94,155,30,.18),rgba(180,222,60,.18))', color: '#5E9B1E', label: 'В графике'  },
       yellow: { bg: 'rgba(217,119,6,.14)',  color: '#D97706', label: 'На грани'   },
-      red:    { bg: 'rgba(220,38,38,.14)',  color: '#DC2626', label: 'Перерасход' },
+      red:    { bg: 'rgba(176,73,42,.14)',  color: '#B0492A', label: 'Не хватает' },
     };
 
     // ── Safe to spend ────────────────────────────────────────────────────────
@@ -6338,18 +6391,62 @@ async function loadDashboardNew() {
 
     const todayDay    = new Date().getDate();
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const monthNamesShort = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+    const mShort = monthNamesShort[new Date().getMonth()];
 
+    // Zero-crossing day (from forecast points)
+    const zeroCrossDay = (() => {
+      const allSeq = [
+        ...(fc.points || []).filter(p => p.fact != null).map(p => ({ d: p.day, v: p.fact })),
+        ...(fc.points || []).filter(p => p.forecast != null).map(p => ({ d: p.day, v: p.forecast })),
+      ];
+      for (let i = 1; i < allSeq.length; i++) {
+        const prev = allSeq[i - 1], curr = allSeq[i];
+        if (prev.v >= 0 && curr.v < 0) {
+          const t = prev.v / (prev.v - curr.v);
+          return Math.round(prev.d + t * (curr.d - prev.d));
+        }
+      }
+      return null;
+    })();
+
+    // Structural deficit: projected expenses > projected income
+    const totalOutflows    = wf.f_remain + wf.v_remain;
+    const structuralDeficit = wf.i_remain > 0 && totalOutflows > wf.i_remain;
+    const deficitGap        = totalOutflows - wf.i_remain;
+
+    // Chips: neutral style, hide near-zero values, remove C_cushion / v_remain "Сверхплан"
     const chips = [
-      { label: 'Баланс',    value: wf.b0,        sign: '+' },
-      { label: 'Доходы',    value: wf.i_remain,  sign: '+' },
-      { label: 'Расходы',   value: wf.f_remain,  sign: '−' },
-      { label: 'Сверхплан', value: wf.v_remain,  sign: '−' },
-      { label: 'Резервы',   value: wf.r_topup,   sign: '−' },
-      { label: 'Подушка',   value: wf.c_cushion, sign: '−' },
-    ].map(ch => {
-      const pos = ch.sign === '+';
-      return `<span class="chip" style="background:${pos ? 'rgba(94,155,30,.10)' : 'rgba(220,38,38,.08)'};color:${pos ? '#5E9B1E' : '#DC2626'}">${ch.label} ${pos ? '+' : '−'}${f(ch.value)} ₽</span>`;
+      { label: 'Баланс',  value: wf.b0,        sign: '+' },
+      { label: 'Доходы',  value: wf.i_remain,  sign: '+' },
+      { label: 'Расходы', value: wf.f_remain,  sign: '−' },
+      { label: 'Поток',   value: wf.v_remain,  sign: '−' },
+      { label: 'Резерв',  value: wf.r_topup,   sign: '−' },
+    ].filter(ch => Math.abs(ch.value) >= 1).map(ch => {
+      return `<span class="chip">${ch.label} <b>${ch.sign}${f(ch.value)} ₽</b></span>`;
     }).join('');
+
+    // Early warning lines (when STS < 0)
+    const warningHtml = sts.value < 0 ? `
+      ${zeroCrossDay ? `<div class="warnote"><b>Деньги заканчиваются около ${zeroCrossDay} ${mShort}</b> — платежи приходят раньше поступления дохода.</div>` : ''}
+      ${structuralDeficit ? `<div class="muted">Расходы (~${f(totalOutflows)} ₽) больше дохода (~${f(wf.i_remain)} ₽) примерно на <b style="color:var(--text)">${f(deficitGap)} ₽</b>.</div>` : ''}
+    ` : '';
+
+    // Levers block (when STS < 0)
+    let leversHtml = '';
+    if (sts.value < 0) {
+      const levers = [];
+      if (zeroCrossDay) {
+        levers.push({ title: 'Сдвинуть крупный платёж ближе к поступлению дохода.', tag: 'убирает ранний разрыв', note: `Снимет кассовый разрыв до ${zeroCrossDay} ${mShort} — быстрый и безболезненный шаг.` });
+      }
+      if (dsr.value >= 30) {
+        levers.push({ title: 'Долговая нагрузка — главный рычаг.', tag: `${f(dsr.monthly_payments)} ₽/мес обслуживание`, note: `На выплаты уходит ${dsr.value}% дохода. Рефинансирование или консолидация освободят поток.` });
+      }
+      levers.push({ title: 'Резервы или брокерский — подстраховка на крайний случай.', tag: 'крайняя мера', note: 'Могут перекрыть текущий месяц, но ломают долгосрочные цели — только в последнюю очередь.' });
+      const items = levers.slice(0, 3).map((l, i) => `
+        <div class="lever"><div class="lnum">${i + 1}</div><div class="ltxt"><b>${l.title}</b><span class="ltag">${l.tag}</span><span class="muted">${l.note}</span></div></div>`).join('');
+      leversHtml = `<div class="card" style="margin-bottom:12px"><div class="card-header"><span class="card-title">Что поможет закрыть минус</span></div><div class="card-body" style="padding-top:8px"><div class="levers">${items}</div></div></div>`;
+    }
 
     // ── KPI helpers ──────────────────────────────────────────────────────────
     const nc  = m.net_capital;
@@ -6361,6 +6458,10 @@ async function loadDashboardNew() {
     const ncDelta = nc.delta_pct != null
       ? `<span style="color:${nc.delta_pct >= 0 ? '#5E9B1E' : '#DC2626'}">${nc.delta_pct >= 0 ? '▲' : '▼'} ${Math.abs(nc.delta_pct)}%</span> за 30 дней`
       : (nc.value >= 0 ? 'активы > обязательства' : 'обязательства > активы');
+    // For negative capital: show deleveraging note instead of meaningless bar
+    const ncBarOrNote = nc.value >= 0
+      ? `<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:100%;background:${C[nc.status]};border-radius:2px"></div></div>`
+      : `<div style="font-size:11px;color:#5E9B1E;margin-top:6px">▲ гасишь тело ~${f(dsr.monthly_payments)}/мес → растёт</div>`;
 
     const dsrW     = Math.min(Math.round(dsr.value / 50 * 100), 100);
     const dsrColor = C[dsr.status];
@@ -6368,10 +6469,26 @@ async function loadDashboardNew() {
     const runPlan  = Math.min(Math.round(run.planned_months   / 12 * 100), 100);
     const runBeh   = Math.min(Math.round(run.behavioral_months / 12 * 100), 100);
 
-    // ── Categories ───────────────────────────────────────────────────────────
-    const cats       = (m.categories || []).slice(0, 8);
+    // Resilience: worst-subscore hint when low
+    const SUBSCORES = { s_runway:'увеличить запас прочности', s_reserve:'накопить резервный фонд', s_debt:'снизить долговую нагрузку', s_savings:'повысить норму сбережений', s_income:'стабилизировать доход' };
+    const resLeverHtml = (res.value < 4 && res.components) ? (() => {
+      const worst = Object.entries(res.components).sort(([,a],[,b]) => a - b)[0];
+      return worst ? `<div style="font-size:11px;color:var(--text2);margin-top:8px">быстрее всего поднимет: <b>${SUBSCORES[worst[0]] || worst[0]}</b></div>` : '';
+    })() : '';
+
+    // ── Categories (deduplicated by name) ────────────────────────────────────
+    const catMap = {};
+    for (const c of (m.categories || [])) {
+      if (catMap[c.category]) {
+        catMap[c.category].amount_fact     += c.amount_fact;
+        catMap[c.category].amount_forecast += c.amount_forecast;
+      } else {
+        catMap[c.category] = { ...c };
+      }
+    }
+    const cats       = Object.values(catMap).sort((a, b) => b.amount_forecast - a.amount_forecast).slice(0, 8);
     const maxCat     = cats[0]?.amount_forecast || 1;
-    const catPalette = ['#2AA7CC','#1FA497','#B4DE3C','#5E9B1E','#7C6FF7','#E58C2A','#DC5B5B','#93A1B5'];
+    const catPalette = ['#2AA7CC','#1FA497','#3DB9A8','#5CC9B5','#B4DE3C','#8FBE1E','#6EA815','#A0C040'];
     const catHtml    = cats.map((c, i) => {
       const w   = Math.round(c.amount_forecast / maxCat * 100);
       const clr = catPalette[i % catPalette.length];
@@ -6386,20 +6503,33 @@ async function loadDashboardNew() {
       </div>`;
     }).join('');
 
-    // ── Next step (цель) ─────────────────────────────────────────────────────
-    const goal     = (af.goals || []).filter(g => !g.done).sort((a,b) => (a.eta_months||999) - (b.eta_months||999))[0];
-    const stepHtml = goal ? `
-      <div class="step">
+    // ── Next step — лесенка §4.8 ─────────────────────────────────────────────
+    let stepHtml = '';
+    if (sts.value < 0) {
+      stepHtml = `<div class="step">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Следующий шаг</div>
-        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${goal.name}</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">По силам к <b>${goal.eta_label || '—'}</b>${goal.confidence ? ` <span style="color:var(--text3)">· ${goal.confidence}% уверенность</span>` : ''}</div>
-        <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:4px">
-          <div style="height:100%;width:${goal.pct}%;background:linear-gradient(90deg,var(--accent),var(--lm));border-radius:4px"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)">
-          <span>${f(goal.current)} ₽</span><span>${goal.pct}% из ${f(goal.target)} ₽</span>
-        </div>
-      </div>` : '';
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Сначала — свести месяц в ноль</div>
+        <div style="font-size:12px;color:var(--text2)">Когда месяц перестанет уходить в минус, «Следующий шаг» подрастёт — до целей и накоплений.</div>
+      </div>`;
+    } else {
+      const goal = (af.goals || []).filter(g => !g.done).sort((a,b) => (a.eta_months||999) - (b.eta_months||999))[0];
+      if (goal) {
+        const etaText = goal.eta_label
+          ? `По силам к <b>${goal.eta_label}</b>${goal.confidence ? ` <span style="color:var(--text3)">· ${goal.confidence}% уверенность</span>` : ''}`
+          : `<span style="color:var(--text3)">Срок появится, когда месяц выйдет в плюс.</span>`;
+        stepHtml = `<div class="step">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Следующий шаг</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${goal.name}</div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${etaText}</div>
+          <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:4px">
+            <div style="height:100%;width:${goal.pct}%;background:linear-gradient(90deg,var(--accent),var(--lm));border-radius:4px"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)">
+            <span>${f(goal.current)} ₽</span><span>${goal.pct}% из ${f(goal.target)} ₽</span>
+          </div>
+        </div>`;
+      }
+    }
 
     // ── Render ───────────────────────────────────────────────────────────────
     main.innerHTML = `
@@ -6419,22 +6549,23 @@ async function loadDashboardNew() {
           <div class="kpi-label">Свободно до конца месяца</div>
           <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${pill.color}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:10px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽</div>
-          <div class="chips">${chips}</div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
+          ${warningHtml}
+          <div class="chips" style="margin-top:8px">${chips}</div>
         </div>
         <div class="hero-right">
           ${renderForecastChart(fc.points || [], todayDay, daysInMonth, 'Прогноз баланса')}
         </div>
       </div>
 
+      ${leversHtml}
+
       <div class="stats">
         <div class="card">
           <div class="kpi-label">Чистый капитал</div>
           <div class="kpi-val" style="font-size:22px;color:${C[nc.status]}">${ncSign}${f(nc.value)} ₽</div>
-          <div class="kpi-sub" style="margin-bottom:8px">${ncDelta}</div>
-          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-            <div style="height:100%;width:${nc.value >= 0 ? 100 : 0}%;background:${C[nc.status]};border-radius:2px"></div>
-          </div>
+          <div class="kpi-sub" style="margin-bottom:6px">${ncDelta}</div>
+          ${ncBarOrNote}
         </div>
         <div class="card">
           <div class="kpi-label">Кредитная нагрузка</div>
@@ -6449,6 +6580,7 @@ async function loadDashboardNew() {
             <div class="kpi-label">Устойчивость</div>
             <div class="kpi-val" style="font-size:22px;color:${C[res.status]}">${res.value} / 10</div>
             <div class="kpi-sub">${{ green:'высокая', yellow:'средняя', red:'низкая' }[res.status] || ''}</div>
+            ${resLeverHtml}
           </div>
           ${renderRing(res.value * 10, res.value + '/10')}
         </div>
@@ -6469,14 +6601,14 @@ async function loadDashboardNew() {
           </div>
           <div class="card-body">
             <div class="run">
-              <span class="run-label">По плану</span>
+              <span class="run-label">Плановый</span>
               <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
                 <div style="height:100%;width:${runPlan}%;background:var(--accent);border-radius:3px"></div>
               </div>
               <span class="run-val">${run.planned_months} мес</span>
             </div>
             <div class="run">
-              <span class="run-label">Реальный</span>
+              <span class="run-label">Поведенческий</span>
               <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
                 <div style="height:100%;width:${runBeh}%;background:${C[run.status]};border-radius:3px"></div>
               </div>
@@ -6869,6 +7001,18 @@ window.onload = async () => {
       const el = document.getElementById(id);
       if (el) el.style.display = '';
     });
+  }
+
+  // New-arch nav: hide old items, show Прогноз, rename Дашборд → Обзор
+  if (window.NEW_ARCH) {
+    ['navSummary', 'navTx', 'navPlan', 'navSectionOps', 'navSectionOld', 'navGoals'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    const fEl = document.getElementById('navForecast');
+    if (fEl) fEl.style.display = '';
+    const lbl = document.getElementById('navDashboardLabel');
+    if (lbl) lbl.textContent = 'Обзор';
   }
 
   await loadMeta();
