@@ -6115,6 +6115,181 @@ async function deleteRule(id) {
   loadBudget();
 }
 
+// ── PURE SVG CHART UTILITIES (no library) ────────────────────────────────────
+
+function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
+  if (!pts || pts.length < 2) return '';
+  const VW = 760, VH = 280;
+  const pL = 60, pR = 70, pT = 34, pB = 38;
+  const plotW = VW - pL - pR, plotH = VH - pT - pB;
+  const x1 = pL, x2 = VW - pR, y1 = pT, y2 = VH - pB;
+
+  const factPts = pts.filter(p => p.fact     != null);
+  const fcstPts = pts.filter(p => p.forecast != null);
+  const planPts = pts.filter(p => p.plan     != null);
+  const bandPts = pts.filter(p => p.high     != null && p.low != null);
+
+  const allVals = pts.flatMap(p => [p.fact, p.forecast, p.plan, p.high, p.low].filter(v => v != null));
+  if (!allVals.length) return '';
+  const minV = Math.min(...allVals);
+  const maxV = Math.max(...allVals);
+  const spanV = maxV - minV || 1;
+  const minP = minV - spanV * 0.05;
+  const maxP = maxV + spanV * 0.12;
+  const spanP = maxP - minP;
+
+  const N = Math.max(daysInMonth - 1, 1);
+  const dX = d => (x1 + (d - 1) / N * plotW).toFixed(1);
+  const vY = v => (y2 - (v - minP) / spanP * plotH).toFixed(1);
+  const fmt = v => Math.abs(v) >= 1000 ? (v / 1000).toFixed(0) + 'к' : Math.round(v).toString();
+
+  // Grid (3 horizontal lines)
+  const step = spanP / 4;
+  let grid = '', yLbl = '';
+  for (let i = 1; i <= 3; i++) {
+    const v = minP + step * i, gy = vY(v);
+    grid += `<line x1="${x1}" y1="${gy}" x2="${x2}" y2="${gy}" stroke="#E4EAF1"/>`;
+    yLbl += `<text x="${x1 - 6}" y="${(+gy + 4).toFixed(0)}" fill="#93A1B5" font-size="11" text-anchor="end">${fmt(v)}</text>`;
+  }
+
+  // X-axis tick days
+  const tDays = [1, Math.round(daysInMonth * 0.25), Math.round(daysInMonth * 0.5),
+                 Math.round(daysInMonth * 0.75), daysInMonth].filter((v, i, a) => a.indexOf(v) === i);
+  const xLbl = tDays.map(d => `<text x="${dX(d)}" y="${VH - 6}" fill="#93A1B5" font-size="11" text-anchor="middle">${d}</text>`).join('');
+
+  // "Today" vertical marker
+  const todX = +dX(todayDay);
+  const today = `<line x1="${todX}" y1="${y1}" x2="${todX}" y2="${y2}" stroke="#B9C6D6" stroke-dasharray="3 3"/>
+    <text x="${todX}" y="${y1 - 8}" fill="#5A6B82" font-size="11" text-anchor="middle">сегодня</text>`;
+
+  // Gradient fill for fact area
+  const gId = 'fg' + Math.random().toString(36).slice(2, 7);
+  const grad = `<defs><linearGradient id="${gId}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2AA7CC" stop-opacity="0.18"/>
+    <stop offset="1" stop-color="#2AA7CC" stop-opacity="0"/>
+  </linearGradient></defs>`;
+
+  const seg = (arr, key) => arr.map((p, i) => `${i ? 'L' : 'M'}${dX(p.day)} ${vY(p[key])}`).join(' ');
+
+  // Confidence band polygon
+  let band = '';
+  if (bandPts.length >= 2) {
+    const top = bandPts.map((p, i) => `${i ? 'L' : 'M'}${dX(p.day)} ${vY(p.high)}`).join(' ');
+    const bot = [...bandPts].reverse().map(p => `L${dX(p.day)} ${vY(p.low)}`).join(' ');
+    band = `<path d="${top} ${bot} Z" fill="#1FA497" fill-opacity="0.10"/>`;
+  }
+
+  // Fact fill area
+  let factArea = '';
+  if (factPts.length >= 2) {
+    const fp0 = factPts[0], fpN = factPts[factPts.length - 1];
+    factArea = `<path d="${seg(factPts, 'fact')} L${dX(fpN.day)} ${y2} L${dX(fp0.day)} ${y2} Z" fill="url(#${gId})"/>`;
+  }
+
+  const factLine = factPts.length ? `<path d="${seg(factPts, 'fact')}" fill="none" stroke="#2AA7CC" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  const planLine = planPts.length ? `<path d="${seg(planPts, 'plan')}" fill="none" stroke="#8FBE1E" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  const fcstLine = fcstPts.length ? `<path d="${seg(fcstPts, 'forecast')}" fill="none" stroke="#1FA497" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+
+  // End-point dots and value labels
+  let dots = '';
+  if (planPts.length) {
+    const lp = planPts[planPts.length - 1];
+    const px = dX(lp.day), py = vY(lp.plan);
+    dots += `<circle cx="${px}" cy="${py}" r="4" fill="#8FBE1E" stroke="var(--bg2)" stroke-width="1.5"/>`;
+    dots += `<text x="${+px + 8}" y="${(+py + 4).toFixed(0)}" fill="#6FA01A" font-size="12" font-weight="600">${fmt(lp.plan)}</text>`;
+  }
+  if (fcstPts.length) {
+    const lp = fcstPts[fcstPts.length - 1];
+    const px = dX(lp.day), py = vY(lp.forecast);
+    dots += `<circle cx="${px}" cy="${py}" r="4" fill="#1FA497" stroke="var(--bg2)" stroke-width="1.5"/>`;
+    dots += `<text x="${+px + 8}" y="${(+py + 16).toFixed(0)}" fill="#1FA497" font-size="12" font-weight="600">${fmt(lp.forecast)}</text>`;
+  }
+  if (factPts.length) {
+    const lp = factPts[factPts.length - 1];
+    dots += `<circle cx="${dX(lp.day)}" cy="${vY(lp.fact)}" r="4" fill="#2AA7CC" stroke="var(--bg2)" stroke-width="1.5"/>`;
+  }
+
+  return `<svg viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="${ariaLabel || 'График прогноза баланса'}">
+  <title>Прогноз баланса</title><desc>Синий — факт, бирюзовый — прогноз, зелёный пунктир — план</desc>
+  ${grad}${grid}${yLbl}${xLbl}${today}${band}${factArea}${factLine}${planLine}${fcstLine}${dots}
+</svg>`;
+}
+
+function renderWaterfall(steps) {
+  if (!steps || !steps.length) return '';
+  const VW = 920, VH = 300;
+  const pL = 20, pR = 20, pT = 34, pB = 38;
+  const plotH = VH - pT - pB;
+  const n = steps.length;
+  const colW = (VW - pL - pR) / n;
+  const barW = Math.floor(colW * 0.62);
+  const bOff = (colW - barW) / 2;
+
+  // Compute floating bar positions
+  const items = [];
+  let run = 0;
+  for (const s of steps) {
+    const v = Math.abs(s.value);
+    if (s.type === 'start') {
+      items.push({ ...s, lo: 0, hi: s.value, runAfter: s.value });
+      run = s.value;
+    } else if (s.type === 'add') {
+      items.push({ ...s, lo: run, hi: run + v, runAfter: run + v });
+      run += v;
+    } else if (s.type === 'sub') {
+      items.push({ ...s, lo: run - v, hi: run, runAfter: run - v });
+      run -= v;
+    } else {
+      items.push({ ...s, lo: 0, hi: run, runAfter: run });
+    }
+  }
+
+  const allV = items.flatMap(it => [it.lo, it.hi]);
+  const minV = Math.min(...allV, 0), maxV = Math.max(...allV);
+  const spanV = maxV - minV || 1;
+  const minP = minV - spanV * 0.02, maxP = maxV + spanV * 0.18;
+  const spanP = maxP - minP;
+  const yBase = pT + plotH;
+  const vY = v => yBase - (v - minP) / spanP * plotH;
+  const fmt = v => Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(0) + 'к' : Math.abs(Math.round(v)).toString();
+
+  let bars = '', conn = '', lbls = '', xLbl = '';
+  items.forEach((it, i) => {
+    const bx = pL + i * colW + bOff;
+    const cx = (bx + barW / 2).toFixed(1);
+    const barT = vY(it.hi).toFixed(1);
+    const barH = Math.max(vY(it.lo) - vY(it.hi), 2).toFixed(1);
+    const fill = (it.type === 'start' || it.type === 'end') ? '#2AA7CC' : it.type === 'add' ? '#8FBE1E' : '#2E8FA8';
+
+    bars += `<rect x="${bx.toFixed(1)}" y="${barT}" width="${barW}" height="${barH}" rx="3" fill="${fill}"/>`;
+
+    const sign = it.type === 'add' ? '+' : it.type === 'sub' ? '−' : '';
+    const lblColor = (it.type === 'start' || it.type === 'end') ? '#0F243C' : it.type === 'add' ? '#6FA01A' : '#2E8FA8';
+    lbls += `<text x="${cx}" y="${(+barT - 7).toFixed(0)}" fill="${lblColor}" font-size="12.5" font-weight="600" text-anchor="middle" font-family="Sora,sans-serif">${sign}${fmt(it.value)}</text>`;
+    xLbl += `<text x="${cx}" y="${VH - 8}" fill="#93A1B5" font-size="11" text-anchor="middle">${it.label}</text>`;
+
+    if (i < items.length - 1) {
+      const nextBx = pL + (i + 1) * colW + bOff;
+      const cY = vY(it.runAfter).toFixed(1);
+      conn += `<line x1="${(bx + barW).toFixed(1)}" y1="${cY}" x2="${nextBx.toFixed(1)}" y2="${cY}" stroke="#C4D0DD" stroke-dasharray="3 3"/>`;
+    }
+  });
+
+  return `<svg viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="Декомпозиция прогноза">
+  <title>Из чего складывается прогноз</title>
+  ${bars}${conn}${lbls}${xLbl}
+</svg>`;
+}
+
+function renderRing(pct, label) {
+  pct = Math.max(0, Math.min(100, Math.round(pct)));
+  const fill = pct >= 70 ? '#9FC22A' : pct >= 40 ? '#E5A823' : '#DC5B5B';
+  return `<div style="position:relative;width:64px;height:64px;border-radius:50%;background:conic-gradient(${fill} ${pct}%,rgba(15,36,60,.10) 0);display:grid;place-items:center;flex-shrink:0">
+    <div style="position:absolute;width:50px;height:50px;border-radius:50%;background:var(--bg2)"></div>
+    <span style="position:relative;font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:var(--text)">${label}</span>
+  </div>`;
+}
+
 // ── NEW ARCH DASHBOARD ───────────────────────────────────────────────────────
 async function loadDashboardNew() {
   const main = document.getElementById('mainContent');
