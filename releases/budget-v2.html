@@ -5795,56 +5795,74 @@ async function loadBudget() {
     const budgets = Array.isArray(budgetsRaw) ? budgetsRaw : [];
     const goals   = (goalsRaw.data  || []);
     const txs     = (txRaw.data     || []);
+    window._bgtRules = rules;
 
-    // ── Fixed: which rules already have a matching fact tx ──
+    // ── Fixed: match by category_id when available; else by account pair + ±50% amount ──
     const doneRuleIds = new Set();
     rules.forEach(rule => {
-      if (txs.some(t => t.account_from === rule.account_from && t.account_to === rule.account_to))
-        doneRuleIds.add(rule.id);
+      const amt = +rule.amount || 0;
+      const done = rule.category_id
+        ? txs.some(t => t.category_id === rule.category_id)
+        : txs.some(t =>
+            t.account_from === rule.account_from &&
+            t.account_to   === rule.account_to &&
+            amt > 0 && Math.abs(+t.amount - amt) <= amt * 0.5
+          );
+      if (done) doneRuleIds.add(rule.id);
     });
     const fixedTotal = rules.reduce((s, r) => s + (+r.amount || 0), 0);
 
-    // ── Flow: facts per category_id ──
-    const factByCat = {};
+    // ── Flow: aggregate facts by category_id, then group budgets by category name ──
+    const factByCatId = {};
     txs.filter(t => t.account_to === 'Расход' && t.category_id).forEach(t => {
-      factByCat[t.category_id] = (factByCat[t.category_id] || 0) + (+t.amount || 0);
+      factByCatId[t.category_id] = (factByCatId[t.category_id] || 0) + (+t.amount || 0);
     });
-    const flowBudgetTotal = budgets.reduce((s, b) => s + (+b.budget || 0), 0);
-    const flowFactTotal   = budgets.reduce((s, b) => s + (factByCat[b.category_id] || 0), 0);
-    const flowForecast    = Math.round(flowFactTotal / daysElapsed * daysInMonth);
+    const catGroupMap = {};
+    budgets.forEach(b => {
+      const key = b.categories?.category || b.categories?.subcategory || '—';
+      if (!catGroupMap[key]) catGroupMap[key] = { name: key, budget: 0, catIds: [] };
+      catGroupMap[key].budget += +b.budget || 0;
+      catGroupMap[key].catIds.push(b.category_id);
+    });
+    const catGroups = Object.values(catGroupMap);
+    catGroups.forEach(g => { g.fact = g.catIds.reduce((s, id) => s + (factByCatId[id] || 0), 0); });
+
+    const flowBudgetTotal = catGroups.reduce((s, g) => s + g.budget, 0);
+    const flowFactTotal   = catGroups.reduce((s, g) => s + g.fact,   0);
+    const flowForecast    = daysElapsed > 0 ? Math.round(flowFactTotal / daysElapsed * daysInMonth) : 0;
 
     // ── Episodic: reserve balances ──
     const episTotal = goals.reduce((s, g) => s + (+g.current_balance || 0), 0);
 
     // ── Row builders ──
     function fixedRow(rule) {
-      const done = doneRuleIds.has(rule.id);
-      const sub  = rule.categories?.subcategory || rule.categories?.category || '';
+      const done  = doneRuleIds.has(rule.id);
+      const sub   = rule.categories?.subcategory || rule.categories?.category || '';
       const sched = rule.day_of_month ? rule.day_of_month + '-го · ежемесячно' : 'ежемесячно';
       return '<div class="bgt-frow">'
         + '<div class="bgt-rn">' + esc(rule.name) + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
         + '<span class="bgt-ch bgt-fix">фикс</span>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
         + '<span class="bgt-amt">' + f(rule.amount) + ' ₽</span>'
-        + '<span class="' + (done ? 'bgt-done' : 'bgt-wait') + '">' + (done ? 'Исполнено' : 'Ожидается') + '</span>'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
+          + '<span class="' + (done ? 'bgt-done' : 'bgt-wait') + '">' + (done ? 'Исполнено' : 'Ожидается') + '</span>'
+          + '<button class="del-btn" onclick="deleteRule(' + rule.id + ')">×</button>'
+        + '</div>'
         + '</div>';
     }
 
-    function flowRow(budget) {
-      const fact     = factByCat[budget.category_id] || 0;
-      const bdg      = +budget.budget || 0;
-      const pct      = bdg > 0 ? Math.min(100, Math.round(fact / bdg * 100)) : (fact > 0 ? 100 : 0);
-      const forecast = daysElapsed > 0 ? Math.round(fact / daysElapsed * daysInMonth) : 0;
-      const over     = bdg > 0 && forecast > bdg;
+    function flowRow(group) {
+      const pct      = group.budget > 0 ? Math.min(100, Math.round(group.fact / group.budget * 100)) : (group.fact > 0 ? 100 : 0);
+      const forecast = daysElapsed > 0 ? Math.round(group.fact / daysElapsed * daysInMonth) : 0;
+      const over     = group.budget > 0 && forecast > group.budget;
       const barColor = pct >= 90 ? '#C0741A' : '#1FA497';
-      const name     = budget.categories?.subcategory || budget.categories?.category || '—';
       const fcHtml   = over
-        ? '<span class="bgt-over">прогноз +' + f(forecast - bdg) + '</span>'
+        ? '<span class="bgt-over">прогноз +' + f(forecast - group.budget) + '</span>'
         : '<span class="bgt-fc">прогноз ' + f(forecast) + '</span>';
       return '<div class="bgt-flrow">'
-        + '<div class="bgt-rn">' + esc(name) + '<span class="bgt-ch bgt-flow">поток</span></div>'
+        + '<div class="bgt-rn">' + esc(group.name) + '<span class="bgt-ch bgt-flow">поток</span></div>'
         + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barColor + '"></i></div>'
-        + '<span class="bgt-amt2">' + f(fact) + ' / ' + f(bdg) + ' ₽</span>'
+        + '<span class="bgt-amt2">' + f(group.fact) + ' / ' + f(group.budget) + ' ₽</span>'
         + fcHtml
         + '</div>';
     }
@@ -5862,12 +5880,12 @@ async function loadBudget() {
     }
 
     const periodLabel = MONTHS_S[month] + ' ' + year;
-    const fixedRows = rules.length   ? rules.map(fixedRow).join('')   : '<div style="padding:20px 18px;color:var(--text3);font-size:13px">Нет активных правил на этот период.</div>';
-    const flowRows  = budgets.length ? budgets.map(flowRow).join('')  : '<div style="padding:20px 18px;color:var(--text3);font-size:13px">Нет конвертов на этот период.</div>';
-    const episRows  = goals.length   ? goals.map(episRow).join('')    : '<div style="padding:20px 18px;color:var(--text3);font-size:13px">Нет резервных целей.</div>';
+    const fixedRows = rules.length     ? rules.map(fixedRow).join('')     : '<div style="padding:20px 18px;color:var(--text3);font-size:13px">Нет правил. Нажми «+ Правило».</div>';
+    const flowRows  = catGroups.length ? catGroups.map(flowRow).join('')  : '<div style="padding:20px 18px;color:var(--text3);font-size:13px">Нет конвертов на этот период.</div>';
+    const episRows  = goals.length     ? goals.map(episRow).join('')      : '<div style="padding:20px 18px;color:var(--text3);font-size:13px">Нет резервных целей.</div>';
 
     main.innerHTML = '<style>'
-      + '.bgt-frow{display:grid;grid-template-columns:1fr auto minmax(150px,auto) 110px 110px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
+      + '.bgt-frow{display:grid;grid-template-columns:1fr auto minmax(150px,auto) 110px minmax(120px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-flrow{display:grid;grid-template-columns:minmax(160px,1.1fr) 1fr 150px auto;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-eprow{display:grid;grid-template-columns:minmax(150px,1fr) auto 1fr 150px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-rn{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
@@ -5891,6 +5909,7 @@ async function loadBudget() {
       + '<div class="topbar">'
         + '<div><div class="page-title">Бюджет</div>'
         + '<div class="page-sub">Правила, конверты и резервы по характеру · ' + periodLabel + '</div></div>'
+        + '<div class="quick-btns"><button class="qbtn qbtn-income" onclick="openAddRule()">+ Правило</button></div>'
       + '</div>'
       + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px">'
         + '<div class="card" style="padding:16px 18px">'
@@ -5905,7 +5924,7 @@ async function loadBudget() {
             + '<span style="width:8px;height:8px;border-radius:2px;background:#1FA497;display:inline-block"></span>Поток · конверты'
           + '</div>'
           + '<div style="font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">' + f(flowFactTotal) + ' / ' + f(flowBudgetTotal) + ' ₽</div>'
-          + '<div style="font-size:11px;color:var(--text3);margin-top:4px">прогноз ' + f(flowForecast) + ' · ' + budgets.length + ' категорий</div>'
+          + '<div style="font-size:11px;color:var(--text3);margin-top:4px">прогноз ' + f(flowForecast) + ' · ' + catGroups.length + ' категорий</div>'
         + '</div>'
         + '<div class="card" style="padding:16px 18px">'
           + '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:6px">'
@@ -5943,6 +5962,76 @@ async function loadBudget() {
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
   }
+}
+
+function openAddRule() {
+  const accs = (accounts_cache || []);
+  const virtual = ['Доход', 'Расход', 'Обязательства'];
+  const allNames = [...virtual, ...accs.map(a => a.name)];
+  const accOpts = allNames.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+  const catOpts = (cats || [])
+    .filter(c => c.expense_type === 'fixed' || c.character === 'Повседневный')
+    .map(c => '<option value="' + c.id + '">' + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>')
+    .join('');
+
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal">'
+    + '<div class="modal-title">Новое правило</div>'
+    + '<div class="field"><div class="field-label">Название</div>'
+      + '<input class="field-input" id="ruleN" placeholder="Аренда квартиры"/></div>'
+    + '<div class="field"><div class="field-label">Сумма, ₽</div>'
+      + '<input class="field-input" type="number" id="ruleAmt" placeholder="30000" min="0"/></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      + '<div class="field"><div class="field-label">Откуда</div>'
+        + '<select class="field-select" id="ruleFrom">' + accOpts + '</select></div>'
+      + '<div class="field"><div class="field-label">Куда</div>'
+        + '<select class="field-select" id="ruleTo"><option value="Расход" selected>Расход</option>'
+        + accOpts.replace('<option value="Расход">Расход</option>', '') + '</select></div>'
+    + '</div>'
+    + '<div class="field"><div class="field-label">День месяца (1–31, необязательно)</div>'
+      + '<input class="field-input" type="number" id="ruleDom" min="1" max="31" placeholder="—"/></div>'
+    + '<div class="field"><div class="field-label">Категория (необязательно)</div>'
+      + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>'
+    + '<div class="modal-btns">'
+      + '<button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
+      + '<button class="btn-primary" onclick="saveRule(this)">Создать</button>'
+    + '</div></div>';
+  document.body.appendChild(mo);
+}
+
+async function saveRule(btn) {
+  const name  = document.getElementById('ruleN')?.value.trim();
+  const amt   = parseFloat(document.getElementById('ruleAmt')?.value) || 0;
+  const from  = document.getElementById('ruleFrom')?.value;
+  const to    = document.getElementById('ruleTo')?.value;
+  const domV  = document.getElementById('ruleDom')?.value;
+  const catV  = document.getElementById('ruleCat')?.value;
+  if (!name || amt <= 0 || !from || !to) { toast('Заполни название, сумму и счета', false); return; }
+  btn.disabled = true;
+  const res = await fetch(`${API_BASE}/api/plan-rules`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name, amount: amt,
+      account_from: from,
+      account_to:   to,
+      day_of_month: domV ? +domV : null,
+      category_id:  catV ? +catV : null,
+    }),
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
+  btn.closest('.modal-overlay').remove();
+  toast('✓ Правило добавлено');
+  loadBudget();
+}
+
+async function deleteRule(id) {
+  if (!confirm('Удалить правило?')) return;
+  const res = await fetch(`${API_BASE}/api/plan-rules/${id}`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) { toast('Ошибка удаления', false); return; }
+  toast('Правило удалено');
+  loadBudget();
 }
 
 // ── NEW ARCH DASHBOARD ───────────────────────────────────────────────────────
