@@ -798,6 +798,23 @@ body {
 
 a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ── New-arch dashboard layout ──────────────────────────────── */
+.hero { display:grid; grid-template-columns:1fr 1.4fr; gap:16px; background:var(--bg2); border-radius:var(--radius); padding:20px; margin-bottom:12px; box-shadow:var(--shadow); }
+.hero-left { display:flex; flex-direction:column; }
+.hero-right { display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.pill { display:inline-flex; align-items:center; padding:3px 12px; border-radius:20px; font-size:11px; font-weight:600; margin:8px 0 4px; width:fit-content; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.chip { font-size:11px; font-weight:500; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+.stats { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:12px; }
+.stats .card { padding:16px; }
+.lower { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+.cat { margin-bottom:10px; }
+.cat:last-child { margin-bottom:0; }
+.run { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.run-label { font-size:12px; color:var(--text2); min-width:72px; }
+.run-val { font-size:12px; font-weight:600; color:var(--text); min-width:48px; text-align:right; font-family:Sora,sans-serif; }
+.step { margin-top:6px; padding:14px; background:var(--bg3); border-radius:var(--radius-sm); }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
@@ -6307,89 +6324,79 @@ async function loadDashboardNew() {
     const af = await aRes.json();
 
     const f  = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(n)));
-    const C = { green: '#059669', yellow: '#F59E0B', red: '#DC2626' };
+    const C = { green: '#5E9B1E', yellow: '#D97706', red: '#DC2626' };
+    const PILL = {
+      green:  { bg: 'linear-gradient(90deg,rgba(94,155,30,.18),rgba(180,222,60,.18))', color: '#5E9B1E', label: 'В графике'  },
+      yellow: { bg: 'rgba(217,119,6,.14)',  color: '#D97706', label: 'На грани'   },
+      red:    { bg: 'rgba(220,38,38,.14)',  color: '#DC2626', label: 'Перерасход' },
+    };
 
     // ── Safe to spend ────────────────────────────────────────────────────────
-    const sts      = m.safe_to_spend;
-    const stsColor = C[sts.status];
-    const stsLabel = { green: 'В графике', yellow: 'На грани', red: 'Перерасход' }[sts.status];
-    const wf       = sts.waterfall;
+    const sts  = m.safe_to_spend;
+    const wf   = sts.waterfall;
+    const pill = PILL[sts.status] || PILL.yellow;
 
-    const wfRows = [
-      ['Баланс сейчас',         wf.b0,        '+'],
-      ['Ожидаемые доходы',      wf.i_remain,  '+'],
-      ['Расходы по плану',      wf.f_remain,  '−'],
-      ['Сверхплановый поток',   wf.v_remain,  '−'],
-      ['Взносы в резервы',      wf.r_topup,   '−'],
-      ['Подушка',               wf.c_cushion, '−'],
-    ].map(([lbl, val, sign]) => {
-      const col = sign === '+' ? '#059669' : '#DC2626';
-      return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:.5px solid var(--border)">
-        <span style="font-size:12px;color:var(--text2)">${lbl}</span>
-        <span style="font-size:12px;font-weight:500;color:${val > 0 ? col : 'var(--text3)'}">
-          ${val > 0 ? sign + ' ' : ''}${f(val)} ₽
-        </span></div>`;
+    const todayDay    = new Date().getDate();
+    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+
+    const chips = [
+      { label: 'Баланс',    value: wf.b0,        sign: '+' },
+      { label: 'Доходы',    value: wf.i_remain,  sign: '+' },
+      { label: 'Расходы',   value: wf.f_remain,  sign: '−' },
+      { label: 'Сверхплан', value: wf.v_remain,  sign: '−' },
+      { label: 'Резервы',   value: wf.r_topup,   sign: '−' },
+      { label: 'Подушка',   value: wf.c_cushion, sign: '−' },
+    ].map(ch => {
+      const pos = ch.sign === '+';
+      return `<span class="chip" style="background:${pos ? 'rgba(94,155,30,.10)' : 'rgba(220,38,38,.08)'};color:${pos ? '#5E9B1E' : '#DC2626'}">${ch.label} ${pos ? '+' : '−'}${f(ch.value)} ₽</span>`;
     }).join('');
 
-    const dbgAccs = (m.safe_to_spend?.b0_accounts || []);
-    const wfAccs = dbgAccs.length ? `
-      <div style="margin-top:8px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Счета в Балансе сейчас</div>
-      ${dbgAccs.map(a => `
-        <div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px">
-          <span style="color:var(--text2)">${a.name} <span style="color:var(--text3)">(${a.type})</span></span>
-          <span style="color:var(--text)">${f(a.balance)} ₽</span>
-        </div>`).join('')}` : '';
+    // ── KPI helpers ──────────────────────────────────────────────────────────
+    const nc  = m.net_capital;
+    const dsr = m.dsr;
+    const run = m.runway;
+    const res = m.resilience;
 
-    // ── Health KPIs ──────────────────────────────────────────────────────────
-    const kpis = [
-      { label: 'Чистый капитал',    val: (m.net_capital.value < 0 ? '−' : '') + f(m.net_capital.value) + ' ₽', color: C[m.net_capital.status],
-        sub: m.net_capital.delta_pct != null ? (m.net_capital.delta_pct >= 0 ? '▲' : '▼') + ' ' + Math.abs(m.net_capital.delta_pct) + '% за 30 дней' : (m.net_capital.value >= 0 ? 'активы > обязательства' : 'обязательства > активы') },
-      { label: 'Долговая нагрузка', val: m.dsr.value + '%',                        color: C[m.dsr.status],
-        sub: f(m.dsr.monthly_payments) + ' ₽/мес на долги' },
-      { label: 'Runway',            val: m.runway.behavioral_months + ' мес',      color: C[m.runway.status],
-        sub: 'план: ' + m.runway.planned_months + ' мес · факт: ' + m.runway.behavioral_months + ' мес' },
-      { label: 'Устойчивость',      val: m.resilience.value + ' / 10',             color: C[m.resilience.status],
-        sub: { green: 'высокая', yellow: 'средняя', red: 'низкая' }[m.resilience.status] },
-    ];
-    const kpiHtml = kpis.map(k => `
-      <div class="card" style="padding:14px 16px">
-        <div class="kpi-label">${k.label}</div>
-        <div style="font-size:22px;font-weight:700;color:${k.color};font-family:Sora,sans-serif;line-height:1.15">${k.val}</div>
-        <div class="kpi-sub">${k.sub}</div>
-      </div>`).join('');
+    const ncSign  = nc.value < 0 ? '−' : '';
+    const ncDelta = nc.delta_pct != null
+      ? `<span style="color:${nc.delta_pct >= 0 ? '#5E9B1E' : '#DC2626'}">${nc.delta_pct >= 0 ? '▲' : '▼'} ${Math.abs(nc.delta_pct)}%</span> за 30 дней`
+      : (nc.value >= 0 ? 'активы > обязательства' : 'обязательства > активы');
+
+    const dsrW     = Math.min(Math.round(dsr.value / 50 * 100), 100);
+    const dsrColor = C[dsr.status];
+
+    const runPlan  = Math.min(Math.round(run.planned_months   / 12 * 100), 100);
+    const runBeh   = Math.min(Math.round(run.behavioral_months / 12 * 100), 100);
 
     // ── Categories ───────────────────────────────────────────────────────────
-    const cats    = (m.categories || []).slice(0, 7);
-    const maxCat  = cats[0]?.amount_forecast || 1;
-    const catColors = { fixed: '#2563EB', variable: '#DC2626' };
-    const catCharColor = { 'Эпизодический': '#8B5CF6' };
-    const catHtml = cats.map(c => {
-      const w = Math.round(c.amount_forecast / maxCat * 100);
-      const barColor = c.character === 'Эпизодический' ? '#8B5CF6' : (catColors[c.expense_type] || '#6B7280');
-      return `<div style="margin-bottom:9px">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
-          <span style="color:var(--text)">${c.category}</span>
-          <span style="color:var(--text2)">${f(c.amount_fact)} <span style="color:var(--text3);font-size:11px">→ ${f(c.amount_forecast)} ₽</span></span>
+    const cats       = (m.categories || []).slice(0, 8);
+    const maxCat     = cats[0]?.amount_forecast || 1;
+    const catPalette = ['#2AA7CC','#1FA497','#B4DE3C','#5E9B1E','#7C6FF7','#E58C2A','#DC5B5B','#93A1B5'];
+    const catHtml    = cats.map((c, i) => {
+      const w   = Math.round(c.amount_forecast / maxCat * 100);
+      const clr = catPalette[i % catPalette.length];
+      return `<div class="cat">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--text)">${c.category}</span>
+          <span style="font-size:12px;color:var(--text2);font-family:Sora,sans-serif">${f(c.amount_fact)} <span style="color:var(--text3);font-size:11px">→ ${f(c.amount_forecast)} ₽</span></span>
         </div>
-        <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-          <div style="height:100%;width:${w}%;background:${barColor};border-radius:2px"></div>
-        </div></div>`;
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${w}%;background:${clr};border-radius:3px"></div>
+        </div>
+      </div>`;
     }).join('');
 
     // ── Next step (цель) ─────────────────────────────────────────────────────
-    const goal = (af.goals || []).filter(g => !g.done).sort((a,b) => (a.eta_months||999) - (b.eta_months||999))[0];
-    const goalHtml = goal ? `
-      <div class="card" style="padding:14px 16px;border-left:3px solid #2563EB">
-        <div class="kpi-label">Следующий шаг</div>
-        <div style="font-size:14px;font-weight:600;color:var(--text);margin:4px 0">${goal.name}</div>
-        <div style="font-size:12px;color:var(--text2)">
-          По силам к <b>${goal.eta_label || '—'}</b>
-          ${goal.confidence ? `<span style="color:var(--text3)"> · ${goal.confidence}% уверенность</span>` : ''}
+    const goal     = (af.goals || []).filter(g => !g.done).sort((a,b) => (a.eta_months||999) - (b.eta_months||999))[0];
+    const stepHtml = goal ? `
+      <div class="step">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Следующий шаг</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${goal.name}</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px">По силам к <b>${goal.eta_label || '—'}</b>${goal.confidence ? ` <span style="color:var(--text3)">· ${goal.confidence}% уверенность</span>` : ''}</div>
+        <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:4px">
+          <div style="height:100%;width:${goal.pct}%;background:linear-gradient(90deg,var(--accent),var(--lm));border-radius:4px"></div>
         </div>
-        <div style="height:4px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden">
-          <div style="height:100%;width:${goal.pct}%;background:#2563EB;border-radius:2px"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:3px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)">
           <span>${f(goal.current)} ₽</span><span>${goal.pct}% из ${f(goal.target)} ₽</span>
         </div>
       </div>` : '';
@@ -6407,85 +6414,79 @@ async function loadDashboardNew() {
         </button>
       </div>
 
-      <div class="card" style="padding:18px;border-left:4px solid ${stsColor};margin-bottom:4px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div>
-            <div class="kpi-label">Свободно до конца месяца</div>
-            <div style="font-size:38px;font-weight:700;color:${stsColor};font-family:Sora,sans-serif;line-height:1.1">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽</div>
+      <div class="hero">
+        <div class="hero-left">
+          <div class="kpi-label">Свободно до конца месяца</div>
+          <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${pill.color}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
+          <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:10px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽</div>
+          <div class="chips">${chips}</div>
+        </div>
+        <div class="hero-right">
+          ${renderForecastChart(fc.points || [], todayDay, daysInMonth, 'Прогноз баланса')}
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="card">
+          <div class="kpi-label">Чистый капитал</div>
+          <div class="kpi-val" style="font-size:22px;color:${C[nc.status]}">${ncSign}${f(nc.value)} ₽</div>
+          <div class="kpi-sub" style="margin-bottom:8px">${ncDelta}</div>
+          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${nc.value >= 0 ? 100 : 0}%;background:${C[nc.status]};border-radius:2px"></div>
           </div>
-          <span style="font-size:11px;font-weight:600;color:${stsColor};background:${stsColor}1a;padding:3px 10px;border-radius:12px;white-space:nowrap">${stsLabel}</span>
         </div>
-        <details style="margin-top:12px">
-          <summary style="font-size:11px;color:var(--text3);cursor:pointer;list-style:none;user-select:none">▸ Как считается</summary>
-          <div style="margin-top:8px">${wfRows}${wfAccs}</div>
-        </details>
+        <div class="card">
+          <div class="kpi-label">Кредитная нагрузка</div>
+          <div class="kpi-val" style="font-size:22px;color:${dsrColor}">${dsr.value}%</div>
+          <div class="kpi-sub" style="margin-bottom:8px">${f(dsr.monthly_payments)} ₽/мес · DSR</div>
+          <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${dsrW}%;background:${dsrColor};border-radius:2px"></div>
+          </div>
+        </div>
+        <div class="card" style="display:flex;gap:14px;align-items:center">
+          <div style="flex:1;min-width:0">
+            <div class="kpi-label">Устойчивость</div>
+            <div class="kpi-val" style="font-size:22px;color:${C[res.status]}">${res.value} / 10</div>
+            <div class="kpi-sub">${{ green:'высокая', yellow:'средняя', red:'низкая' }[res.status] || ''}</div>
+          </div>
+          ${renderRing(res.value * 10, res.value + '/10')}
+        </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Прогноз баланса</span>
-          <span class="card-hint">
-            <span style="color:#059669">━</span> факт &nbsp;
-            <span style="color:#2563EB">╌</span> прогноз &nbsp;
-            <span style="color:#9CA3AF">╌</span> план
-          </span>
+      <div class="lower">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Расходы по категориям</span>
+            <span class="card-hint">факт → прогноз</span>
+          </div>
+          <div class="card-body">${catHtml || '<span style="font-size:12px;color:var(--text3)">Нет данных</span>'}</div>
         </div>
-        <div class="card-body"><canvas id="chartFcNew" height="110"></canvas></div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:4px">${kpiHtml}</div>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Расходы по категориям</span>
-          <span class="card-hint">факт → прогноз месяца</span>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Запас прочности</span>
+            <span class="card-hint">runway</span>
+          </div>
+          <div class="card-body">
+            <div class="run">
+              <span class="run-label">По плану</span>
+              <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${runPlan}%;background:var(--accent);border-radius:3px"></div>
+              </div>
+              <span class="run-val">${run.planned_months} мес</span>
+            </div>
+            <div class="run">
+              <span class="run-label">Реальный</span>
+              <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${runBeh}%;background:${C[run.status]};border-radius:3px"></div>
+              </div>
+              <span class="run-val">${run.behavioral_months} мес</span>
+            </div>
+            ${stepHtml}
+          </div>
         </div>
-        <div class="card-body">${catHtml || '<span style="font-size:12px;color:var(--text3)">Нет данных</span>'}</div>
       </div>
-
-      ${goalHtml}
     `;
-
-    // ── Forecast chart ───────────────────────────────────────────────────────
-    const ctx = document.getElementById('chartFcNew')?.getContext('2d');
-    if (ctx && fc.points?.length) {
-      const pts  = fc.points;
-      const lbl  = pts.map(p => p.day);
-      chartLine  = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: lbl,
-          datasets: [
-            { label:'Коридор верх', data: pts.map(p => p.high ?? null),
-              borderColor:'transparent', backgroundColor:'rgba(37,99,235,0.07)',
-              fill:'+1', pointRadius:0, tension:0.3, spanGaps:false },
-            { label:'Коридор низ',  data: pts.map(p => p.low  ?? null),
-              borderColor:'transparent', fill:false,
-              pointRadius:0, tension:0.3, spanGaps:false },
-            { label:'Факт',     data: pts.map(p => p.fact     ?? null),
-              borderColor:'#059669', borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false, fill:false },
-            { label:'Прогноз',  data: pts.map(p => p.forecast ?? null),
-              borderColor:'#2563EB', borderWidth:2, borderDash:[5,3],
-              pointRadius:0, tension:0.3, spanGaps:false, fill:false },
-            { label:'План',     data: pts.map(p => p.plan     ?? null),
-              borderColor:'#9CA3AF', borderWidth:1.5, borderDash:[2,4],
-              pointRadius:0, tension:0.3, spanGaps:false, fill:false },
-          ],
-        },
-        options: {
-          responsive:true,
-          interaction:{ mode:'index', intersect:false },
-          plugins:{ legend:{ display:false },
-            tooltip:{ callbacks:{ label: ctx => ctx.dataset.label + ': ' + f(ctx.parsed.y) + ' ₽' } } },
-          scales:{
-            x:{ grid:{ color:'rgba(0,0,0,0.04)' }, ticks:{ color:'#9CA3AF', font:{ size:10 } } },
-            y:{ grid:{ color:'rgba(0,0,0,0.04)' }, ticks:{ color:'#9CA3AF', font:{ size:10 },
-              callback: v => f(v) + ' ₽' } },
-          },
-        },
-      });
-    }
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + e.message + '</div>';
