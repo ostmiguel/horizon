@@ -6415,6 +6415,12 @@ async function loadDashboardNew() {
     const structuralDeficit = wf.i_remain > 0 && totalOutflows > wf.i_remain;
     const deficitGap        = totalOutflows - wf.i_remain;
 
+    // ── KPI shortcuts (needed before levers block) ───────────────────────────
+    const nc  = m.net_capital;
+    const dsr = m.dsr;
+    const run = m.runway;
+    const res = m.resilience;
+
     // Chips: neutral style, hide near-zero values, remove C_cushion / v_remain "Сверхплан"
     const chips = [
       { label: 'Баланс',  value: wf.b0,        sign: '+' },
@@ -6447,12 +6453,6 @@ async function loadDashboardNew() {
         <div class="lever"><div class="lnum">${i + 1}</div><div class="ltxt"><b>${l.title}</b><span class="ltag">${l.tag}</span><span class="muted">${l.note}</span></div></div>`).join('');
       leversHtml = `<div class="card" style="margin-bottom:12px"><div class="card-header"><span class="card-title">Что поможет закрыть минус</span></div><div class="card-body" style="padding-top:8px"><div class="levers">${items}</div></div></div>`;
     }
-
-    // ── KPI helpers ──────────────────────────────────────────────────────────
-    const nc  = m.net_capital;
-    const dsr = m.dsr;
-    const run = m.runway;
-    const res = m.resilience;
 
     const ncSign  = nc.value < 0 ? '−' : '';
     const ncDelta = nc.delta_pct != null
