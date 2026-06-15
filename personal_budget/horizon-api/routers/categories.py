@@ -9,12 +9,14 @@ class CategoryCreate(BaseModel):
     category: str
     subcategory: str
     character: Optional[str] = None
+    expense_type: Optional[str] = None  # 'fixed' | 'variable'
 
 class CategoryUpdate(BaseModel):
     group_name: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
     character: Optional[str] = None
+    expense_type: Optional[str] = None
 
 @router.get("")
 async def get_categories(request: Request):
@@ -31,9 +33,9 @@ async def create_category(data: CategoryCreate, request: Request):
     user_id = request.state.user_id
     db = request.state.db
     row = await db.fetchrow("""
-        INSERT INTO categories (user_id, group_name, category, subcategory, character)
-        VALUES ($1,$2,$3,$4,$5) RETURNING *
-    """, user_id, data.group_name, data.category, data.subcategory, data.character)
+        INSERT INTO categories (user_id, group_name, category, subcategory, character, expense_type)
+        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
+    """, user_id, data.group_name, data.category, data.subcategory, data.character, data.expense_type)
     return dict(row)
 
 @router.patch("/{cat_id}")

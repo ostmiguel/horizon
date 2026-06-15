@@ -10,6 +10,8 @@ class AccountCreate(BaseModel):
     color: Optional[str] = "#b0c4de"
     initial_balance: Optional[float] = 0
     include_in_balance: Optional[bool] = True
+    is_reserve: Optional[bool] = False
+    is_cushion: Optional[bool] = False
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
@@ -17,6 +19,8 @@ class AccountUpdate(BaseModel):
     initial_balance: Optional[float] = None
     include_in_balance: Optional[bool] = None
     sort_order: Optional[int] = None
+    is_reserve: Optional[bool] = None
+    is_cushion: Optional[bool] = None
 
 @router.get("")
 async def get_accounts(request: Request):
@@ -45,10 +49,10 @@ async def create_account(data: AccountCreate, request: Request):
     user_id = request.state.user_id
     db = request.state.db
     row = await db.fetchrow("""
-        INSERT INTO accounts (user_id, name, account_type, color, initial_balance, include_in_balance)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+        INSERT INTO accounts (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve, is_cushion)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
     """, user_id, data.name, data.account_type, data.color,
-        data.initial_balance, data.include_in_balance)
+        data.initial_balance, data.include_in_balance, data.is_reserve, data.is_cushion)
     return dict(row)
 
 @router.patch("/{account_id}")

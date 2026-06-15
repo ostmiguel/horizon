@@ -87,9 +87,13 @@ FIXED_CHARS = ('fixed', 'Фиксированный')
 
 
 async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
-    """Robust daily rate and σ from last 30 days of variable everyday expenses.
-    §3.3: медиана + MAD-фильтр (отсев дней с отклонением >3·MAD от медианы).
-    Only expense_type='variable' + character!='Эпизодический'."""
+    """§3.3 Robust daily rate (r_var) and σ from last 30 calendar days.
+
+    Key fix vs. previous version: include zero-spend days in the window so
+    the rate is total_spending / 30, not median(spending-day amounts).
+    MAD filter is applied to non-zero values only to remove outlier days
+    (e.g. one-off large purchases in an otherwise flow category).
+    """
     cutoff = today - timedelta(days=30)
     rows = await db.fetch("""
         SELECT t.date, SUM(t.amount) AS daily_total
@@ -101,13 +105,23 @@ async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
           AND c.character != 'Эпизодический'
         GROUP BY t.date ORDER BY t.date
     """, user_id, cutoff, today)
-    daily = [float(r["daily_total"]) for r in rows]
-    if len(daily) >= 4:
-        med = statistics.median(daily)
-        mad = statistics.median([abs(x - med) for x in daily])
-        threshold = 3 * mad
-        daily = [x for x in daily if abs(x - med) <= threshold] or daily
-    return robust_rate(daily), robust_sigma(daily)
+
+    WINDOW = 30
+    daily_by_date = {r["date"]: float(r["daily_total"]) for r in rows}
+    # Full 30-day series including zero-spend days
+    daily = [daily_by_date.get(cutoff + timedelta(days=i), 0.0) for i in range(WINDOW)]
+
+    # MAD outlier filter on positive values only (zeros are valid, not outliers)
+    pos = [x for x in daily if x > 0]
+    if len(pos) >= 2:
+        med = statistics.median(pos)
+        mad = statistics.median([abs(x - med) for x in pos])
+        threshold = med + 3 * 1.4826 * mad
+        daily = [x if x <= threshold else 0.0 for x in daily]
+
+    rate = sum(daily) / WINDOW
+    sigma = robust_sigma(daily)
+    return rate, sigma
 
 
 async def monthly_income_sum(db, user_id: str, year: int, month: int) -> float:
@@ -349,8 +363,11 @@ async def get_metrics(request: Request):
     else:
         s_income = 0.5
 
+    # §4.5 formula: s_reserve = резерв / (3 × обязательные_мес)
+    # обязательные = фикс расходы + платежи по долгам (monthly_payments already computed above)
+    monthly_obligations = monthly_fixed_exp + monthly_payments
     s_runway  = min(behavioral_runway / 6, 1.0)
-    s_reserve = min(reserve_balance / max(3 * monthly_fixed_exp, 1), 1.0)
+    s_reserve = min(reserve_balance / max(3 * monthly_obligations, 1), 1.0)
     s_debt    = 1 - min(dsr / 0.40, 1.0)
     s_savings = min(savings_rate / 0.20, 1.0)
 
@@ -383,23 +400,62 @@ async def get_metrics(request: Request):
         ORDER BY total DESC
     """, user_id, year, month)
 
+    # Track which categories already have fact data
+    seen_cat_chars: set[tuple] = set()
     categories = []
+    CAT_WINDOW = 30
+
     for r in cat_rows:
         fact = float(r["total"])
-        is_variable_everyday = (r["cat_expense_type"] == "variable" and r["cat_char"] != "Эпизодический")
+        is_variable_everyday = (
+            r["cat_expense_type"] == "variable"
+            and r["cat_char"] not in EPISODIC_CHARS
+        )
         if is_variable_everyday and d_left > 0:
-            cat_daily = await db.fetch("""
+            # §3.3 fix: rate = total_in_window / window_days (not median of spending-days)
+            # MAD filter removes outlier days before summing.
+            cat_cutoff = today - timedelta(days=CAT_WINDOW)
+            cat_daily_rows = await db.fetch("""
                 SELECT t.date, SUM(t.amount) AS dt
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
-                WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3 AND c.category=$4
+                WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
+                  AND c.category=$4 AND c.character NOT IN ('Эпизодический','episodic')
                   AND t.account_to = 'Расход'
                 GROUP BY t.date
-            """, user_id, today - timedelta(days=30), today, r["category"])
-            cat_rate = robust_rate([float(x["dt"]) for x in cat_daily])
+            """, user_id, cat_cutoff, today, r["category"])
+            daily_by_date = {row["date"]: float(row["dt"]) for row in cat_daily_rows}
+            cat_daily = [
+                daily_by_date.get(cat_cutoff + timedelta(days=i), 0.0)
+                for i in range(CAT_WINDOW)
+            ]
+            # MAD outlier filter (same logic as flow_daily_rate)
+            pos = [x for x in cat_daily if x > 0]
+            if len(pos) >= 2:
+                med = statistics.median(pos)
+                mad = statistics.median([abs(x - med) for x in pos])
+                threshold = med + 3 * 1.4826 * mad
+                cat_daily = [x if x <= threshold else 0.0 for x in cat_daily]
+            cat_rate = sum(cat_daily) / CAT_WINDOW
             forecast = fact + cat_rate * d_left
+        elif r["cat_expense_type"] == "fixed":
+            # Fixed: show plan amount for the month (max of fact vs plan)
+            plan_cat_total = await db.fetchval("""
+                SELECT COALESCE(SUM(p.amount), 0)
+                FROM plan p
+                JOIN categories c ON p.category_id = c.id
+                WHERE p.user_id=$1
+                  AND EXTRACT(YEAR  FROM p.date)=$2
+                  AND EXTRACT(MONTH FROM p.date)=$3
+                  AND c.category=$4
+                  AND p.account_to = 'Расход'
+            """, user_id, year, month, r["category"])
+            forecast = max(fact, float(plan_cat_total or 0))
         else:
+            # Episodic: show only what was actually spent
             forecast = fact
+
+        seen_cat_chars.add((r["category"], r["cat_char"]))
         categories.append({
             "category":        r["category"],
             "character":       r["cat_char"],
@@ -407,6 +463,29 @@ async def get_metrics(request: Request):
             "amount_fact":     round(fact),
             "amount_forecast": round(forecast),
         })
+
+    # Add fixed categories that have plan entries but no fact yet this month
+    plan_fixed_cats = await db.fetch("""
+        SELECT c.category, c.character AS cat_char, c.expense_type AS cat_expense_type,
+               SUM(p.amount) AS plan_total
+        FROM plan p
+        JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1
+          AND EXTRACT(YEAR  FROM p.date)=$2
+          AND EXTRACT(MONTH FROM p.date)=$3
+          AND p.account_to = 'Расход'
+          AND c.expense_type = 'fixed'
+        GROUP BY c.category, c.character, c.expense_type
+    """, user_id, year, month)
+    for r in plan_fixed_cats:
+        if (r["category"], r["cat_char"]) not in seen_cat_chars:
+            categories.append({
+                "category":        r["category"],
+                "character":       r["cat_char"],
+                "expense_type":    "fixed",
+                "amount_fact":     0,
+                "amount_forecast": round(float(r["plan_total"])),
+            })
 
     # ── Flow fact this month ──────────────────────────────────────────────────
     flow_fact = float(await db.fetchval("""
@@ -516,21 +595,38 @@ async def get_forecast(request: Request):
     r_var, sigma_day = await flow_daily_rate(db, user_id, today)
 
     plan_rows = await plan_remaining(db, user_id, year, month, today)
-    plan_by_day: dict[int, float] = {}
+
+    # plan_by_day_all  → plan line (все плановые операции, как задумал пользователь)
+    # plan_by_day_fixed → forecast line (только фикс/долги/эпизод — переменные уже в r_var)
+    plan_by_day_all:   dict[int, float] = {}
+    plan_by_day_fixed: dict[int, float] = {}
     for r in plan_rows:
-        day = r["date"].day
+        day    = r["date"].day
         amount = float(r["amount"])
-        af = r.get("account_from", "")
-        at = r.get("account_to", "")
+        af     = r.get("account_from", "")
+        at     = r.get("account_to", "")
+        cat_et = r.get("cat_expense_type")
+        cat_ch = r.get("cat_character", "")
+
+        is_variable_flow = (
+            at == "Расход"
+            and cat_et == "variable"
+            and cat_ch not in EPISODIC_CHARS
+        )
+
         if af == "Доход":
-            plan_by_day[day] = plan_by_day.get(day, 0) + amount
+            plan_by_day_all[day]   = plan_by_day_all.get(day, 0)   + amount
+            plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) + amount
         elif at in ("Расход", "Обязательства"):
-            plan_by_day[day] = plan_by_day.get(day, 0) - amount
+            plan_by_day_all[day] = plan_by_day_all.get(day, 0) - amount
+            if not is_variable_flow:
+                # Variable flow already accounted for via r_var; skip to avoid double-counting
+                plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) - amount
 
     points = []
-    running_fact = B_month_start
+    running_fact     = B_month_start
     running_forecast = B0_now
-    running_plan = B0_now
+    running_plan     = B0_now
 
     for d in range(1, days_in_month + 1):
         point: dict = {"day": d}
@@ -541,14 +637,14 @@ async def get_forecast(request: Request):
         else:
             point["fact"] = None
             running_forecast -= r_var
-            running_forecast += plan_by_day.get(d, 0)
+            running_forecast += plan_by_day_fixed.get(d, 0)
             days_ahead = d - d_now
             sigma = sigma_day * math.sqrt(days_ahead)
             point["forecast"] = round(running_forecast)
             point["low"]      = round(running_forecast - Z_80 * sigma)
             point["high"]     = round(running_forecast + Z_80 * sigma)
 
-            running_plan += plan_by_day.get(d, 0)
+            running_plan += plan_by_day_all.get(d, 0)
             point["plan"] = round(running_plan)
 
         points.append(point)

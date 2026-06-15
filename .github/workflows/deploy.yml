@@ -7,6 +7,8 @@ on:
       - 'releases/budget-v2.html'
       - 'personal_budget/horizon-api/forecast_cron.py'
       - 'personal_budget/horizon-api/routers/metrics.py'
+      - 'personal_budget/horizon-api/routers/accounts.py'
+      - 'personal_budget/horizon-api/routers/categories.py'
       - 'personal_budget/horizon-api/main.py'
       - 'personal_budget/horizon-api/routers/goals.py'
       - 'personal_budget/horizon-api/routers/plan_rules.py'
@@ -14,6 +16,7 @@ on:
       - 'personal_budget/horizon-api/routers/loans.py'
       - 'personal_budget/horizon-api/routers/transactions.py'
       - 'personal_budget/horizon-api/routers/auth.py'
+      - 'personal_budget/horizon-api/migrations/*.sql'
       - '.github/workflows/deploy.yml'
 
 jobs:
@@ -67,15 +70,45 @@ jobs:
           target: /opt/horizon/personal_budget/horizon-api/
           strip_components: 2
 
-      - name: Copy metrics router and main.py
+      - name: Copy routers and main.py
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 109.71.247.58
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "personal_budget/horizon-api/routers/metrics.py,personal_budget/horizon-api/routers/goals.py,personal_budget/horizon-api/routers/plan_rules.py,personal_budget/horizon-api/routers/category_budgets.py,personal_budget/horizon-api/routers/loans.py,personal_budget/horizon-api/routers/transactions.py,personal_budget/horizon-api/routers/auth.py,personal_budget/horizon-api/main.py"
+          source: "personal_budget/horizon-api/routers/metrics.py,personal_budget/horizon-api/routers/accounts.py,personal_budget/horizon-api/routers/categories.py,personal_budget/horizon-api/routers/goals.py,personal_budget/horizon-api/routers/plan_rules.py,personal_budget/horizon-api/routers/category_budgets.py,personal_budget/horizon-api/routers/loans.py,personal_budget/horizon-api/routers/transactions.py,personal_budget/horizon-api/routers/auth.py,personal_budget/horizon-api/main.py"
           target: /opt/horizon/personal_budget/horizon-api/
           strip_components: 2
+
+      - name: Copy migrations
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: personal_budget/horizon-api/migrations/
+          target: /opt/horizon/personal_budget/horizon-api/
+          strip_components: 2
+
+      - name: Run DB migrations
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            APP=/opt/horizon/personal_budget/horizon-api
+            # Try .env in app dir, then parent dirs
+            ENV_FILE=$(find /opt/horizon -maxdepth 3 -name '.env' | head -1)
+            if [ -z "$ENV_FILE" ]; then echo "No .env found, skipping migrations"; exit 0; fi
+            DB_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+            if [ -z "$DB_URL" ]; then echo "DATABASE_URL not set, skipping migrations"; exit 0; fi
+            for f in $APP/migrations/*.sql; do
+              echo "Running migration: $f"
+              psql "$DB_URL" -f "$f"
+            done
+            echo "Migrations done"
 
       - name: Restart API
         uses: appleboy/ssh-action@v1.0.3
