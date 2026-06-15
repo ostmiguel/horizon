@@ -5797,13 +5797,16 @@ async function loadBudget() {
     const txs     = (txRaw.data     || []);
     window._bgtRules = rules;
 
-    // ── Fixed: match by category_id when available; else by account pair + ±50% amount ──
+    // ── Fixed: only count transactions dated ≤ today (ignore future entries in current month) ──
+    const todayStr = now.toISOString().split('T')[0];
+    const statusTxs = isCurrentMonth ? txs.filter(t => (t.date || '') <= todayStr) : txs;
+
     const doneRuleIds = new Set();
     rules.forEach(rule => {
       const amt = +rule.amount || 0;
       const done = rule.category_id
-        ? txs.some(t => t.category_id === rule.category_id)
-        : txs.some(t =>
+        ? statusTxs.some(t => t.category_id === rule.category_id)
+        : statusTxs.some(t =>
             t.account_from === rule.account_from &&
             t.account_to   === rule.account_to &&
             amt > 0 && Math.abs(+t.amount - amt) <= amt * 0.5
@@ -5844,7 +5847,8 @@ async function loadBudget() {
         + '<span class="bgt-ch bgt-fix">фикс</span>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
         + '<span class="bgt-amt">' + f(rule.amount) + ' ₽</span>'
-        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px">'
+          + '<button class="edit-btn" onclick="openEditRule(' + rule.id + ')">ред.</button>'
           + '<span class="' + (done ? 'bgt-done' : 'bgt-wait') + '">' + (done ? 'Исполнено' : 'Ожидается') + '</span>'
           + '<button class="del-btn" onclick="deleteRule(' + rule.id + ')">×</button>'
         + '</div>'
@@ -5964,38 +5968,57 @@ async function loadBudget() {
   }
 }
 
-function openAddRule() {
-  const accs = (accounts_cache || []);
-  const virtual = ['Доход', 'Расход', 'Обязательства'];
-  const allNames = [...virtual, ...accs.map(a => a.name)];
-  const accOpts = allNames.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+function ruleFormHtml(r) {
+  const accs     = (accounts_cache || []);
+  const allNames = ['Доход', 'Расход', 'Обязательства', ...accs.map(a => a.name)];
+  function accOpts(sel) {
+    return allNames.map(n =>
+      '<option value="' + esc(n) + '"' + (n === sel ? ' selected' : '') + '>' + esc(n) + '</option>'
+    ).join('');
+  }
   const catOpts = (cats || [])
-    .filter(c => c.expense_type === 'fixed' || c.character === 'Повседневный')
-    .map(c => '<option value="' + c.id + '">' + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>')
+    .map(c => '<option value="' + c.id + '"' + (r && r.category_id === c.id ? ' selected' : '') + '>'
+      + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>')
     .join('');
-
-  const mo = document.createElement('div');
-  mo.className = 'modal-overlay open';
-  mo.innerHTML = '<div class="modal">'
-    + '<div class="modal-title">Новое правило</div>'
-    + '<div class="field"><div class="field-label">Название</div>'
-      + '<input class="field-input" id="ruleN" placeholder="Аренда квартиры"/></div>'
+  return '<div class="field"><div class="field-label">Название</div>'
+      + '<input class="field-input" id="ruleN" placeholder="Аренда квартиры" value="' + (r ? esc(r.name) : '') + '"/></div>'
     + '<div class="field"><div class="field-label">Сумма, ₽</div>'
-      + '<input class="field-input" type="number" id="ruleAmt" placeholder="30000" min="0"/></div>'
+      + '<input class="field-input" type="number" id="ruleAmt" min="0" value="' + (r ? +r.amount : '') + '" placeholder="30000"/></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
       + '<div class="field"><div class="field-label">Откуда</div>'
-        + '<select class="field-select" id="ruleFrom">' + accOpts + '</select></div>'
+        + '<select class="field-select" id="ruleFrom">' + accOpts(r?.account_from) + '</select></div>'
       + '<div class="field"><div class="field-label">Куда</div>'
-        + '<select class="field-select" id="ruleTo"><option value="Расход" selected>Расход</option>'
-        + accOpts.replace('<option value="Расход">Расход</option>', '') + '</select></div>'
+        + '<select class="field-select" id="ruleTo">' + accOpts(r?.account_to || 'Расход') + '</select></div>'
     + '</div>'
     + '<div class="field"><div class="field-label">День месяца (1–31, необязательно)</div>'
-      + '<input class="field-input" type="number" id="ruleDom" min="1" max="31" placeholder="—"/></div>'
+      + '<input class="field-input" type="number" id="ruleDom" min="1" max="31" placeholder="—"'
+      + ' value="' + (r?.day_of_month || '') + '"/></div>'
     + '<div class="field"><div class="field-label">Категория (необязательно)</div>'
-      + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>'
+      + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>';
+}
+
+function openAddRule() {
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Новое правило</div>'
+    + ruleFormHtml(null)
     + '<div class="modal-btns">'
       + '<button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
       + '<button class="btn-primary" onclick="saveRule(this)">Создать</button>'
+    + '</div></div>';
+  document.body.appendChild(mo);
+}
+
+function openEditRule(id) {
+  const r = (window._bgtRules || []).find(x => x.id === id);
+  if (!r) return;
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Редактировать правило</div>'
+    + ruleFormHtml(r)
+    + '<div class="modal-btns">'
+      + '<button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
+      + '<button class="btn-primary" onclick="updateRule(' + id + ',this)">Сохранить</button>'
     + '</div></div>';
   document.body.appendChild(mo);
 }
@@ -6023,6 +6046,32 @@ async function saveRule(btn) {
   if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
   btn.closest('.modal-overlay').remove();
   toast('✓ Правило добавлено');
+  loadBudget();
+}
+
+async function updateRule(id, btn) {
+  const name  = document.getElementById('ruleN')?.value.trim();
+  const amt   = parseFloat(document.getElementById('ruleAmt')?.value) || 0;
+  const from  = document.getElementById('ruleFrom')?.value;
+  const to    = document.getElementById('ruleTo')?.value;
+  const domV  = document.getElementById('ruleDom')?.value;
+  const catV  = document.getElementById('ruleCat')?.value;
+  if (!name || amt <= 0 || !from || !to) { toast('Заполни название, сумму и счета', false); return; }
+  btn.disabled = true;
+  const res = await fetch(`${API_BASE}/api/plan-rules/${id}`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name, amount: amt,
+      account_from: from,
+      account_to:   to,
+      day_of_month: domV ? +domV : null,
+      category_id:  catV ? +catV : null,
+    }),
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
+  btn.closest('.modal-overlay').remove();
+  toast('✓ Правило сохранено');
   loadBudget();
 }
 
