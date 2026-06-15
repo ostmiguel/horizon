@@ -6517,20 +6517,12 @@ window.onload = async () => {
   window._isOwner = isOwner;
   window.NEW_ARCH = isOwner && localStorage.getItem('hz_new_arch') === '1';
 
-  // Show lab nav only for Maks
+  // Show all owner nav items regardless of NEW_ARCH toggle
   if (isOwner) {
-    const navLab = document.getElementById('navLab');
-    if (navLab) navLab.style.display = '';
-  }
-
-  // Show goals/operations nav only with NEW_ARCH flag
-  if (window.NEW_ARCH) {
-    const navGoals = document.getElementById('navGoals');
-    if (navGoals) navGoals.style.display = '';
-    const navOps = document.getElementById('navOps');
-    if (navOps) navOps.style.display = '';
-    const navBudget = document.getElementById('navBudget');
-    if (navBudget) navBudget.style.display = '';
+    ['navLab', 'navGoals', 'navOps', 'navBudget'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    });
   }
 
   await loadMeta();
