@@ -437,6 +437,7 @@ async def get_metrics(request: Request):
                 "r_topup":   round(R_topup),
                 "c_cushion": round(C_cushion),
             },
+            "b0_accounts": b0_accounts,
         },
         "net_capital": {
             "value":     round(net_capital),
@@ -476,19 +477,6 @@ async def get_metrics(request: Request):
             "flow_forecast_month": round(flow_fact + V_remain),
         },
         "categories": categories,
-        "_debug": {
-            "b0_accounts": b0_accounts,
-            "all_accounts": [
-                {"name": a["name"], "balance": round(float(a["balance"])),
-                 "type": a["account_type"],
-                 "include_in_balance": a.get("include_in_balance"),
-                 "is_operational": a.get("is_operational"),
-                 "is_reserve": a.get("is_reserve"),
-                 "is_cushion": a.get("is_cushion"),
-                 "in_b0": _is_op(a)}
-                for a in accs.values()
-            ],
-        },
     }
 
 
@@ -507,17 +495,16 @@ async def get_forecast(request: Request):
     B0_now = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
 
     if op_names:
-        name_list = "'" + "','".join(n.replace("'", "''") for n in op_names) + "'"
-        daily_fact = await db.fetch(f"""
+        daily_fact = await db.fetch("""
             SELECT date,
-                   SUM(CASE WHEN account_to   IN ({name_list}) THEN amount ELSE 0 END)
-                 - SUM(CASE WHEN account_from IN ({name_list}) THEN amount ELSE 0 END)
+                   SUM(CASE WHEN account_to   = ANY($4::text[]) THEN amount ELSE 0 END)
+                 - SUM(CASE WHEN account_from = ANY($4::text[]) THEN amount ELSE 0 END)
                    AS net
             FROM transactions
             WHERE user_id=$1
               AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
             GROUP BY date ORDER BY date
-        """, user_id, year, month)
+        """, user_id, year, month, op_names)
     else:
         daily_fact = []
 

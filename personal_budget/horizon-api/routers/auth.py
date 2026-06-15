@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException, Response
 from pydantic import BaseModel
 import httpx
 import os
+import secrets
 import asyncpg
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -15,18 +16,25 @@ BASE_URL             = os.getenv("BASE_URL", "http://localhost:8000")
 # ── Google OAuth ─────────────────────────────────────────────
 @router.get("/google")
 async def auth_google():
+    state = secrets.token_urlsafe(32)
     url = (
         "https://accounts.google.com/o/oauth2/v2/auth"
         f"?client_id={GOOGLE_CLIENT_ID}"
         f"&redirect_uri={BASE_URL}/api/auth/google/callback"
         "&response_type=code"
         "&scope=openid email profile"
+        f"&state={state}"
     )
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url)
+    r = RedirectResponse(url)
+    r.set_cookie("oauth_state", state, httponly=True, samesite="lax", max_age=600, secure=True)
+    return r
 
 @router.get("/google/callback")
-async def auth_google_callback(code: str, request: Request, response: Response):
+async def auth_google_callback(code: str, state: str, request: Request, response: Response):
+    stored_state = request.cookies.get("oauth_state")
+    if not stored_state or stored_state != state:
+        raise HTTPException(400, "Invalid OAuth state")
     db = request.state.db
     async with httpx.AsyncClient() as client:
         # Exchange code for token
@@ -49,24 +57,33 @@ async def auth_google_callback(code: str, request: Request, response: Response):
                                       user_info.get("email"), user_info.get("name"))
     session_token = await _create_session(db, user["id"])
 
-    response.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=30*24*3600)
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(f"{BASE_URL}/?logged_in=1")
+    r = RedirectResponse(f"{BASE_URL}/?logged_in=1")
+    r.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=30*24*3600, secure=True)
+    r.delete_cookie("oauth_state")
+    return r
 
 # ── Yandex OAuth ─────────────────────────────────────────────
 @router.get("/yandex")
 async def auth_yandex():
+    state = secrets.token_urlsafe(32)
     url = (
         "https://oauth.yandex.ru/authorize"
         f"?client_id={YANDEX_CLIENT_ID}"
         f"&redirect_uri={BASE_URL}/api/auth/yandex/callback"
         "&response_type=code"
+        f"&state={state}"
     )
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url)
+    r = RedirectResponse(url)
+    r.set_cookie("oauth_state", state, httponly=True, samesite="lax", max_age=600, secure=True)
+    return r
 
 @router.get("/yandex/callback")
-async def auth_yandex_callback(code: str, request: Request, response: Response):
+async def auth_yandex_callback(code: str, state: str, request: Request, response: Response):
+    stored_state = request.cookies.get("oauth_state")
+    if not stored_state or stored_state != state:
+        raise HTTPException(400, "Invalid OAuth state")
     db = request.state.db
     async with httpx.AsyncClient() as client:
         token_res = await client.post("https://oauth.yandex.ru/token", data={
@@ -86,9 +103,11 @@ async def auth_yandex_callback(code: str, request: Request, response: Response):
                                       user_info.get("default_email"), user_info.get("real_name"))
     session_token = await _create_session(db, user["id"])
 
-    response.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=30*24*3600)
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(f"{BASE_URL}/?logged_in=1")
+    r = RedirectResponse(f"{BASE_URL}/?logged_in=1")
+    r.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=30*24*3600, secure=True)
+    r.delete_cookie("oauth_state")
+    return r
 
 # ── Me & Logout ──────────────────────────────────────────────
 @router.get("/me")
