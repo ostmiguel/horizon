@@ -2044,11 +2044,11 @@ async function loadDashboard() {
           },
           scales: {
             x: {
-              ticks: { color: '#9CA3AF', font: { size: 9, family: Sora }, maxTicksLimit: 12, maxRotation: 0 },
+              ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' }, maxTicksLimit: 12, maxRotation: 0 },
               grid: { display: false }, border: { display: false }
             },
             y: {
-              ticks: { color: '#9CA3AF', font: { size: 9, family: Sora }, callback: v => (v/1000).toFixed(0)+'к' },
+              ticks: { color: '#9CA3AF', font: { size: 9, family: 'Inter' }, callback: v => (v/1000).toFixed(0)+'к' },
               grid: {
                 color: ctx => ctx.tick.value === 0 ? 'rgba(220,38,38,0.5)' : 'rgba(0,0,0,0.04)',
                 lineWidth: ctx => ctx.tick.value === 0 ? 1.5 : 1
@@ -2201,11 +2201,11 @@ async function loadDashboard() {
           },
           scales: {
             x: {
-              ticks: { color:'#9CA3AF', font:{size:9,family:Sora}, callback: v=>(v/1000).toFixed(0)+'к' },
+              ticks: { color:'#9CA3AF', font:{size:9,family:'Inter'}, callback: v=>(v/1000).toFixed(0)+'к' },
               grid: { color:'rgba(0,0,0,0.04)' }
             },
             y: {
-              ticks: { color:'#6B7280', font:{size: isYear ? 9 : 10, family:Sora} },
+              ticks: { color:'#6B7280', font:{size: isYear ? 9 : 10, family:'Inter'} },
               grid: { display: false }
             }
           }
