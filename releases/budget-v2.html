@@ -193,7 +193,8 @@ body {
 }
 .card-title { font-size: 13px; font-weight: 600; color: var(--text2); }
 .card-hint  { font-size: 10px; color: var(--text3); }
-.card-body  { padding: 14px 16px; }
+.card-header { padding: 16px 18px 8px; display: flex; justify-content: space-between; align-items: center; }
+.card-body  { padding: 10px 18px 16px; }
 .card-body-sm { padding: 10px 14px; }
 
 /* ── CHART ── */
@@ -802,7 +803,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 /* ── New-arch dashboard layout ──────────────────────────────── */
 .hero { display:grid; grid-template-columns:1fr 1.4fr; gap:16px; background:var(--bg2); border-radius:var(--radius); padding:20px; margin-bottom:12px; box-shadow:var(--shadow); }
 .hero-left { display:flex; flex-direction:column; }
-.hero-right { display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.hero-right { display:flex; flex-direction:column; align-items:stretch; justify-content:center; overflow:hidden; }
 .pill { display:inline-flex; align-items:center; padding:3px 12px; border-radius:20px; font-size:11px; font-weight:600; margin:8px 0 4px; width:fit-content; }
 .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .chip { font-size:11px; color:var(--text2); padding:4px 10px; border-radius:8px; background:var(--bg3); border:1px solid var(--border); white-space:nowrap; }
@@ -827,7 +828,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .run-row b { font-size:13px; font-family:Sora,sans-serif; font-weight:600; color:var(--text); }
 .bar { height:7px; border-radius:99px; background:rgba(15,36,60,.08); overflow:hidden; }
 .bar i { display:block; height:100%; border-radius:99px; }
-.step { margin-top:6px; padding:14px; background:var(--bg3); border-radius:var(--radius-sm); }
+.step { margin-top:14px; padding:16px; border-radius:14px; border:1px solid var(--border2,var(--border)); background:linear-gradient(135deg,rgba(42,167,204,.10),rgba(180,222,60,.10)); }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
@@ -6229,10 +6230,9 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
       const labelDay = Math.round(crossDay);
       const labelX = +cx + 6 > x2 - 190 ? +cx - 6 : +cx + 6;
       const labelAnchor = +cx + 6 > x2 - 190 ? 'end' : 'start';
-      const textY = (zy + 18 < y2 - 20) ? (zy + 16).toFixed(0) : (zy - 7).toFixed(0);
+      const textY = Math.max(y1 + 16, zy - 12).toFixed(0);
       zeroCrossMarker = `<line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="#C0561A" stroke-dasharray="3 3" opacity="0.7"/>
         <circle cx="${cx}" cy="${zy}" r="4.5" fill="#C0561A"/>
-        <rect x="${labelAnchor==='end' ? +cx - 216 : +cx + 2}" y="${(+textY - 14).toFixed(0)}" width="212" height="17" rx="3" fill="rgba(255,255,255,0.88)"/>
         <text x="${labelX}" y="${textY}" fill="#C0561A" font-size="11" font-weight="600" text-anchor="${labelAnchor}">деньги заканчиваются ≈${labelDay} ${mName}</text>`;
     }
   }
@@ -6291,7 +6291,6 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
   const overlay   = `<rect x="${x1}" y="${y1}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair" onmousemove="fcHover(event,this)" onmouseleave="fcHoverLeave()"/>`;
 
   return `<svg id="${svgId}" viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="${ariaLabel || 'График прогноза баланса'}">
-  <title>Прогноз баланса</title><desc>Синий — факт, бирюзовый — прогноз, зелёный пунктир — план</desc>
   ${grad}${grid}${deficitZone}${yLbl}${xLbl}${today}${zeroLine}${band}${factArea}${factLine}${planLine}${fcstLine}${zeroCrossMarker}${dots}${crosshair}${overlay}
 </svg>`;
 }
@@ -6383,7 +6382,7 @@ window.fcHover = function(evt, el) {
   const cx = (x1 + (day - 1) / N * plotW).toFixed(1);
   if (tl) { tl.setAttribute('x1', cx); tl.setAttribute('x2', cx); tl.style.display = ''; }
 
-  const fv = v => v != null ? new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(v))) + ' ₽' : null;
+  const fv = v => v != null ? (v < 0 ? '−' : '') + new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(v))) + ' ₽' : null;
   const rows = [
     pt.fact     != null ? ['Факт',    fv(pt.fact),     '#2AA7CC'] : null,
     pt.forecast != null ? ['Прогноз', fv(pt.forecast), '#1FA497'] : null,
@@ -6552,12 +6551,12 @@ async function loadDashboardNew() {
     const maxCat     = cats[0]?.amount_forecast || 1;
     const catPalette = ['#2AA7CC','#1FA497','#3DB9A8','#5CC9B5','#B4DE3C','#8FBE1E','#6EA815','#A0C040'];
     const catHtml    = cats.map((c, i) => {
-      const w   = Math.round(c.amount_forecast / maxCat * 100);
+      const w   = c.amount_forecast > 0 ? Math.min(Math.round(c.amount_fact / c.amount_forecast * 100), 100) : 0;
       const clr = catPalette[i % catPalette.length];
       return `<div class="cat">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
           <span style="font-size:13px;color:var(--text)">${c.category}</span>
-          <span style="font-size:12px;color:var(--text2);font-family:Sora,sans-serif">${f(c.amount_fact)} <span style="color:var(--text3);font-size:11px">→ ${f(c.amount_forecast)} ₽</span></span>
+          <span style="font-size:13px;color:var(--text2);font-family:Sora,sans-serif;white-space:nowrap">${f(c.amount_fact)} <span style="color:var(--text3)">→ ${f(c.amount_forecast)}</span></span>
         </div>
         <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
           <div style="height:100%;width:${w}%;background:${clr};border-radius:3px"></div>
@@ -6617,6 +6616,11 @@ async function loadDashboardNew() {
         </div>
         <div class="hero-right">
           ${renderForecastChart(fc.points || [], todayDay, daysInMonth, 'Прогноз баланса')}
+          <div style="display:flex;gap:16px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
+            <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#2AA7CC;border-radius:2px;display:inline-block"></span>Факт</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз</span>
+            <span style="display:flex;align-items:center;gap:5px"><span style="width:18px;height:0;border-top:2px dashed #8FBE1E;display:inline-block"></span>План</span>
+          </div>
         </div>
       </div>
 
@@ -6639,9 +6643,9 @@ async function loadDashboardNew() {
         </div>
         <div class="card" style="display:flex;gap:14px;align-items:center">
           <div style="flex:1;min-width:0">
-            <div class="kpi-label">Устойчивость</div>
+            <div class="kpi-label">Финансовая устойчивость</div>
             <div class="kpi-val" style="font-size:22px;color:${C[res.status]}">${res.value} / 10</div>
-            <div class="kpi-sub">${{ green:'высокая', yellow:'средняя', red:'низкая' }[res.status] || ''}</div>
+            <div class="kpi-sub"><b style="color:${C[res.status]}">${{ green:'Высокая', yellow:'Средняя', red:'Низкая' }[res.status] || ''}</b></div>
             ${resLeverHtml}
           </div>
           ${renderRing(res.value * 10, res.value + '/10')}
@@ -6659,7 +6663,6 @@ async function loadDashboardNew() {
         <div class="card">
           <div class="card-header">
             <span class="card-title">Запас прочности</span>
-            <span class="card-hint">runway</span>
           </div>
           <div class="card-body">
             <div class="run">
