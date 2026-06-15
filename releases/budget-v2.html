@@ -166,9 +166,9 @@ body {
   transition: box-shadow 0.15s;
 }
 .kpi:hover { box-shadow: var(--shadow2); }
-.kpi-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.kpi-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
 .kpi-val { font-size: 20px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.kpi-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+.kpi-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
 .c-income   { color: var(--income); }
 .c-expense  { color: var(--expense); }
 .c-accent   { color: var(--accent); }
@@ -191,7 +191,7 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid var(--border);
 }
-.card-title { font-size: 10.5px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text2); }
 .card-hint  { font-size: 10px; color: var(--text3); }
 .card-body  { padding: 14px 16px; }
 .card-body-sm { padding: 10px 14px; }
@@ -558,8 +558,8 @@ body {
   }
   .kpi-val { font-size: 15px !important; }
   .kpi-val.mobile-fmt::after { content: attr(data-mobile); }
-  .kpi-label { font-size: 8px !important; }
-  .kpi-sub   { font-size: 8px !important; }
+  .kpi-label { font-size: 10px !important; }
+  .kpi-sub   { font-size: 10px !important; }
   .kpi { padding: 9px 10px !important; }
   .g21 { grid-template-columns: 1fr !important; display: flex !important; flex-direction: column !important; }
   .g12 { grid-template-columns: 1fr !important; }
@@ -821,9 +821,12 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .lower { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
 .cat { margin-bottom:10px; }
 .cat:last-child { margin-bottom:0; }
-.run { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.run-label { font-size:12px; color:var(--text2); min-width:72px; }
-.run-val { font-size:12px; font-weight:600; color:var(--text); min-width:48px; text-align:right; font-family:Sora,sans-serif; }
+.run { margin:13px 0; }
+.run-row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+.rv { font-size:12px; color:var(--text2); }
+.run-row b { font-size:13px; font-family:Sora,sans-serif; font-weight:600; color:var(--text); }
+.bar { height:7px; border-radius:99px; background:rgba(15,36,60,.08); overflow:hidden; }
+.bar i { display:block; height:100%; border-radius:99px; }
 .step { margin-top:6px; padding:14px; background:var(--bg3); border-radius:var(--radius-sm); }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
@@ -6158,7 +6161,7 @@ async function deleteRule(id) {
 
 function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
   if (!pts || pts.length < 2) return '';
-  const VW = 760, VH = 280;
+  const VW = 760, VH = 290;
   const pL = 60, pR = 70, pT = 34, pB = 38;
   const plotW = VW - pL - pR, plotH = VH - pT - pB;
   const x1 = pL, x2 = VW - pR, y1 = pT, y2 = VH - pB;
@@ -6221,14 +6224,16 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
     }
     if (crossDay) {
       const cx = (x1 + (crossDay - 1) / N * plotW).toFixed(1);
-      const mons = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+      const mons = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
       const mName = mons[new Date().getMonth()];
       const labelDay = Math.round(crossDay);
-      const labelX = +cx + 6 > x2 - 140 ? +cx - 6 : +cx + 6;
-      const labelAnchor = +cx + 6 > x2 - 140 ? 'end' : 'start';
-      zeroCrossMarker = `<line x1="${cx}" y1="${(zy + 2).toFixed(0)}" x2="${cx}" y2="${y2}" stroke="#C0561A" stroke-dasharray="3 3" opacity="0.7"/>
+      const labelX = +cx + 6 > x2 - 190 ? +cx - 6 : +cx + 6;
+      const labelAnchor = +cx + 6 > x2 - 190 ? 'end' : 'start';
+      const textY = (zy + 18 < y2 - 20) ? (zy + 16).toFixed(0) : (zy - 7).toFixed(0);
+      zeroCrossMarker = `<line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="#C0561A" stroke-dasharray="3 3" opacity="0.7"/>
         <circle cx="${cx}" cy="${zy}" r="4.5" fill="#C0561A"/>
-        <text x="${labelX}" y="${(zy - 7).toFixed(0)}" fill="#C0561A" font-size="11" font-weight="600" text-anchor="${labelAnchor}">деньги заканчиваются ≈${labelDay} ${mName}</text>`;
+        <rect x="${labelAnchor==='end' ? +cx - 216 : +cx + 2}" y="${(+textY - 14).toFixed(0)}" width="212" height="17" rx="3" fill="rgba(255,255,255,0.88)"/>
+        <text x="${labelX}" y="${textY}" fill="#C0561A" font-size="11" font-weight="600" text-anchor="${labelAnchor}">деньги заканчиваются ≈${labelDay} ${mName}</text>`;
     }
   }
 
@@ -6279,9 +6284,15 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
     dots += `<circle cx="${dX(lp.day)}" cy="${vY(lp.fact)}" r="4" fill="#2AA7CC" stroke="var(--bg2)" stroke-width="1.5"/>`;
   }
 
-  return `<svg viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="${ariaLabel || 'График прогноза баланса'}">
+  const svgId = 'fc' + Math.random().toString(36).slice(2,7);
+  (window._fcCharts = window._fcCharts || {})[svgId] = { pts, minP, spanP, x1, x2, y1, y2, plotW, N };
+
+  const crosshair = `<line id="${svgId}-tl" x1="0" y1="${y1}" x2="0" y2="${y2}" stroke="rgba(15,36,60,.18)" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>`;
+  const overlay   = `<rect x="${x1}" y="${y1}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair" onmousemove="fcHover(event,this)" onmouseleave="fcHoverLeave()"/>`;
+
+  return `<svg id="${svgId}" viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="${ariaLabel || 'График прогноза баланса'}">
   <title>Прогноз баланса</title><desc>Синий — факт, бирюзовый — прогноз, зелёный пунктир — план</desc>
-  ${grad}${grid}${deficitZone}${yLbl}${xLbl}${today}${zeroLine}${band}${factArea}${factLine}${planLine}${fcstLine}${zeroCrossMarker}${dots}
+  ${grad}${grid}${deficitZone}${yLbl}${xLbl}${today}${zeroLine}${band}${factArea}${factLine}${planLine}${fcstLine}${zeroCrossMarker}${dots}${crosshair}${overlay}
 </svg>`;
 }
 
@@ -6351,9 +6362,60 @@ function renderWaterfall(steps) {
 </svg>`;
 }
 
+// ── Chart hover tooltip ──────────────────────────────────────────────────────
+window.fcHover = function(evt, el) {
+  const svg = el.ownerSVGElement;
+  if (!svg || !svg.id) return;
+  const meta = (window._fcCharts || {})[svg.id];
+  if (!meta) return;
+  const { pts, minP, spanP, x1, x2, y1, y2, plotW, N } = meta;
+
+  const svgRect = svg.getBoundingClientRect();
+  const scaleX  = svg.viewBox.baseVal.width / svgRect.width;
+  const mx = (evt.clientX - svgRect.left) * scaleX;
+  if (mx < x1 || mx > x1 + plotW) { window.fcHoverLeave(); return; }
+
+  const day = Math.max(1, Math.min(Math.round((mx - x1) / plotW * N + 1), pts.length));
+  const pt  = pts.find(p => p.day === day);
+  if (!pt) return;
+
+  const tl = document.getElementById(svg.id + '-tl');
+  const cx = (x1 + (day - 1) / N * plotW).toFixed(1);
+  if (tl) { tl.setAttribute('x1', cx); tl.setAttribute('x2', cx); tl.style.display = ''; }
+
+  const fv = v => v != null ? new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(v))) + ' ₽' : null;
+  const rows = [
+    pt.fact     != null ? ['Факт',    fv(pt.fact),     '#2AA7CC'] : null,
+    pt.forecast != null ? ['Прогноз', fv(pt.forecast), '#1FA497'] : null,
+    pt.plan     != null ? ['План',    fv(pt.plan),     '#8FBE1E'] : null,
+  ].filter(Boolean).map(([lbl, val, clr]) =>
+    `<div style="display:flex;justify-content:space-between;gap:14px;margin:2px 0">
+      <span style="color:#93A1B5;font-size:11px">${lbl}</span>
+      <span style="font-family:Sora,sans-serif;font-weight:600;font-size:12px;color:${clr}">${val}</span>
+    </div>`).join('');
+
+  let tip = document.getElementById('fc-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'fc-tooltip';
+    tip.style.cssText = 'position:fixed;background:#fff;border:1px solid rgba(15,36,60,.09);border-radius:10px;padding:10px 14px;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(15,36,60,.14);pointer-events:none;z-index:9999;min-width:154px;';
+    document.body.appendChild(tip);
+  }
+  tip.innerHTML = `<div style="font-size:11px;font-weight:600;color:#5A6B82;margin-bottom:6px">День ${day}</div>${rows}`;
+  tip.style.display = 'block';
+  const tx = Math.min(evt.clientX + 16, window.innerWidth - 175);
+  tip.style.left = tx + 'px';
+  tip.style.top  = Math.max(evt.clientY - 40, 8) + 'px';
+};
+window.fcHoverLeave = function() {
+  const tip = document.getElementById('fc-tooltip');
+  if (tip) tip.style.display = 'none';
+  document.querySelectorAll('[id$="-tl"]').forEach(el => { el.style.display = 'none'; });
+};
+
 function renderRing(pct, label) {
   pct = Math.max(0, Math.min(100, Math.round(pct)));
-  const fill = pct >= 70 ? '#9FC22A' : pct >= 40 ? '#E5A823' : '#DC5B5B';
+  const fill = pct >= 70 ? '#9FC22A' : pct >= 40 ? '#E5A823' : '#B0492A';
   return `<div style="position:relative;width:64px;height:64px;border-radius:50%;background:conic-gradient(${fill} ${pct}%,rgba(15,36,60,.10) 0);display:grid;place-items:center;flex-shrink:0">
     <div style="position:absolute;width:50px;height:50px;border-radius:50%;background:var(--bg2)"></div>
     <span style="position:relative;font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:var(--text)">${label}</span>
@@ -6377,7 +6439,7 @@ async function loadDashboardNew() {
     const af = await aRes.json();
 
     const f  = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(n)));
-    const C = { green: '#5E9B1E', yellow: '#D97706', red: '#DC2626' };
+    const C = { green: '#5E9B1E', yellow: '#D97706', red: '#B0492A' };
     const PILL = {
       green:  { bg: 'linear-gradient(90deg,rgba(94,155,30,.18),rgba(180,222,60,.18))', color: '#5E9B1E', label: 'В графике'  },
       yellow: { bg: 'rgba(217,119,6,.14)',  color: '#D97706', label: 'На грани'   },
@@ -6391,7 +6453,7 @@ async function loadDashboardNew() {
 
     const todayDay    = new Date().getDate();
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const monthNamesShort = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+    const monthNamesShort = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
     const mShort = monthNamesShort[new Date().getMonth()];
 
     // Zero-crossing day (from forecast points)
@@ -6456,12 +6518,12 @@ async function loadDashboardNew() {
 
     const ncSign  = nc.value < 0 ? '−' : '';
     const ncDelta = nc.delta_pct != null
-      ? `<span style="color:${nc.delta_pct >= 0 ? '#5E9B1E' : '#DC2626'}">${nc.delta_pct >= 0 ? '▲' : '▼'} ${Math.abs(nc.delta_pct)}%</span> за 30 дней`
+      ? `<span style="color:${nc.delta_pct >= 0 ? '#5E9B1E' : '#B0492A'}">${nc.delta_pct >= 0 ? '▲' : '▼'} ${Math.abs(nc.delta_pct)}%</span> за 30 дней`
       : (nc.value >= 0 ? 'активы > обязательства' : 'обязательства > активы');
     // For negative capital: show deleveraging note instead of meaningless bar
     const ncBarOrNote = nc.value >= 0
       ? `<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:100%;background:${C[nc.status]};border-radius:2px"></div></div>`
-      : `<div style="font-size:11px;color:#5E9B1E;margin-top:6px">▲ гасишь тело ~${f(dsr.monthly_payments)}/мес → растёт</div>`;
+      : `<div class="kpi-sub" style="color:#5E9B1E">▲ гасишь тело ~${f(dsr.monthly_payments)}/мес → растёт</div>`;
 
     const dsrW     = Math.min(Math.round(dsr.value / 50 * 100), 100);
     const dsrColor = C[dsr.status];
@@ -6546,7 +6608,7 @@ async function loadDashboardNew() {
 
       <div class="hero">
         <div class="hero-left">
-          <div class="kpi-label">Свободно до конца месяца</div>
+          <div class="kpi-label">Свободно на конец месяца</div>
           <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${pill.color}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
           <div style="font-size:11px;color:var(--text3);margin-bottom:6px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
@@ -6601,18 +6663,12 @@ async function loadDashboardNew() {
           </div>
           <div class="card-body">
             <div class="run">
-              <span class="run-label">Плановый</span>
-              <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:${runPlan}%;background:var(--accent);border-radius:3px"></div>
-              </div>
-              <span class="run-val">${run.planned_months} мес</span>
+              <div class="run-row"><span class="rv">Плановый runway</span><b>${run.planned_months} мес</b></div>
+              <div class="bar"><i style="width:${runPlan}%;background:linear-gradient(90deg,#2AA7CC,#1FA497)"></i></div>
             </div>
             <div class="run">
-              <span class="run-label">Поведенческий</span>
-              <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:${runBeh}%;background:${C[run.status]};border-radius:3px"></div>
-              </div>
-              <span class="run-val">${run.behavioral_months} мес</span>
+              <div class="run-row"><span class="rv">Поведенческий runway</span><b>${run.behavioral_months} мес</b></div>
+              <div class="bar"><i style="width:${runBeh}%;background:${run.status === 'green' ? 'linear-gradient(90deg,#1FA497,#9FC22A)' : run.status === 'yellow' ? 'linear-gradient(90deg,#D97706,#C0741A)' : 'linear-gradient(90deg,#C0741A,#B0492A)'}"></i></div>
             </div>
             ${stepHtml}
           </div>
