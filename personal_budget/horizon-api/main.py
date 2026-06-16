@@ -1,14 +1,14 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncpg
 import os
-from dotenv import load_dotenv
 
 from middleware import AuthMiddleware
 from routers import accounts, transactions, categories, loans, auth, metrics, goals, plan_rules, category_budgets
-
-load_dotenv()
 
 DB_URL = os.getenv("DATABASE_URL")
 
