@@ -811,21 +811,21 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .wf-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .wf-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;cursor:pointer;font-size:11px;border:1px solid transparent;transition:background 150ms ease-out,border-color 150ms ease-out;white-space:nowrap;user-select:none;-webkit-user-select:none}
 .wf-pill:active{transform:scale(0.97)}
-.wf-pill-lbl{color:var(--text2)}
-.wf-pill-val{font-weight:600}
+.wf-pill-lbl{color:#5E7088;font-size:12px}
+.wf-pill-val{font-weight:600;font-size:13px;font-variant-numeric:tabular-nums}
 .wf-pill--bal{background:rgba(157,176,200,.12)}.wf-pill--bal.active{background:rgba(157,176,200,.26);border-color:rgba(157,176,200,.5)}
 .wf-pill--inc{background:rgba(180,222,60,.13)}.wf-pill--inc.active{background:rgba(180,222,60,.28);border-color:rgba(180,222,60,.6)}
-.wf-pill--fix{background:rgba(176,73,42,.10)}.wf-pill--fix.active{background:rgba(176,73,42,.24);border-color:rgba(176,73,42,.45)}
-.wf-pill--var{background:rgba(176,73,42,.10)}.wf-pill--var.active{background:rgba(176,73,42,.24);border-color:rgba(176,73,42,.45)}
+.wf-pill--fix{background:rgba(157,176,200,.11)}.wf-pill--fix.active{background:rgba(157,176,200,.24);border-color:rgba(100,130,165,.38)}
+.wf-pill--var{background:rgba(157,176,200,.10)}.wf-pill--var.active{background:rgba(157,176,200,.20)}
 .wf-pill--rsv{background:rgba(73,166,234,.10)}.wf-pill--rsv.active{background:rgba(73,166,234,.24);border-color:rgba(73,166,234,.45)}
-.wf-det-section{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 4px;margin-top:4px}
+.wf-det-section{font-size:13px;font-weight:600;color:#5E7088;padding:8px 0 4px;margin-top:4px}
 .wf-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 220ms ease-out,opacity 220ms ease-out;opacity:0;pointer-events:none}
 .wf-detail.open{grid-template-rows:1fr;opacity:1;pointer-events:auto}
 .wf-detail>div{overflow:hidden}
 .wf-det-inner{padding:10px 2px 4px}
-.wf-det-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
+.wf-det-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(125,165,205,.12);font-size:14px;font-weight:500;color:#0F243C;font-variant-numeric:tabular-nums}
 .wf-det-row:last-child{border-bottom:none}
-.wf-det-hint{font-size:11px;color:var(--text2);padding:6px 0 4px;line-height:1.6}
+.wf-det-hint{font-size:12.5px;color:#5E7088;padding:6px 0 4px;line-height:1.5}
 .levers { counter-reset:l; }
 .lever { display:flex; gap:12px; padding:12px 0; border-top:1px solid var(--border); }
 .lever:first-child { border-top:0; padding-top:2px; }
@@ -6514,11 +6514,11 @@ async function loadDashboardNew() {
         </span>
         <span class="wf-pill wf-pill--fix" data-pill="fixed" onclick="wfPillClick('fixed')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Платежи</span>
-          <b class="wf-pill-val" style="color:#B0492A">−${f(wf.f_remain)} ₽</b>
+          <b class="wf-pill-val" style="color:#0F243C">−${f(wf.f_remain)} ₽</b>
         </span>
         <span class="wf-pill wf-pill--var" data-pill="variable" onclick="wfPillClick('variable')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Повседневные</span>
-          <b class="wf-pill-val" style="color:#B0492A">−${f(wf.v_remain)} ₽</b>
+          <b class="wf-pill-val" style="color:#0F243C">−${f(wf.v_remain)} ₽</b>
         </span>
         ${wf.r_topup >= 1 ? `<span class="wf-pill wf-pill--rsv" data-pill="reserve" onclick="wfPillClick('reserve')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Резерв</span>
@@ -6649,7 +6649,7 @@ async function loadDashboardNew() {
           <div class="kpi-label">Свободно на конец месяца</div>
           <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${pill.color}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:6px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
+          <div style="font-size:12.5px;color:#5E7088;line-height:1.5;margin-bottom:6px;font-variant-numeric:tabular-nums">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
           ${warningHtml}
           ${pillsHtml}
         </div>
@@ -6783,8 +6783,8 @@ function wfPillClick(type) {
     const items = det.variable_items || [];
     html = `<div class="wf-det-hint">Прогноз: ~${fv(rate)} ₽/день × ${dLeft} дней — по среднему за последние 30 дней</div>`;
     if (items.length) {
-      html += '<div class="wf-det-hint" style="margin-top:4px;font-weight:500;color:var(--text)">Топ категорий этого месяца:</div>';
-      html += items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:var(--text2)">−${fv(it.amount)} ₽</span></div>`).join('');
+      html += '<div class="wf-det-section">Топ категорий этого месяца</div>';
+      html += items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="color:#5E7088">−${fv(it.amount)} ₽</span></div>`).join('');
     }
   }
 
