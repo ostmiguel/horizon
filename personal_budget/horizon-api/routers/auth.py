@@ -13,56 +13,6 @@ YANDEX_CLIENT_ID     = os.getenv("YANDEX_CLIENT_ID")
 YANDEX_CLIENT_SECRET = os.getenv("YANDEX_CLIENT_SECRET")
 BASE_URL             = os.getenv("BASE_URL", "http://localhost:8000")
 
-# ── Google OAuth ─────────────────────────────────────────────
-@router.get("/google")
-async def auth_google():
-    state = secrets.token_urlsafe(32)
-    url = (
-        "https://accounts.google.com/o/oauth2/v2/auth"
-        f"?client_id={GOOGLE_CLIENT_ID}"
-        f"&redirect_uri={BASE_URL}/api/auth/google/callback"
-        "&response_type=code"
-        "&scope=openid email profile"
-        f"&state={state}"
-    )
-    from fastapi.responses import RedirectResponse
-    r = RedirectResponse(url)
-    r.set_cookie("oauth_state", state, httponly=True, samesite="lax", max_age=600, secure=True)
-    return r
-
-@router.get("/google/callback")
-async def auth_google_callback(code: str, state: str, request: Request, response: Response):
-    stored_state = request.cookies.get("oauth_state")
-    if not stored_state or stored_state != state:
-        raise HTTPException(400, "Invalid OAuth state")
-    db = request.state.db
-    async with httpx.AsyncClient() as client:
-        # Exchange code for token
-        token_res = await client.post("https://oauth2.googleapis.com/token", data={
-            "code": code,
-            "client_id": GOOGLE_CLIENT_ID,
-            "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": f"{BASE_URL}/api/auth/google/callback",
-            "grant_type": "authorization_code",
-        })
-        tokens = token_res.json()
-        # Get user info
-        user_res = await client.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {tokens['access_token']}"}
-        )
-        user_info = user_res.json()
-
-    user = await _get_or_create_user(db, "google", user_info["sub"],
-                                      user_info.get("email"), user_info.get("name"))
-    session_token = await _create_session(db, user["id"])
-
-    from fastapi.responses import RedirectResponse
-    r = RedirectResponse(f"{BASE_URL}/?logged_in=1")
-    r.set_cookie("session", session_token, httponly=True, samesite="lax", max_age=30*24*3600, secure=True)
-    r.delete_cookie("oauth_state")
-    return r
-
 # ── Yandex OAuth ─────────────────────────────────────────────
 @router.get("/yandex")
 async def auth_yandex():
@@ -128,6 +78,7 @@ async def logout(request: Request, response: Response):
 
 # ── Helpers ──────────────────────────────────────────────────
 async def _get_or_create_user(db, provider: str, provider_id: str, email: str, name: str):
+    # Fast path: found by (provider, provider_id)
     row = await db.fetchrow(
         "SELECT * FROM users WHERE provider=$1 AND provider_id=$2",
         provider, provider_id
@@ -135,10 +86,16 @@ async def _get_or_create_user(db, provider: str, provider_id: str, email: str, n
     if row:
         await db.execute("UPDATE users SET last_login=NOW() WHERE id=$1", row["id"])
         return dict(row)
+    # New login or provider switch: upsert by email.
+    # Also updates provider/provider_id so next login hits the fast path.
     row = await db.fetchrow("""
         INSERT INTO users (email, name, provider, provider_id)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, last_login=NOW()
+        ON CONFLICT (email) DO UPDATE
+          SET name=EXCLUDED.name,
+              provider=EXCLUDED.provider,
+              provider_id=EXCLUDED.provider_id,
+              last_login=NOW()
         RETURNING *
     """, email, name, provider, provider_id)
     return dict(row)
