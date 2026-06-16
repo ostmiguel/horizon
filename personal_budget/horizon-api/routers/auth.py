@@ -4,6 +4,7 @@ import httpx
 import os
 import secrets
 import asyncpg
+from urllib.parse import urlencode
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -17,13 +18,13 @@ BASE_URL             = os.getenv("BASE_URL", "http://localhost:8000")
 @router.get("/yandex")
 async def auth_yandex():
     state = secrets.token_urlsafe(32)
-    url = (
-        "https://oauth.yandex.ru/authorize"
-        f"?client_id={YANDEX_CLIENT_ID}"
-        f"&redirect_uri={BASE_URL}/api/auth/yandex/callback"
-        "&response_type=code"
-        f"&state={state}"
-    )
+    params = urlencode({
+        "client_id": YANDEX_CLIENT_ID,
+        "redirect_uri": f"{BASE_URL}/api/auth/yandex/callback",
+        "response_type": "code",
+        "state": state,
+    })
+    url = f"https://oauth.yandex.ru/authorize?{params}"
     from fastapi.responses import RedirectResponse
     r = RedirectResponse(url)
     r.set_cookie("oauth_state", state, httponly=True, samesite="lax", max_age=600, secure=True)
