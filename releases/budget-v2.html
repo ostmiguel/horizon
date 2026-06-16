@@ -815,15 +815,15 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .wf-pill-val{font-weight:600;font-size:13px;font-variant-numeric:tabular-nums}
 .wf-pill--bal{background:rgba(157,176,200,.12)}.wf-pill--bal.active{background:rgba(157,176,200,.26);border-color:rgba(157,176,200,.5)}
 .wf-pill--inc{background:rgba(180,222,60,.13)}.wf-pill--inc.active{background:rgba(180,222,60,.28);border-color:rgba(180,222,60,.6)}
-.wf-pill--fix{background:rgba(157,176,200,.11)}.wf-pill--fix.active{background:rgba(157,176,200,.24);border-color:rgba(100,130,165,.38)}
-.wf-pill--var{background:rgba(157,176,200,.10)}.wf-pill--var.active{background:rgba(157,176,200,.20)}
+.wf-pill--fix{background:rgba(176,73,42,.08)}.wf-pill--fix.active{background:rgba(176,73,42,.16);border-color:rgba(176,73,42,.32)}
+.wf-pill--var{background:rgba(176,73,42,.08)}.wf-pill--var.active{background:rgba(176,73,42,.15);border-color:rgba(176,73,42,.28)}
 .wf-pill--rsv{background:rgba(73,166,234,.10)}.wf-pill--rsv.active{background:rgba(73,166,234,.24);border-color:rgba(73,166,234,.45)}
 .wf-det-section{font-size:13px;font-weight:600;color:#5E7088;padding:8px 0 4px;margin-top:4px}
 .wf-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 220ms ease-out,opacity 220ms ease-out;opacity:0;pointer-events:none}
 .wf-detail.open{grid-template-rows:1fr;opacity:1;pointer-events:auto}
 .wf-detail>div{overflow:hidden}
 .wf-det-inner{padding:10px 2px 4px}
-.wf-det-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(125,165,205,.12);font-size:14px;font-weight:500;color:#0F243C;font-variant-numeric:tabular-nums}
+.wf-det-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(125,165,205,.12);font-size:12.5px;color:#5E7088;line-height:1.5;font-variant-numeric:tabular-nums}
 .wf-det-row:last-child{border-bottom:none}
 .wf-det-hint{font-size:12.5px;color:#5E7088;padding:6px 0 4px;line-height:1.5}
 .levers { counter-reset:l; }
@@ -6229,7 +6229,7 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
     const zy = +vY(0);
     deficitZone = `<rect x="${x1}" y="${zy}" width="${plotW}" height="${(y2 - zy).toFixed(1)}" fill="#D6785A" fill-opacity="0.08"/>`;
     zeroLine = `<line x1="${x1}" y1="${zy}" x2="${x2}" y2="${zy}" stroke="#C28A3A" stroke-width="1.5" stroke-dasharray="5 4"/>
-      <text x="${x1 + 4}" y="${(zy - 4).toFixed(0)}" fill="#B07A1E" font-size="11" font-weight="600">0 ₽</text>`;
+      <text x="${x1 - 6}" y="${(zy + 4).toFixed(0)}" fill="#B07A1E" font-size="11" font-weight="600" text-anchor="end">0 ₽</text>`;
     // Find zero-crossing day (fact→forecast transition or within forecast)
     let crossDay = null;
     const allSeq = [...factPts.map(p => ({d: p.day, v: p.fact})), ...fcstPts.map(p => ({d: p.day, v: p.forecast}))];
@@ -6430,12 +6430,11 @@ window.fcHoverLeave = function() {
   document.querySelectorAll('[id$="-tl"]').forEach(el => { el.style.display = 'none'; });
 };
 
-function renderRing(pct, label) {
+function renderRing(pct) {
   pct = Math.max(0, Math.min(100, Math.round(pct)));
-  const fill = pct >= 70 ? '#9FC22A' : pct >= 40 ? '#E5A823' : '#B0492A';
+  const fill = pct >= 70 ? '#B4DE3C' : pct >= 40 ? '#E5A823' : '#B0492A';
   return `<div style="position:relative;width:64px;height:64px;border-radius:50%;background:conic-gradient(${fill} ${pct}%,rgba(15,36,60,.10) 0);display:grid;place-items:center;flex-shrink:0">
     <div style="position:absolute;width:50px;height:50px;border-radius:50%;background:var(--bg2)"></div>
-    <span style="position:relative;font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:var(--text)">${label}</span>
   </div>`;
 }
 
@@ -6458,7 +6457,7 @@ async function loadDashboardNew() {
     const f  = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(n)));
     const C = { green: '#5E9B1E', yellow: '#D97706', red: '#B0492A' };
     const PILL = {
-      green:  { bg: 'linear-gradient(90deg,rgba(94,155,30,.18),rgba(180,222,60,.18))', color: '#5E9B1E', label: 'В графике'  },
+      green:  { bg: 'linear-gradient(90deg,#c1ee56,#a3d837)', color: '#0F243C', label: '• В графике'  },
       yellow: { bg: 'rgba(217,119,6,.14)',  color: '#D97706', label: 'На грани'   },
       red:    { bg: 'rgba(176,73,42,.14)',  color: '#B0492A', label: 'Не хватает' },
     };
@@ -6564,7 +6563,10 @@ async function loadDashboardNew() {
       : `<div class="kpi-sub" style="color:#5E9B1E">▲ гасишь тело ~${f(dsr.monthly_payments)}/мес → растёт</div>`;
 
     const dsrW     = Math.min(Math.round(dsr.value / 50 * 100), 100);
-    const dsrColor = C[dsr.status];
+    const dsrOk    = dsr.status === 'green';
+    const dsrColor = dsrOk ? '#0F243C' : '#B0492A';
+    const dsrSubText = dsrOk ? 'Комфортно · ниже 30%' : 'Высокая · норма ниже 30%';
+    const dsrSubColor = dsrOk ? '#B4DE3C' : '#B0492A';
 
     const runPlan  = Math.min(Math.round(run.planned_months   / 12 * 100), 100);
     const runBeh   = Math.min(Math.round(run.behavioral_months / 12 * 100), 100);
@@ -6593,12 +6595,12 @@ async function loadDashboardNew() {
       const w   = c.amount_forecast > 0 ? Math.min(Math.round(c.amount_fact / c.amount_forecast * 100), 100) : 0;
       const clr = catPalette[i % catPalette.length];
       return `<div class="cat">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-          <span style="font-size:13px;color:var(--text)">${c.category}</span>
-          <span style="font-size:13px;color:var(--text2);font-family:Sora,sans-serif;white-space:nowrap">${f(c.amount_fact)} <span style="color:var(--text3)">→ ${f(c.amount_forecast)}</span></span>
-        </div>
-        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:${w}%;background:${clr};border-radius:3px"></div>
+        <div style="font-size:12.5px;color:#5E7088;margin-bottom:4px">${c.category}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${w}%;background:${clr};border-radius:3px"></div>
+          </div>
+          <span style="font-size:12.5px;color:#5E7088;font-family:Sora,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums">${f(c.amount_fact)} <span style="color:rgba(94,112,136,.55)">/ ${f(c.amount_forecast)}</span></span>
         </div>
       </div>`;
     }).join('');
@@ -6647,7 +6649,7 @@ async function loadDashboardNew() {
       <div class="hero">
         <div class="hero-left">
           <div class="kpi-label">Свободно на конец месяца</div>
-          <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${pill.color}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
+          <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${sts.value < 0 ? '#B0492A' : '#0F243C'}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
           <div style="font-size:12.5px;color:#5E7088;line-height:1.5;margin-bottom:6px;font-variant-numeric:tabular-nums">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
           ${warningHtml}
@@ -6668,26 +6670,27 @@ async function loadDashboardNew() {
       <div class="stats">
         <div class="card">
           <div class="kpi-label">Чистый капитал</div>
-          <div class="kpi-val" style="font-size:22px;color:${C[nc.status]}">${ncSign}${f(nc.value)} ₽</div>
+          <div class="kpi-val" style="font-size:22px;color:${nc.value < 0 ? '#B0492A' : '#0F243C'}">${ncSign}${f(nc.value)} ₽</div>
           <div class="kpi-sub" style="margin-bottom:6px">${ncDelta}</div>
           ${ncBarOrNote}
         </div>
         <div class="card">
           <div class="kpi-label">Кредитная нагрузка</div>
           <div class="kpi-val" style="font-size:22px;color:${dsrColor}">${dsr.value}%</div>
-          <div class="kpi-sub" style="margin-bottom:8px">${f(dsr.monthly_payments)} ₽/мес · DSR</div>
+          <div class="kpi-sub" style="margin-bottom:4px">${f(dsr.monthly_payments)} ₽/мес · DSR</div>
+          <div style="font-size:11.5px;color:${dsrSubColor};font-weight:500;margin-bottom:8px">${dsrSubText}</div>
           <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
-            <div style="height:100%;width:${dsrW}%;background:${dsrColor};border-radius:2px"></div>
+            <div style="height:100%;width:${dsrW}%;background:linear-gradient(90deg,#2AA7CC,#B4DE3C);border-radius:2px"></div>
           </div>
         </div>
         <div class="card" style="display:flex;gap:14px;align-items:center">
           <div style="flex:1;min-width:0">
             <div class="kpi-label">Финансовая устойчивость</div>
-            <div class="kpi-val" style="font-size:22px;color:${C[res.status]}">${res.value} / 10</div>
-            <div class="kpi-sub"><b style="color:${C[res.status]}">${{ green:'Высокая', yellow:'Средняя', red:'Низкая' }[res.status] || ''}</b></div>
+            <div class="kpi-val" style="font-size:22px;color:#0F243C">${res.value}<span style="color:#5E7088;font-size:16px;font-weight:400"> / 10</span></div>
+            <div class="kpi-sub"><b style="color:${{ green:'#B4DE3C', yellow:'#D97706', red:'#bf7419' }[res.status] || '#5E7088'}">${{ green:'Высокая', yellow:'Средняя', red:'Низкая' }[res.status] || ''}</b></div>
             ${resLeverHtml}
           </div>
-          ${renderRing(res.value * 10, res.value + '/10')}
+          ${renderRing(res.value * 10)}
         </div>
       </div>
 
