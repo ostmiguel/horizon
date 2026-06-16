@@ -6251,7 +6251,7 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
       const lbW = 190, lbH = 20;
       // lower half → upper-right; upper half → lower-left
       let lbX = goUp ? cx + 16 : cx - 16 - lbW;
-      const lbYraw = goUp ? zy - 52 : zy + 30;
+      const lbYraw = goUp ? zy - 72 : zy + 30;
       const lbY = Math.max(y1 + 4, Math.min(y2 - lbH - 4, lbYraw));
       // Leader line end: corner of label box closest to circle
       const leX = (goUp ? lbX : lbX + lbW).toFixed(1);
@@ -6541,8 +6541,8 @@ async function loadDashboardNew() {
 
     // Early warning lines (when STS < 0)
     const warningHtml = sts.value < 0 ? `
-      ${zeroCrossDay ? `<div class="warnote"><b>Деньги заканчиваются около ${zeroCrossDay} ${mShort}</b> — платежи приходят раньше поступления дохода.</div>` : ''}
-      ${structuralDeficit ? `<div class="muted">Расходы (~${f(totalOutflows)} ₽) больше дохода (~${f(wf.i_remain)} ₽) примерно на <b style="color:var(--text)">${f(deficitGap)} ₽</b>.</div>` : ''}
+      ${zeroCrossDay ? `<div class="muted">Деньги заканчиваются около ${zeroCrossDay} ${mShort} — платежи приходят раньше поступления дохода.</div>` : ''}
+      ${structuralDeficit ? `<div class="muted">Расходы (~${f(totalOutflows)} ₽) больше дохода (~${f(wf.i_remain)} ₽) примерно на ${f(deficitGap)} ₽.</div>` : ''}
     ` : '';
 
     // Levers block (when STS < 0)
