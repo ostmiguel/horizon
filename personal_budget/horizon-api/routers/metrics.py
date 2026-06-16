@@ -628,7 +628,8 @@ async def get_forecast(request: Request):
     today, year, month, d_now, d_left, days_in_month, month_start, month_end = month_context()
 
     accs = await account_balances(db, user_id)
-    op_names = [a["name"] for a in accs.values() if _is_op(a)]
+    op_names    = [a["name"] for a in accs.values() if _is_op(a)]
+    reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
 
     B0_now = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
 
@@ -681,6 +682,10 @@ async def get_forecast(request: Request):
             if not is_variable_flow:
                 # Variable flow already accounted for via r_var; skip to avoid double-counting
                 plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) - amount
+        elif at in reserve_names:
+            # Reserve top-up: money leaves operational accounts
+            plan_by_day_all[day]   = plan_by_day_all.get(day, 0)   - amount
+            plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) - amount
 
     points = []
     running_fact     = B_month_start
