@@ -510,19 +510,36 @@ async def get_metrics(request: Request):
     income_items = [{"category": k, "amount": round(v)}
                     for k, v in sorted(income_by_cat.items(), key=lambda x: -x[1])]
 
-    fixed_by_cat: dict[str, float] = {}
+    fixed_by_cat: dict[tuple, float] = {}
     for r in plan_rows:
         if r.get("account_to") == "Расход" and (
             r.get("cat_expense_type") == "fixed"
             or r.get("cat_character") in EPISODIC_CHARS
         ):
-            cat = r.get("cat_category") or "Расходы"
-            fixed_by_cat[cat] = fixed_by_cat.get(cat, 0) + float(r["amount"])
+            cat  = r.get("cat_category") or "Расходы"
+            kind = "episodic" if r.get("cat_character") in EPISODIC_CHARS else "fixed"
+            key  = (cat, kind)
+            fixed_by_cat[key] = fixed_by_cat.get(key, 0) + float(r["amount"])
         elif r.get("account_to") == "Обязательства":
             cat = r.get("cat_category") or "Обязательства"
-            fixed_by_cat[cat] = fixed_by_cat.get(cat, 0) + float(r["amount"])
-    fixed_items = [{"category": k, "amount": round(v)}
+            key = (cat, "fixed")
+            fixed_by_cat[key] = fixed_by_cat.get(key, 0) + float(r["amount"])
+    fixed_items = [{"category": k[0], "type": k[1], "amount": round(v)}
                    for k, v in sorted(fixed_by_cat.items(), key=lambda x: -x[1])]
+
+    reserve_topup_items: list[dict] = []
+    topup_by_name: dict[str, float] = {}
+    for r in plan_rows:
+        if r.get("account_to") in reserve_names:
+            name = r.get("account_to", "Резерв")
+            topup_by_name[name] = topup_by_name.get(name, 0) + float(r["amount"])
+    reserve_topup_items = [{"name": k, "amount": round(v)}
+                           for k, v in sorted(topup_by_name.items(), key=lambda x: -x[1])]
+
+    cushion_accounts_detail = [
+        {"name": a["name"], "balance": round(float(a["balance"]))}
+        for a in accs.values() if a.get("is_cushion")
+    ]
 
     variable_items = sorted(
         [{"category": c["category"], "amount": c["amount_fact"]}
@@ -551,11 +568,13 @@ async def get_metrics(request: Request):
             },
             "b0_accounts": b0_accounts,
             "waterfall_detail": {
-                "income_items":   income_items,
-                "fixed_items":    fixed_items,
-                "variable_items": variable_items,
-                "v_daily_rate":   round(r_var),
-                "d_left":         d_left,
+                "income_items":          income_items,
+                "fixed_items":           fixed_items,
+                "variable_items":        variable_items,
+                "reserve_topup_items":   reserve_topup_items,
+                "cushion_accounts":      cushion_accounts_detail,
+                "v_daily_rate":          round(r_var),
+                "d_left":                d_left,
             },
         },
         "net_capital": {

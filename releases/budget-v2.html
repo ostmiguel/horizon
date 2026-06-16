@@ -817,6 +817,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .wf-pill--inc{background:rgba(180,222,60,.13)}.wf-pill--inc.active{background:rgba(180,222,60,.28);border-color:rgba(180,222,60,.6)}
 .wf-pill--fix{background:rgba(176,73,42,.10)}.wf-pill--fix.active{background:rgba(176,73,42,.24);border-color:rgba(176,73,42,.45)}
 .wf-pill--var{background:rgba(176,73,42,.10)}.wf-pill--var.active{background:rgba(176,73,42,.24);border-color:rgba(176,73,42,.45)}
+.wf-pill--rsv{background:rgba(73,166,234,.10)}.wf-pill--rsv.active{background:rgba(73,166,234,.24);border-color:rgba(73,166,234,.45)}
+.wf-det-section{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 4px;margin-top:4px}
 .wf-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 220ms ease-out,opacity 220ms ease-out;opacity:0;pointer-events:none}
 .wf-detail.open{grid-template-rows:1fr;opacity:1;pointer-events:auto}
 .wf-detail>div{overflow:hidden}
@@ -6518,6 +6520,14 @@ async function loadDashboardNew() {
           <span class="wf-pill-lbl">Повседневные</span>
           <b class="wf-pill-val" style="color:#B0492A">−${f(wf.v_remain)} ₽</b>
         </span>
+        ${wf.r_topup >= 1 ? `<span class="wf-pill wf-pill--rsv" data-pill="reserve" onclick="wfPillClick('reserve')" role="button" tabindex="0">
+          <span class="wf-pill-lbl">Резерв</span>
+          <b class="wf-pill-val" style="color:#2F8FD4">−${f(wf.r_topup)} ₽</b>
+        </span>` : ''}
+        ${wf.c_cushion >= 1 ? `<span class="wf-pill wf-pill--rsv" data-pill="cushion" onclick="wfPillClick('cushion')" role="button" tabindex="0">
+          <span class="wf-pill-lbl">Подушка</span>
+          <b class="wf-pill-val" style="color:#2F8FD4">−${f(wf.c_cushion)} ₽</b>
+        </span>` : ''}
       </div>
       <div class="wf-detail" id="wfDetail"><div><div class="wf-det-inner" id="wfDetInner"></div></div></div>
     `;
@@ -6748,9 +6758,25 @@ function wfPillClick(type) {
       : '<div class="wf-det-hint">Плановых поступлений до конца месяца нет</div>';
   } else if (type === 'fixed') {
     const items = det.fixed_items || [];
+    if (!items.length) {
+      html = '<div class="wf-det-hint">Запланированных платежей до конца месяца нет</div>';
+    } else {
+      const fixed    = items.filter(it => it.type === 'fixed');
+      const episodic = items.filter(it => it.type === 'episodic');
+      const row = it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:#B0492A">−${fv(it.amount)} ₽</span></div>`;
+      if (fixed.length)    html += `<div class="wf-det-section">Фиксированные</div>` + fixed.map(row).join('');
+      if (episodic.length) html += `<div class="wf-det-section">Эпизодические</div>` + episodic.map(row).join('');
+    }
+  } else if (type === 'reserve') {
+    const items = det.reserve_topup_items || [];
     html = items.length
-      ? items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:#B0492A">−${fv(it.amount)} ₽</span></div>`).join('')
-      : '<div class="wf-det-hint">Запланированных платежей до конца месяца нет</div>';
+      ? `<div class="wf-det-hint">Плановые пополнения резервных счетов до конца месяца:</div>` +
+        items.map(it => `<div class="wf-det-row"><span>${it.name}</span><span style="font-weight:600;color:#2F8FD4">−${fv(it.amount)} ₽</span></div>`).join('')
+      : '<div class="wf-det-hint">Плановых пополнений резерва до конца месяца нет</div>';
+  } else if (type === 'cushion') {
+    const accs = det.cushion_accounts || [];
+    html = `<div class="wf-det-hint">Неснижаемая подушка безопасности — вычитается из «Свободно», чтобы эти деньги никогда не тратились в текущем потоке.</div>`;
+    if (accs.length) html += accs.map(a => `<div class="wf-det-row"><span>${a.name}</span><span style="font-weight:600;color:#2F8FD4">${fv(a.balance)} ₽</span></div>`).join('');
   } else if (type === 'variable') {
     const rate  = det.v_daily_rate || 0;
     const dLeft = det.d_left || 0;
