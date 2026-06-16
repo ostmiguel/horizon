@@ -6242,16 +6242,25 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
       }
     }
     if (crossDay) {
-      const cx = (x1 + (crossDay - 1) / N * plotW).toFixed(1);
+      const cx   = +(x1 + (crossDay - 1) / N * plotW).toFixed(1);
       const mons = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
       const mName = mons[new Date().getMonth()];
       const labelDay = Math.round(crossDay);
-      const labelX = +cx + 6 > x2 - 190 ? +cx - 6 : +cx + 6;
-      const labelAnchor = +cx + 6 > x2 - 190 ? 'end' : 'start';
-      const textY = Math.max(y1 + 16, zy - 12).toFixed(0);
-      zeroCrossMarker = `<line x1="${cx}" y1="${y1}" x2="${cx}" y2="${y2}" stroke="#C0561A" stroke-dasharray="3 3" opacity="0.7"/>
+      const midY = (y1 + y2) / 2;
+      const goUp = zy > midY; // zero is in lower half → label goes upper-right
+      const lbW = 190, lbH = 20;
+      let lbX = cx + 16;
+      if (lbX + lbW > x2 - 4) lbX = cx - 16 - lbW;
+      const lbYraw = goUp ? zy - 52 : zy + 30;
+      const lbY = Math.max(y1 + 4, Math.min(y2 - lbH - 4, lbYraw));
+      // Leader line end: corner of label box closest to circle
+      const leX = (lbX > cx ? lbX : lbX + lbW).toFixed(1);
+      const leY = (goUp ? lbY + lbH : lbY).toFixed(1);
+      zeroCrossMarker = `
+        <line x1="${cx}" y1="${zy}" x2="${leX}" y2="${leY}" stroke="#C0561A" stroke-width="1.2" opacity="0.75"/>
         <circle cx="${cx}" cy="${zy}" r="4.5" fill="#C0561A"/>
-        <text x="${labelX}" y="${textY}" fill="#C0561A" font-size="11" font-weight="600" text-anchor="${labelAnchor}">деньги заканчиваются ≈${labelDay} ${mName}</text>`;
+        <rect x="${lbX.toFixed(1)}" y="${lbY.toFixed(1)}" width="${lbW}" height="${lbH}" rx="4" fill="rgba(10,20,34,0.80)"/>
+        <text x="${(lbX + 9).toFixed(1)}" y="${(lbY + 13.5).toFixed(1)}" fill="#C0561A" font-size="11" font-weight="600">деньги заканчиваются ≈${labelDay} ${mName}</text>`;
     }
   }
 
@@ -7168,7 +7177,7 @@ window.onload = async () => {
 
   // New-arch nav: hide old items, show Прогноз, rename Дашборд → Обзор
   if (window.NEW_ARCH) {
-    ['navSummary', 'navSectionOld', 'navGoals'].forEach(id => {
+    ['navSummary', 'navSectionOld'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
