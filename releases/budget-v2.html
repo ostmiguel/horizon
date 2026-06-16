@@ -139,7 +139,7 @@ body {
 .period-select:focus { outline: none; border-color: var(--accent); }
 
 /* ── MAIN ── */
-.main { margin-left: 210px; padding: 24px; min-height: 100vh; }
+.main { margin-left: 210px; padding: 24px; min-height: 100vh; max-width: 1280px; }
 
 /* ── TOPBAR ── */
 .topbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
@@ -6594,11 +6594,11 @@ async function loadDashboardNew() {
       const w   = c.amount_forecast > 0 ? Math.min(Math.round(c.amount_fact / c.amount_forecast * 100), 100) : 0;
       const clr = 'linear-gradient(90deg,#2AA7CC,#1FA497,#B4DE3C)';
       return `<div class="cat" style="display:flex;align-items:center;gap:10px;padding:5px 0">
-        <span style="font-size:12.5px;color:#5E7088;white-space:nowrap;min-width:90px">${c.category}</span>
+        <span style="font-size:12.5px;color:#5E7088;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:110px;flex-shrink:0">${c.category}</span>
         <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
           <div style="height:100%;width:${w}%;background:${clr};border-radius:3px"></div>
         </div>
-        <span style="font-size:12.5px;color:#5E7088;font-family:Sora,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:80px;text-align:right">${f(c.amount_fact)} <span style="color:rgba(94,112,136,.55)">→ ${f(c.amount_forecast)}</span></span>
+        <span style="font-size:12.5px;color:#5E7088;font-family:Sora,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums;width:130px;flex-shrink:0;text-align:right">${f(c.amount_fact)} <span style="color:rgba(94,112,136,.55)">→ ${f(c.amount_forecast)}</span></span>
       </div>`;
     }).join('');
 
