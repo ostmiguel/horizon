@@ -808,15 +808,15 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .chip { font-size:11px; color:var(--text2); padding:4px 10px; border-radius:8px; background:var(--bg3); border:1px solid var(--border); white-space:nowrap; }
 .chip b { color:var(--text); font-weight:600; }
-.wf-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.wf-pill{display:flex;flex-direction:column;gap:3px;padding:9px 13px;border-radius:14px;cursor:pointer;transition:background 150ms ease-out,border-color 150ms ease-out,transform 100ms ease-out;border:1.5px solid transparent;flex:1;min-width:80px;user-select:none;-webkit-user-select:none}
+.wf-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.wf-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;cursor:pointer;font-size:11px;border:1px solid transparent;transition:background 150ms ease-out,border-color 150ms ease-out;white-space:nowrap;user-select:none;-webkit-user-select:none}
 .wf-pill:active{transform:scale(0.97)}
-.wf-pill-lbl{font-size:10px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
-.wf-pill-val{font-family:'Sora',sans-serif;font-size:14px;font-weight:600;white-space:nowrap}
-.wf-pill--bal{background:rgba(157,176,200,.10)}.wf-pill--bal.active{background:rgba(157,176,200,.22);border-color:rgba(157,176,200,.45)}
-.wf-pill--inc{background:rgba(180,222,60,.11)}.wf-pill--inc.active{background:rgba(180,222,60,.26);border-color:rgba(180,222,60,.55)}
-.wf-pill--fix{background:rgba(176,73,42,.09)}.wf-pill--fix.active{background:rgba(176,73,42,.22);border-color:rgba(176,73,42,.42)}
-.wf-pill--var{background:rgba(73,208,234,.09)}.wf-pill--var.active{background:rgba(73,208,234,.22);border-color:rgba(73,208,234,.42)}
+.wf-pill-lbl{color:var(--text2)}
+.wf-pill-val{font-weight:600}
+.wf-pill--bal{background:rgba(157,176,200,.12)}.wf-pill--bal.active{background:rgba(157,176,200,.26);border-color:rgba(157,176,200,.5)}
+.wf-pill--inc{background:rgba(180,222,60,.13)}.wf-pill--inc.active{background:rgba(180,222,60,.28);border-color:rgba(180,222,60,.6)}
+.wf-pill--fix{background:rgba(176,73,42,.10)}.wf-pill--fix.active{background:rgba(176,73,42,.24);border-color:rgba(176,73,42,.45)}
+.wf-pill--var{background:rgba(176,73,42,.10)}.wf-pill--var.active{background:rgba(176,73,42,.24);border-color:rgba(176,73,42,.45)}
 .wf-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 220ms ease-out,opacity 220ms ease-out;opacity:0;pointer-events:none}
 .wf-detail.open{grid-template-rows:1fr;opacity:1;pointer-events:auto}
 .wf-detail>div{overflow:hidden}
@@ -6502,22 +6502,22 @@ async function loadDashboardNew() {
     window._wfMetrics = m;
     const pillsHtml = `
       <div class="wf-pills" id="wfPills">
-        <div class="wf-pill wf-pill--bal" data-pill="balance" onclick="wfPillClick('balance')" role="button" tabindex="0" aria-label="Остаток на счетах">
+        <span class="wf-pill wf-pill--bal" data-pill="balance" onclick="wfPillClick('balance')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Остаток</span>
-          <span class="wf-pill-val" style="color:var(--text)">${wf.b0 < 0 ? '−' : ''}${f(wf.b0)} ₽</span>
-        </div>
-        <div class="wf-pill wf-pill--inc" data-pill="income" onclick="wfPillClick('income')" role="button" tabindex="0" aria-label="Ожидаемые доходы">
+          <b class="wf-pill-val" style="color:var(--text)">${wf.b0 < 0 ? '−' : ''}${f(wf.b0)} ₽</b>
+        </span>
+        <span class="wf-pill wf-pill--inc" data-pill="income" onclick="wfPillClick('income')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Доходы</span>
-          <span class="wf-pill-val" style="color:#5E9B1E">+${f(wf.i_remain)} ₽</span>
-        </div>
-        <div class="wf-pill wf-pill--fix" data-pill="fixed" onclick="wfPillClick('fixed')" role="button" tabindex="0" aria-label="Запланированные платежи">
+          <b class="wf-pill-val" style="color:#5E9B1E">+${f(wf.i_remain)} ₽</b>
+        </span>
+        <span class="wf-pill wf-pill--fix" data-pill="fixed" onclick="wfPillClick('fixed')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Платежи</span>
-          <span class="wf-pill-val" style="color:#B0492A">−${f(wf.f_remain)} ₽</span>
-        </div>
-        <div class="wf-pill wf-pill--var" data-pill="variable" onclick="wfPillClick('variable')" role="button" tabindex="0" aria-label="Прогноз повседневных расходов">
+          <b class="wf-pill-val" style="color:#B0492A">−${f(wf.f_remain)} ₽</b>
+        </span>
+        <span class="wf-pill wf-pill--var" data-pill="variable" onclick="wfPillClick('variable')" role="button" tabindex="0">
           <span class="wf-pill-lbl">Повседневные</span>
-          <span class="wf-pill-val" style="color:var(--accent)">−${f(wf.v_remain)} ₽</span>
-        </div>
+          <b class="wf-pill-val" style="color:#B0492A">−${f(wf.v_remain)} ₽</b>
+        </span>
       </div>
       <div class="wf-detail" id="wfDetail"><div><div class="wf-det-inner" id="wfDetInner"></div></div></div>
     `;
@@ -6645,7 +6645,7 @@ async function loadDashboardNew() {
         </div>
         <div class="hero-right">
           ${renderForecastChart(fc.points || [], todayDay, daysInMonth, 'Прогноз баланса')}
-          <div style="display:flex;gap:16px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
+          <div style="display:flex;justify-content:center;gap:16px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
             <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#2AA7CC;border-radius:2px;display:inline-block"></span>Факт</span>
             <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз</span>
             <span style="display:flex;align-items:center;gap:5px"><span style="width:18px;height:0;border-top:2px dashed #8FBE1E;display:inline-block"></span>План</span>

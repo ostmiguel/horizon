@@ -526,7 +526,10 @@ async def get_metrics(request: Request):
 
     variable_items = sorted(
         [{"category": c["category"], "amount": c["amount_fact"]}
-         for c in categories if c.get("expense_type") == "variable" and c.get("amount_fact", 0) > 0],
+         for c in categories
+         if c.get("expense_type") == "variable"
+         and c.get("character") not in EPISODIC_CHARS
+         and c.get("amount_fact", 0) > 0],
         key=lambda x: -x["amount"]
     )[:5]
 
