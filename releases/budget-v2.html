@@ -808,6 +808,22 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 .chip { font-size:11px; color:var(--text2); padding:4px 10px; border-radius:8px; background:var(--bg3); border:1px solid var(--border); white-space:nowrap; }
 .chip b { color:var(--text); font-weight:600; }
+.wf-pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.wf-pill{display:flex;flex-direction:column;gap:3px;padding:9px 13px;border-radius:14px;cursor:pointer;transition:background 150ms ease-out,border-color 150ms ease-out,transform 100ms ease-out;border:1.5px solid transparent;flex:1;min-width:80px;user-select:none;-webkit-user-select:none}
+.wf-pill:active{transform:scale(0.97)}
+.wf-pill-lbl{font-size:10px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
+.wf-pill-val{font-family:'Sora',sans-serif;font-size:14px;font-weight:600;white-space:nowrap}
+.wf-pill--bal{background:rgba(157,176,200,.10)}.wf-pill--bal.active{background:rgba(157,176,200,.22);border-color:rgba(157,176,200,.45)}
+.wf-pill--inc{background:rgba(180,222,60,.11)}.wf-pill--inc.active{background:rgba(180,222,60,.26);border-color:rgba(180,222,60,.55)}
+.wf-pill--fix{background:rgba(176,73,42,.09)}.wf-pill--fix.active{background:rgba(176,73,42,.22);border-color:rgba(176,73,42,.42)}
+.wf-pill--var{background:rgba(73,208,234,.09)}.wf-pill--var.active{background:rgba(73,208,234,.22);border-color:rgba(73,208,234,.42)}
+.wf-detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows 220ms ease-out,opacity 220ms ease-out;opacity:0;pointer-events:none}
+.wf-detail.open{grid-template-rows:1fr;opacity:1;pointer-events:auto}
+.wf-detail>div{overflow:hidden}
+.wf-det-inner{padding:10px 2px 4px}
+.wf-det-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text)}
+.wf-det-row:last-child{border-bottom:none}
+.wf-det-hint{font-size:11px;color:var(--text2);padding:6px 0 4px;line-height:1.6}
 .levers { counter-reset:l; }
 .lever { display:flex; gap:12px; padding:12px 0; border-top:1px solid var(--border); }
 .lever:first-child { border-top:0; padding-top:2px; }
@@ -6482,16 +6498,29 @@ async function loadDashboardNew() {
     const run = m.runway;
     const res = m.resilience;
 
-    // Chips: neutral style, hide near-zero values, remove C_cushion / v_remain "Сверхплан"
-    const chips = [
-      { label: 'Баланс',  value: wf.b0,        sign: '+' },
-      { label: 'Доходы',  value: wf.i_remain,  sign: '+' },
-      { label: 'Расходы', value: wf.f_remain,  sign: '−' },
-      { label: 'Поток',   value: wf.v_remain,  sign: '−' },
-      { label: 'Резерв',  value: wf.r_topup,   sign: '−' },
-    ].filter(ch => Math.abs(ch.value) >= 1).map(ch => {
-      return `<span class="chip">${ch.label} <b>${ch.sign}${f(ch.value)} ₽</b></span>`;
-    }).join('');
+    // Waterfall pills — store data for click handler
+    window._wfMetrics = m;
+    const pillsHtml = `
+      <div class="wf-pills" id="wfPills">
+        <div class="wf-pill wf-pill--bal" data-pill="balance" onclick="wfPillClick('balance')" role="button" tabindex="0" aria-label="Остаток на счетах">
+          <span class="wf-pill-lbl">Остаток</span>
+          <span class="wf-pill-val" style="color:var(--text)">${wf.b0 < 0 ? '−' : ''}${f(wf.b0)} ₽</span>
+        </div>
+        <div class="wf-pill wf-pill--inc" data-pill="income" onclick="wfPillClick('income')" role="button" tabindex="0" aria-label="Ожидаемые доходы">
+          <span class="wf-pill-lbl">Доходы</span>
+          <span class="wf-pill-val" style="color:#5E9B1E">+${f(wf.i_remain)} ₽</span>
+        </div>
+        <div class="wf-pill wf-pill--fix" data-pill="fixed" onclick="wfPillClick('fixed')" role="button" tabindex="0" aria-label="Запланированные платежи">
+          <span class="wf-pill-lbl">Платежи</span>
+          <span class="wf-pill-val" style="color:#B0492A">−${f(wf.f_remain)} ₽</span>
+        </div>
+        <div class="wf-pill wf-pill--var" data-pill="variable" onclick="wfPillClick('variable')" role="button" tabindex="0" aria-label="Прогноз повседневных расходов">
+          <span class="wf-pill-lbl">Повседневные</span>
+          <span class="wf-pill-val" style="color:var(--accent)">−${f(wf.v_remain)} ₽</span>
+        </div>
+      </div>
+      <div class="wf-detail" id="wfDetail"><div><div class="wf-det-inner" id="wfDetInner"></div></div></div>
+    `;
 
     // Early warning lines (when STS < 0)
     const warningHtml = sts.value < 0 ? `
@@ -6612,7 +6641,7 @@ async function loadDashboardNew() {
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
           <div style="font-size:11px;color:var(--text3);margin-bottom:6px">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
           ${warningHtml}
-          <div class="chips" style="margin-top:8px">${chips}</div>
+          ${pillsHtml}
         </div>
         <div class="hero-right">
           ${renderForecastChart(fc.points || [], todayDay, daysInMonth, 'Прогноз баланса')}
@@ -6682,6 +6711,59 @@ async function loadDashboardNew() {
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + e.message + '</div>';
   }
+}
+
+// ── Waterfall pill click handler ─────────────────────────────────────────
+window._wfActivePill = null;
+function wfPillClick(type) {
+  const panel  = document.getElementById('wfDetail');
+  const inner  = document.getElementById('wfDetInner');
+  if (!panel || !inner) return;
+  const pills  = document.querySelectorAll('.wf-pill');
+  const m      = window._wfMetrics;
+  if (!m) return;
+  const wf     = m.safe_to_spend?.waterfall || {};
+  const det    = m.safe_to_spend?.waterfall_detail || {};
+  const fv     = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
+
+  if (window._wfActivePill === type) {
+    window._wfActivePill = null;
+    panel.classList.remove('open');
+    pills.forEach(p => p.classList.remove('active'));
+    return;
+  }
+  window._wfActivePill = type;
+  pills.forEach(p => p.classList.toggle('active', p.dataset.pill === type));
+
+  let html = '';
+  if (type === 'balance') {
+    const accs = m.safe_to_spend?.b0_accounts || [];
+    html = accs.length
+      ? accs.map(a => `<div class="wf-det-row"><span>${a.name}</span><span style="font-weight:600;color:${a.balance < 0 ? '#B0492A' : 'var(--text)'}">${a.balance < 0 ? '−' : ''}${fv(a.balance)} ₽</span></div>`).join('')
+      : '<div class="wf-det-hint">Нет операционных счетов</div>';
+  } else if (type === 'income') {
+    const items = det.income_items || [];
+    html = items.length
+      ? items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:#5E9B1E">+${fv(it.amount)} ₽</span></div>`).join('')
+      : '<div class="wf-det-hint">Плановых поступлений до конца месяца нет</div>';
+  } else if (type === 'fixed') {
+    const items = det.fixed_items || [];
+    html = items.length
+      ? items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:#B0492A">−${fv(it.amount)} ₽</span></div>`).join('')
+      : '<div class="wf-det-hint">Запланированных платежей до конца месяца нет</div>';
+  } else if (type === 'variable') {
+    const rate  = det.v_daily_rate || 0;
+    const dLeft = det.d_left || 0;
+    const items = det.variable_items || [];
+    html = `<div class="wf-det-hint">Прогноз: ~${fv(rate)} ₽/день × ${dLeft} дней — по среднему за последние 30 дней</div>`;
+    if (items.length) {
+      html += '<div class="wf-det-hint" style="margin-top:4px;font-weight:500;color:var(--text)">Топ категорий этого месяца:</div>';
+      html += items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:var(--text2)">−${fv(it.amount)} ₽</span></div>`).join('');
+    }
+  }
+
+  inner.innerHTML = html;
+  panel.classList.add('open');
 }
 
 function goalFormHtml(g) {

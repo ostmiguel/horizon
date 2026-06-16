@@ -149,6 +149,7 @@ async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
 async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -> list:
     rows = await db.fetch("""
         SELECT p.date, p.amount, p.account_from, p.account_to,
+               c.category AS cat_category,
                c.character AS cat_character,
                c.expense_type AS cat_expense_type
         FROM plan p
@@ -500,6 +501,35 @@ async def get_metrics(request: Request):
           AND c.character != 'Эпизодический'
     """, user_id, year, month))
 
+    # ── Waterfall detail (pill breakdowns) ───────────────────────────────────
+    income_by_cat: dict[str, float] = {}
+    for r in plan_rows:
+        if r.get("account_from") == "Доход":
+            cat = r.get("cat_category") or "Доходы"
+            income_by_cat[cat] = income_by_cat.get(cat, 0) + float(r["amount"])
+    income_items = [{"category": k, "amount": round(v)}
+                    for k, v in sorted(income_by_cat.items(), key=lambda x: -x[1])]
+
+    fixed_by_cat: dict[str, float] = {}
+    for r in plan_rows:
+        if r.get("account_to") == "Расход" and (
+            r.get("cat_expense_type") == "fixed"
+            or r.get("cat_character") in EPISODIC_CHARS
+        ):
+            cat = r.get("cat_category") or "Расходы"
+            fixed_by_cat[cat] = fixed_by_cat.get(cat, 0) + float(r["amount"])
+        elif r.get("account_to") == "Обязательства":
+            cat = r.get("cat_category") or "Обязательства"
+            fixed_by_cat[cat] = fixed_by_cat.get(cat, 0) + float(r["amount"])
+    fixed_items = [{"category": k, "amount": round(v)}
+                   for k, v in sorted(fixed_by_cat.items(), key=lambda x: -x[1])]
+
+    variable_items = sorted(
+        [{"category": c["category"], "amount": c["amount_fact"]}
+         for c in categories if c.get("expense_type") == "variable" and c.get("amount_fact", 0) > 0],
+        key=lambda x: -x["amount"]
+    )[:5]
+
     # ── Response ──────────────────────────────────────────────────────────────
     return {
         "as_of": today.isoformat(),
@@ -517,6 +547,13 @@ async def get_metrics(request: Request):
                 "c_cushion": round(C_cushion),
             },
             "b0_accounts": b0_accounts,
+            "waterfall_detail": {
+                "income_items":   income_items,
+                "fixed_items":    fixed_items,
+                "variable_items": variable_items,
+                "v_daily_rate":   round(r_var),
+                "d_left":         d_left,
+            },
         },
         "net_capital": {
             "value":     round(net_capital),
