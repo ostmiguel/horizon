@@ -7656,7 +7656,23 @@ function _buildOpsForm(type) {
     return false;
   }).sort((a,b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
 
-  const catOpts  = `<option value="">— выбери —</option>` + catsForType.map(c => `<option value="${c.id}">${c.subcategory}</option>`).join('');
+  // Та же умная сортировка, что в Транзакциях: для расхода — Недавние/Частые/Все
+  const optHtml = c => `<option value="${c.id}">${esc(c.subcategory)}</option>`;
+  let catInner;
+  if (type === 'expense') {
+    const { recent, frequent, rest } = getSmartCats(catsForType);
+    if (!recent.length && !frequent.length) {
+      catInner = catsForType.map(optHtml).join('');
+    } else {
+      catInner = '';
+      if (recent.length)   catInner += `<optgroup label="— Недавние —">${recent.map(optHtml).join('')}</optgroup>`;
+      if (frequent.length) catInner += `<optgroup label="— Частые —">${frequent.map(optHtml).join('')}</optgroup>`;
+      if (rest.length)     catInner += `<optgroup label="— Все —">${rest.map(optHtml).join('')}</optgroup>`;
+    }
+  } else {
+    catInner = catsForType.map(optHtml).join('');
+  }
+  const catOpts  = `<option value="">— выбери —</option>` + catInner;
   let fromOpts = '', toOpts = '';
   if (type === 'income') {
     fromOpts = `<option value="Доход">Доход</option>`;
@@ -7719,13 +7735,21 @@ function _renderOpsForm(type) {
   }
 }
 
-function openOpsModal(tx) {
+async function openOpsModal(tx) {
   _editingOpsTxId = tx ? tx.id : null;
   const overlay = document.getElementById('opsModalOverlay');
   const title   = document.getElementById('opsModalTitle');
   if (!overlay) return;
   title.textContent = tx ? 'Редактировать операцию' : 'Новая операция';
   const type = tx ? getFlowType(tx.account_from, tx.account_to) : _opsFormType;
+  // Свежая история для умной сортировки подкатегорий (как в Транзакциях)
+  try {
+    const { data: recent } = await sb.from('transactions')
+      .select('date,category_id,account_from,account_to')
+      .eq('year', new Date().getFullYear())
+      .order('date', { ascending: false });
+    window._txCache = recent || [];
+  } catch(e) { window._txCache = window._txCache || []; }
   const panel = document.getElementById('opsModalForm');
   panel.innerHTML = _buildOpsForm(type);
   if (tx) {
