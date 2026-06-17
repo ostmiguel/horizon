@@ -1480,6 +1480,40 @@ function getFlowType(from, to) {
   return 'transfer';
 }
 
+// ── Amount field calculator (YNAB-style): принимает арифметику 100+50*2 ──────
+function evalAmountExpr(raw) {
+  if (raw == null) return NaN;
+  let s = String(raw).trim().replace(/\s+/g, '').replace(/,/g, '.');
+  if (s === '') return NaN;
+  if (/^-?[0-9.]+$/.test(s)) return parseFloat(s);          // обычное число
+  if (!/^[0-9+\-*/().]+$/.test(s)) return NaN;              // только арифметика
+  try {
+    const v = Function('"use strict";return (' + s + ')')();
+    return (typeof v === 'number' && isFinite(v)) ? v : NaN;
+  } catch (e) { return NaN; }
+}
+function amtFmt(n) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(n);
+}
+function amtCalcPreview(inp) {
+  const hint = inp.dataset.hint ? document.getElementById(inp.dataset.hint) : null;
+  if (!hint) return;
+  const raw = inp.value;
+  if (/[+\-*/()]/.test(raw.replace(/^\s*-/, ''))) {   // есть оператор (не только ведущий минус)
+    const v = evalAmountExpr(raw);
+    hint.textContent = isFinite(v) ? '= ' + amtFmt(Math.round(v * 100) / 100) + ' ₽' : '…';
+    hint.style.display = '';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+function amtCalcCommit(inp) {
+  const v = evalAmountExpr(inp.value);
+  if (isFinite(v)) inp.value = String(Math.round(v * 100) / 100);
+  const hint = inp.dataset.hint ? document.getElementById(inp.dataset.hint) : null;
+  if (hint) hint.style.display = 'none';
+}
+
 // ── DASHBOARD ──
 async function loadDashboard() {
   const main = document.getElementById('mainContent');
@@ -2822,7 +2856,9 @@ function buildTxForm(activeType, isPlan) {
       <input class="field-input" type="date" id="fDate" value="${today}">
     </div>
     <div class="field"><div class="field-label">Сумма, ₽</div>
-      <input class="field-input" type="number" id="fAmount" placeholder="0" min="0.01" step="0.01" autofocus>
+      <input class="field-input" type="text" inputmode="decimal" id="fAmount" placeholder="напр. 250 или 100+50" autocomplete="off" autofocus
+        data-hint="fAmountCalc" oninput="amtCalcPreview(this)" onblur="amtCalcCommit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();amtCalcCommit(this)}">
+      <div class="field-note" id="fAmountCalc" style="display:none;color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums"></div>
     </div>
     ${activeType !== 'transfer' ? `
     <div class="field"><div class="field-label">Подкатегория</div>
@@ -2922,7 +2958,7 @@ function updateTxRecurringPreview() {
   const date    = document.getElementById('fDate')?.value;
   const end     = document.getElementById('fEndDate')?.value;
   const freq    = document.getElementById('fFreq')?.value;
-  const amount  = parseFloat(document.getElementById('fAmount')?.value);
+  const amount  = evalAmountExpr(document.getElementById('fAmount')?.value);
   if (!date) { preview.textContent = ''; return; }
 
   // End of current year if no end date
@@ -2961,7 +2997,7 @@ async function saveTx(isPlan) {
   if (btn) btn.disabled = true;
   try {
     const date   = document.getElementById('fDate')?.value;
-    const amount = parseFloat(document.getElementById('fAmount')?.value);
+    const amount = evalAmountExpr(document.getElementById('fAmount')?.value);
     const from   = document.getElementById('fFrom')?.value;
     const to     = document.getElementById('fTo')?.value;
     const note   = document.getElementById('fNote')?.value || null;
@@ -3072,7 +3108,7 @@ async function editTx(id, isPlan) {
         btn.disabled = true;
         try {
           const date   = document.getElementById('fDate')?.value;
-          const amount = parseFloat(document.getElementById('fAmount')?.value);
+          const amount = evalAmountExpr(document.getElementById('fAmount')?.value);
           const from   = document.getElementById('fFrom')?.value;
           const to     = document.getElementById('fTo')?.value;
           const note   = document.getElementById('fNote')?.value || null;
@@ -7647,7 +7683,9 @@ function _buildOpsForm(type) {
       <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
         <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
       <div class="field" style="margin-bottom:8px"><div class="field-label">Сумма, ₽</div>
-        <input class="field-input" type="number" id="opsFAmount" placeholder="0" min="0.01" step="0.01"></div>
+        <input class="field-input" type="text" inputmode="decimal" id="opsFAmount" placeholder="напр. 250 или 100+50" autocomplete="off"
+          data-hint="opsFAmountCalc" oninput="amtCalcPreview(this)" onblur="amtCalcCommit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();amtCalcCommit(this)}">
+        <div class="field-note" id="opsFAmountCalc" style="display:none;color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums"></div></div>
     </div>
     ${type !== 'transfer' ? `<div class="field"><div class="field-label">Категория</div>
       <select class="field-select" id="opsFCat">${catOpts}</select></div>` : ''}
@@ -7726,7 +7764,7 @@ async function saveOpsTx() {
   if (btn) btn.disabled = true;
   try {
     const date  = document.getElementById('opsFDate')?.value;
-    const amt   = parseFloat(document.getElementById('opsFAmount')?.value);
+    const amt   = evalAmountExpr(document.getElementById('opsFAmount')?.value);
     const from  = document.getElementById('opsFFrom')?.value;
     const to    = document.getElementById('opsFTo')?.value;
     const note  = document.getElementById('opsFNote')?.value || null;
@@ -7759,7 +7797,7 @@ async function updateOpsTx(id) {
   if (btn) btn.disabled = true;
   try {
     const date  = document.getElementById('opsFDate')?.value;
-    const amt   = parseFloat(document.getElementById('opsFAmount')?.value);
+    const amt   = evalAmountExpr(document.getElementById('opsFAmount')?.value);
     const from  = document.getElementById('opsFFrom')?.value;
     const to    = document.getElementById('opsFTo')?.value;
     const note  = document.getElementById('opsFNote')?.value || null;
