@@ -7279,7 +7279,7 @@ function openLabModalEpis(planCur) {
 
 // ── ОПЕРАЦИИ (Фаза 3) ─────────────────────────────────────────────────────────
 let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense', _editingOpsTxId = null;
-let _opsCat = 'all', _opsType = 'all', _opsChar = 'all', _opsSearch = '';
+let _opsCat = 'all', _opsSub = 'all', _opsChar = 'all', _opsSearch = '';
 let _opsData = null;
 const MONTHS_GEN = ['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const OPS_CHAR_LABEL = { fixed: 'Фиксированные', variable: 'Повседневные', episodic: 'Эпизодические' };
@@ -7361,8 +7361,9 @@ async function loadOperations(yr, mo) {
         else if (c.expense_type === 'variable') charKey = 'variable';
       }
       const catName = c?.category || (type === 'income' ? 'Доход' : null);
-      const searchKey = [name, sub, t.note, c?.group_name, catName].filter(Boolean).join(' ').toLowerCase();
-      return { id: t.id, date: t.date, amount: +t.amount, type, reserve, name, sub, note: t.note || '', charKey, catName, searchKey };
+      const subName = c?.subcategory || null;
+      const searchKey = [name, sub, t.note, c?.group_name, catName, subName].filter(Boolean).join(' ').toLowerCase();
+      return { id: t.id, date: t.date, amount: +t.amount, type, reserve, name, sub, note: t.note || '', charKey, catName, subName, searchKey };
     });
 
     _opsData = { rows: rowsData, todayStr };
@@ -7371,8 +7372,9 @@ async function loadOperations(yr, mo) {
     const catSet = [...new Set(rowsData.map(r => r.catName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'ru'));
     const catOpts = ['<option value="all">Категория: все</option>']
       .concat(catSet.map(c => `<option value="${esc(c)}"${_opsCat===c?' selected':''}>${esc(c)}</option>`)).join('');
-    const typeDefs = [['all','Тип: все'],['income','Доход'],['expense','Расход'],['obligation','Долг'],['transfer','Перевод']];
-    const typeOpts = typeDefs.map(([v,l]) => `<option value="${v}"${_opsType===v?' selected':''}>${l}</option>`).join('');
+    const subSet = [...new Set(rowsData.map(r => r.subName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'ru'));
+    const subOpts = ['<option value="all">Подкатегория: все</option>']
+      .concat(subSet.map(c => `<option value="${esc(c)}"${_opsSub===c?' selected':''}>${esc(c)}</option>`)).join('');
     const charDefs = [['all','Характер: все'],['fixed','Фиксированные'],['variable','Повседневные'],['episodic','Эпизодические']];
     const charOpts = charDefs.map(([v,l]) => `<option value="${v}"${_opsChar===v?' selected':''}>${l}</option>`).join('');
 
@@ -7413,7 +7415,7 @@ async function loadOperations(yr, mo) {
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
           <div id="opsSeg" style="display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;box-shadow:var(--shadow)">${segBtns}</div>
           <select style="${selStyle}" onchange="_opsCat=this.value;renderOpsRows()">${catOpts}</select>
-          <select style="${selStyle}" onchange="_opsType=this.value;renderOpsRows()">${typeOpts}</select>
+          <select style="${selStyle}" onchange="_opsSub=this.value;renderOpsRows()">${subOpts}</select>
           <select style="${selStyle}" onchange="_opsChar=this.value;renderOpsRows()">${charOpts}</select>
           <input type="text" id="opsSearch" placeholder="Поиск по операциям…" value="${esc(_opsSearch)}" oninput="_opsSearch=this.value;renderOpsRows()"
             style="flex:1;min-width:160px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12.5px;background:var(--bg2);color:var(--text);box-shadow:var(--shadow)">
@@ -7422,7 +7424,7 @@ async function loadOperations(yr, mo) {
         <div class="card" style="padding:0;overflow:hidden">
           <table style="width:100%;border-collapse:collapse">
             <thead>
-              <tr style="border-bottom:1px solid var(--border);background:var(--bg)">
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg3)">
                 <th style="padding:9px 16px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Операция</th>
                 <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Тип</th>
                 <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em" class="ops-hide">Характер</th>
@@ -7499,7 +7501,7 @@ function renderOpsRows() {
     if (_opsFilter === 'expense'  && r.type !== 'expense')    return false;
     if (_opsFilter === 'debt'     && r.type !== 'obligation') return false;
     if (_opsFilter === 'transfer' && r.type !== 'transfer')   return false;
-    if (_opsType !== 'all' && r.type !== _opsType) return false;
+    if (_opsSub  !== 'all' && r.subName !== _opsSub) return false;
     if (_opsCat  !== 'all' && r.catName !== _opsCat) return false;
     if (_opsChar !== 'all' && r.charKey !== _opsChar) return false;
     if (s && !r.searchKey.includes(s)) return false;
@@ -7523,7 +7525,7 @@ function renderOpsRows() {
     let sign = '', clr = 'var(--text2)';
     if (r.type === 'income')         { sign = '+'; clr = '#5E9B1E'; }
     else if (r.type === 'expense')   { sign = '−'; clr = '#bf7419'; }
-    else if (r.type === 'obligation'){ sign = '−'; clr = '#9A6B12'; }
+    else if (r.type === 'obligation'){ sign = '−'; clr = '#bf7419'; }
     else if (r.reserve)              { sign = '';  clr = '#167F73'; }
     return `<td style="padding:0 14px;text-align:right;font-size:13.5px;font-weight:600;color:${clr};white-space:nowrap;font-variant-numeric:tabular-nums">${sign}${f(r.amount)} ₽</td>`;
   };
@@ -7536,9 +7538,9 @@ function renderOpsRows() {
     if (inc > 0) parts.push(`<span style="color:#5E9B1E">доход +${f(inc)} ₽</span>`);
     if (exp > 0) parts.push(`<span style="color:#bf7419">расход −${f(exp)} ₽</span>`);
     const sub = parts.join(' <span style="color:var(--text3)">·</span> ');
-    html += `<tr><td colspan="5" style="padding:13px 16px 6px;background:var(--bg)">
+    html += `<tr><td colspan="5" style="padding:10px 16px;background:rgba(42,167,204,.07);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
-        <span style="font-size:12px;font-weight:600;color:var(--text2)">${opsDateLabel(g.date, _opsData.todayStr)}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text2);letter-spacing:.01em">${opsDateLabel(g.date, _opsData.todayStr)}</span>
         <span style="font-size:12px;font-variant-numeric:tabular-nums">${sub}</span>
       </div></td></tr>`;
     g.rows.forEach(r => {
@@ -7560,9 +7562,15 @@ function renderOpsRows() {
   tbody.innerHTML = html;
 }
 
+function opsMenuOutside(e) {
+  const m = document.getElementById('opsRowMenu');
+  if (m && !m.contains(e.target)) opsCloseMenu();
+}
+
 function opsCloseMenu() {
   const m = document.getElementById('opsRowMenu');
   if (m) m.remove();
+  document.removeEventListener('click', opsMenuOutside, true);
 }
 
 function opsMenu(btn, id) {
@@ -7575,6 +7583,7 @@ function opsMenu(btn, id) {
     <button onclick="opsCloseMenu();openEditOpsTx(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text);padding:8px 10px;border-radius:7px" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">Редактировать</button>
     <button onclick="opsCloseMenu();deleteOpsTx(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:#bf7419;padding:8px 10px;border-radius:7px" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">Удалить</button>`;
   document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', opsMenuOutside, true), 0);
 }
 
 function _buildOpsForm(type) {
