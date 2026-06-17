@@ -408,6 +408,7 @@ async def get_metrics(request: Request):
 
     for r in cat_rows:
         fact = float(r["total"])
+        cat_remaining = 0.0  # forecasted remaining flow until month end (variable-everyday only)
         is_variable_everyday = (
             r["cat_expense_type"] == "variable"
             and r["cat_char"] not in EPISODIC_CHARS
@@ -438,7 +439,8 @@ async def get_metrics(request: Request):
                 threshold = med + 3 * 1.4826 * mad
                 cat_daily = [x if x <= threshold else 0.0 for x in cat_daily]
             cat_rate = sum(cat_daily) / CAT_WINDOW
-            forecast = fact + cat_rate * d_left
+            cat_remaining = cat_rate * d_left
+            forecast = fact + cat_remaining
         elif r["cat_expense_type"] == "fixed":
             # Fixed: show plan amount for the month (max of fact vs plan)
             plan_cat_total = await db.fetchval("""
@@ -463,6 +465,7 @@ async def get_metrics(request: Request):
             "expense_type":    r["cat_expense_type"],
             "amount_fact":     round(fact),
             "amount_forecast": round(forecast),
+            "flow_remaining":  round(cat_remaining),
         })
 
     # Add fixed categories that have plan entries but no fact yet this month
@@ -541,14 +544,34 @@ async def get_metrics(request: Request):
         for a in accs.values() if a.get("is_cushion")
     ]
 
-    variable_items = sorted(
-        [{"category": c["category"], "amount": c["amount_fact"]}
-         for c in categories
-         if c.get("expense_type") == "variable"
-         and c.get("character") not in EPISODIC_CHARS
-         and c.get("amount_fact", 0) > 0],
-        key=lambda x: -x["amount"]
-    )[:5]
+    # Decompose the pill value V_remain (forecasted remaining flow) by category.
+    # Per-category remaining = cat_rate × d_left, normalized so the parts sum to
+    # V_remain exactly (r_var is a global robust rate, not the sum of cat rates).
+    var_remaining = [
+        {"category": c["category"], "amount": float(c.get("flow_remaining", 0))}
+        for c in categories
+        if c.get("expense_type") == "variable"
+        and c.get("character") not in EPISODIC_CHARS
+        and c.get("flow_remaining", 0) > 0
+    ]
+    sum_remaining = sum(x["amount"] for x in var_remaining)
+    V_target = round(V_remain)
+    if sum_remaining > 0 and V_target > 0:
+        scale = V_remain / sum_remaining
+        for x in var_remaining:
+            x["amount"] *= scale
+        var_remaining.sort(key=lambda x: -x["amount"])
+        top = var_remaining[:5]
+        variable_items = [{"category": x["category"], "amount": round(x["amount"])}
+                          for x in top]
+        rest = V_target - sum(it["amount"] for it in variable_items)
+        if len(var_remaining) > 5 and rest > 0:
+            variable_items.append({"category": "Прочие", "amount": rest})
+        elif rest != 0 and variable_items:
+            # absorb rounding residual into the largest item so parts sum to V_remain
+            variable_items[0]["amount"] += rest
+    else:
+        variable_items = []
 
     # ── Response ──────────────────────────────────────────────────────────────
     return {

@@ -6790,7 +6790,7 @@ function wfPillClick(type) {
     const items = det.variable_items || [];
     html = `<div class="wf-det-hint">Прогноз: ~${fv(rate)} ₽/день × ${dLeft} дней — по среднему за последние 30 дней</div>`;
     if (items.length) {
-      html += '<div class="wf-det-section">Топ категорий этого месяца</div>';
+      html += '<div class="wf-det-section">Прогноз по категориям до конца месяца</div>';
       html += items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="color:#5E7088">−${fv(it.amount)} ₽</span></div>`).join('');
     }
   }
