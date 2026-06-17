@@ -3460,13 +3460,18 @@ async function deleteAccount(id, name) {
 }
 
 function openAddCategory() {
-  const groups = [...new Set(cats.map(c=>c.group_name))];
+  const groups   = [...new Set(cats.map(c=>c.group_name))];
+  const catNames = [...new Set(cats.map(c=>c.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
   const mo = document.createElement('div');
   mo.className = 'modal-overlay open';
   mo.innerHTML = `<div class="modal">
     <div class="modal-title">Добавить подкатегорию</div>
     <div class="field"><div class="field-label">Подкатегория</div><input class="field-input" id="cSub" placeholder="Название"/></div>
-    <div class="field"><div class="field-label">Категория</div><input class="field-input" id="cCat" placeholder="Категория"/></div>
+    <div class="field"><div class="field-label">Категория</div>
+      <input class="field-input" id="cCat" list="cCatList" autocomplete="off" placeholder="Выбери существующую или введи новую"/>
+      <datalist id="cCatList">${catNames.map(c=>`<option value="${esc(c)}"></option>`).join('')}</datalist>
+      <div class="field-note">выбери из списка или впиши новую</div>
+    </div>
     <div class="field"><div class="field-label">Группа</div>
       <select class="field-select" id="cGrp">
         ${groups.map(g=>`<option>${g}</option>`).join('')}
@@ -7348,11 +7353,14 @@ async function loadOperations(yr, mo) {
       const reserve = isSavings(t);
       const c = catById[t.category_id] || null;
       const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : reserve ? t.account_to : t.account_to);
+      // Подпись = категория (как у всех операций). Для переводов без категории — счета.
       let sub = '';
-      if (c?.category && c?.subcategory && c.category !== c.subcategory) sub = c.category;
-      else if (type === 'income') sub = t.account_to;
-      else if (type === 'expense' || type === 'obligation') sub = t.account_from;
-      else sub = `${t.account_from} → ${t.account_to}`;
+      if (c?.category) sub = c.category;
+      else if (type === 'transfer') sub = `${t.account_from} → ${t.account_to}`;
+      else if (type === 'income') sub = 'Доход';
+      else if (type === 'obligation') sub = 'Обязательства';
+      else sub = t.account_from;
+      if (sub === name) sub = '';
       // character key (only for expense/obligation)
       let charKey = null;
       if ((type === 'expense' || type === 'obligation') && c) {
@@ -7589,6 +7597,7 @@ function opsMenu(btn, id) {
 function _buildOpsForm(type) {
   _opsFormType = type;
   const realAccs = accounts_cache.filter(a => a.account_type === 'Актив');
+  const allAccs  = accounts_cache.filter(a => a.account_type !== 'Поток');
   const today    = new Date().toISOString().split('T')[0];
   const catsForType = cats.filter(c => {
     if (type === 'income')   return c.group_name === 'Доходы';
@@ -7603,14 +7612,15 @@ function _buildOpsForm(type) {
     fromOpts = `<option value="Доход">Доход</option>`;
     toOpts   = realAccs.map(a => `<option>${a.name}</option>`).join('');
   } else if (type === 'expense') {
-    fromOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    // allAccs включает кредитные счета (Обязательства) — покупка с кредитки увеличивает долг
+    fromOpts = allAccs.map(a => `<option>${a.name}</option>`).join('');
     toOpts   = `<option value="Расход">Расход</option>`;
   } else if (type === 'debt') {
-    fromOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
-    toOpts   = `<option value="Обязательства">Обязательства</option>`;
+    fromOpts = `<option value="Обязательства">Обязательства</option>${realAccs.map(a => `<option>${a.name}</option>`).join('')}`;
+    toOpts   = `<option value="Обязательства">Обязательства</option><option value="Расход">Расход</option>${realAccs.map(a => `<option>${a.name}</option>`).join('')}`;
   } else {
-    fromOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
-    toOpts   = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    fromOpts = allAccs.map(a => `<option>${a.name}</option>`).join('');
+    toOpts   = allAccs.map(a => `<option>${a.name}</option>`).join('');
   }
 
   const typeBtns = [
