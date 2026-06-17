@@ -3468,9 +3468,12 @@ function openAddCategory() {
     <div class="modal-title">Добавить подкатегорию</div>
     <div class="field"><div class="field-label">Подкатегория</div><input class="field-input" id="cSub" placeholder="Название"/></div>
     <div class="field"><div class="field-label">Категория</div>
-      <input class="field-input" id="cCat" list="cCatList" autocomplete="off" placeholder="Выбери существующую или введи новую"/>
-      <datalist id="cCatList">${catNames.map(c=>`<option value="${esc(c)}"></option>`).join('')}</datalist>
-      <div class="field-note">выбери из списка или впиши новую</div>
+      <select class="field-select" id="cCatSel" onchange="onCatSelectChange()">
+        <option value="">— выбери —</option>
+        ${catNames.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+        <option value="__new__">+ Новая категория…</option>
+      </select>
+      <input class="field-input" id="cCatNew" placeholder="Название новой категории" style="display:none;margin-top:8px"/>
     </div>
     <div class="field"><div class="field-label">Группа</div>
       <select class="field-select" id="cGrp">
@@ -3492,9 +3495,20 @@ function openAddCategory() {
   document.body.appendChild(mo);
 }
 
+function onCatSelectChange() {
+  const sel = document.getElementById('cCatSel');
+  const inp = document.getElementById('cCatNew');
+  if (!sel || !inp) return;
+  if (sel.value === '__new__') { inp.style.display = ''; inp.focus(); }
+  else { inp.style.display = 'none'; inp.value = ''; }
+}
+
 async function saveCategory(btn) {
   const sub  = document.getElementById('cSub')?.value.trim();
-  const cat  = document.getElementById('cCat')?.value.trim();
+  const sel  = document.getElementById('cCatSel');
+  const cat  = sel?.value === '__new__'
+    ? document.getElementById('cCatNew')?.value.trim()
+    : sel?.value;
   const grp  = document.getElementById('cGrp')?.value;
   const char = document.getElementById('cChar')?.value || null;
   if (!sub || !cat || !grp) { toast('Заполни все поля', false); return; }
