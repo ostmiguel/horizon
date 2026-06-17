@@ -7398,22 +7398,32 @@ async function loadOperations(yr, mo) {
     }
 
     // ── Precompute fact rows (this is a pure FACT feed — no plan rows) ─────────
+    const isDebtAcc = a => a === 'Обязательства' || a === 'Дебиторка';
     const rowsData = facts.map(t => {
-      const type = getFlowType(t.account_from, t.account_to);
-      const reserve = isSavings(t);
+      let type = getFlowType(t.account_from, t.account_to);
+      let reserve = false;
+      let debtDir = null;  // 'received' (+зелёный) | 'paid' (−янтарь)
+      // Долговые операции (Обязательства/Дебиторка) — направленные:
+      //   счёт-долг в «куда» → деньги уходят (оплатил/дал) → −;  в «откуда» → приходят (получил/занял) → +
+      if (type !== 'income' && type !== 'expense' && (isDebtAcc(t.account_from) || isDebtAcc(t.account_to))) {
+        type = 'debt';
+        debtDir = isDebtAcc(t.account_to) ? 'paid' : 'received';
+      } else if (type === 'transfer' && reserveNames.has(t.account_to)) {
+        reserve = true;
+      }
       const c = catById[t.category_id] || null;
-      const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : reserve ? t.account_to : t.account_to);
-      // Подпись = категория (как у всех операций). Для переводов без категории — счета.
+      const name = c?.subcategory || c?.category || (
+        type === 'income' ? 'Доход' : type === 'debt' ? 'Долг' : t.account_to);
+      // Подпись = категория. Для переводов/долгов без категории — счета.
       let sub = '';
       if (c?.category) sub = c.category;
-      else if (type === 'transfer') sub = `${t.account_from} → ${t.account_to}`;
+      else if (type === 'transfer' || type === 'debt') sub = `${t.account_from} → ${t.account_to}`;
       else if (type === 'income') sub = 'Доход';
-      else if (type === 'obligation') sub = 'Обязательства';
       else sub = t.account_from;
       if (sub === name) sub = '';
-      // character key (only for expense/obligation)
+      // character key (расход и долг)
       let charKey = null;
-      if ((type === 'expense' || type === 'obligation') && c) {
+      if ((type === 'expense' || type === 'debt') && c) {
         if (c.character === 'Эпизодический') charKey = 'episodic';
         else if (c.expense_type === 'fixed') charKey = 'fixed';
         else if (c.expense_type === 'variable') charKey = 'variable';
@@ -7421,7 +7431,7 @@ async function loadOperations(yr, mo) {
       const catName = c?.category || (type === 'income' ? 'Доход' : null);
       const subName = c?.subcategory || null;
       const searchKey = [name, sub, t.note, c?.group_name, catName, subName].filter(Boolean).join(' ').toLowerCase();
-      return { id: t.id, date: t.date, amount: +t.amount, type, reserve, name, sub, note: t.note || '', charKey, catName, subName, searchKey };
+      return { id: t.id, date: t.date, amount: +t.amount, type, reserve, debtDir, name, sub, note: t.note || '', charKey, catName, subName, searchKey };
     });
 
     _opsData = { rows: rowsData, todayStr };
@@ -7535,7 +7545,7 @@ function opsTypeBadge(type, reserve) {
   if (reserve)              return `<span style="${S};color:#167F73;background:rgba(31,164,151,.14)">Пополн. резерва</span>`;
   if (type === 'income')    return `<span style="${S};color:#4E7D14;background:rgba(180,222,60,.20)">Доход</span>`;
   if (type === 'expense')   return `<span style="${S};color:#46586E;background:rgba(15,36,60,.06)">Расход</span>`;
-  if (type === 'obligation')return `<span style="${S};color:#9A6B12;background:rgba(231,178,62,.20)">Долг</span>`;
+  if (type === 'debt' || type === 'obligation') return `<span style="${S};color:#9A6B12;background:rgba(231,178,62,.20)">Долг</span>`;
   return `<span style="${S};color:#1D7E97;background:rgba(42,167,204,.14)">Перевод</span>`;
 }
 
@@ -7557,7 +7567,7 @@ function renderOpsRows() {
   const filtered = _opsData.rows.filter(r => {
     if (_opsFilter === 'income'   && r.type !== 'income')     return false;
     if (_opsFilter === 'expense'  && r.type !== 'expense')    return false;
-    if (_opsFilter === 'debt'     && r.type !== 'obligation') return false;
+    if (_opsFilter === 'debt'     && r.type !== 'debt')       return false;
     if (_opsFilter === 'transfer' && r.type !== 'transfer')   return false;
     if (_opsSub  !== 'all' && r.subName !== _opsSub) return false;
     if (_opsCat  !== 'all' && r.catName !== _opsCat) return false;
@@ -7581,17 +7591,18 @@ function renderOpsRows() {
 
   const amtCell = r => {
     let sign = '', clr = 'var(--text2)';
-    if (r.type === 'income')         { sign = '+'; clr = '#5E9B1E'; }
-    else if (r.type === 'expense')   { sign = '−'; clr = '#bf7419'; }
-    else if (r.type === 'obligation'){ sign = '−'; clr = '#bf7419'; }
-    else if (r.reserve)              { sign = '';  clr = '#167F73'; }
+    if (r.type === 'income')                                   { sign = '+'; clr = '#5E9B1E'; }
+    else if (r.type === 'expense')                            { sign = '−'; clr = '#bf7419'; }
+    else if (r.type === 'debt' && r.debtDir === 'received')   { sign = '+'; clr = '#5E9B1E'; }
+    else if (r.type === 'debt')                               { sign = '−'; clr = '#bf7419'; }
+    else if (r.reserve)                                       { sign = '';  clr = '#167F73'; }
     return `<td style="padding:0 14px;text-align:right;font-size:13.5px;font-weight:600;color:${clr};white-space:nowrap;font-variant-numeric:tabular-nums">${sign}${f(r.amount)} ₽</td>`;
   };
 
   let html = '';
   groups.forEach(g => {
-    const inc = g.rows.filter(r => r.type === 'income').reduce((a,r)=>a+r.amount,0);
-    const exp = g.rows.filter(r => r.type === 'expense' || r.type === 'obligation').reduce((a,r)=>a+r.amount,0);
+    const inc = g.rows.filter(r => r.type === 'income' || (r.type === 'debt' && r.debtDir === 'received')).reduce((a,r)=>a+r.amount,0);
+    const exp = g.rows.filter(r => r.type === 'expense' || (r.type === 'debt' && r.debtDir === 'paid')).reduce((a,r)=>a+r.amount,0);
     const parts = [];
     if (inc > 0) parts.push(`<span style="color:#5E9B1E">доход +${f(inc)} ₽</span>`);
     if (exp > 0) parts.push(`<span style="color:#bf7419">расход −${f(exp)} ₽</span>`);
