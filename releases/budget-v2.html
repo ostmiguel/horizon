@@ -6467,7 +6467,7 @@ async function loadDashboardNew() {
     const PILL = {
       green:  { bg: 'linear-gradient(90deg,#c1ee56,#a3d837)', color: '#0F243C', label: '• В графике'  },
       yellow: { bg: 'rgba(217,119,6,.14)',  color: '#D97706', label: 'На грани'   },
-      red:    { bg: 'rgba(176,73,42,.14)',  color: '#B0492A', label: 'Не хватает' },
+      red:    { bg: 'rgba(176,73,42,.14)',  color: '#B0492A', label: '• Не хватает' },
     };
 
     // ── Safe to spend ────────────────────────────────────────────────────────
@@ -6541,7 +6541,6 @@ async function loadDashboardNew() {
 
     // Early warning lines (when STS < 0)
     const warningHtml = sts.value < 0 ? `
-      ${zeroCrossDay ? `<div class="muted">Деньги заканчиваются около ${zeroCrossDay} ${mShort} — платежи приходят раньше поступления дохода.</div>` : ''}
       ${structuralDeficit ? `<div class="muted">Расходы (~${f(totalOutflows)} ₽) больше дохода (~${f(wf.i_remain)} ₽) примерно на ${f(deficitGap)} ₽.</div>` : ''}
     ` : '';
 
