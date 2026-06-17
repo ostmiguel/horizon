@@ -774,6 +774,7 @@ body {
 .sum-table tr.sum-row-hover td { background:var(--bg3); transition:background 0.1s; }
 .sum-months th, .sum-months td { min-width:72px; }
 @media (max-width:768px) { .summary-kpi { grid-template-columns:repeat(3,1fr); } .summary-grid { grid-template-columns:1fr; } }
+@media (max-width:900px) { .ops-kpi { grid-template-columns:1fr 1fr !important; } .ops-hide { display:none !important; } }
 
 
 .has-tooltip { position: relative; display: inline-flex; }
@@ -7278,6 +7279,10 @@ function openLabModalEpis(planCur) {
 
 // ── ОПЕРАЦИИ (Фаза 3) ─────────────────────────────────────────────────────────
 let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense', _editingOpsTxId = null;
+let _opsCat = 'all', _opsType = 'all', _opsChar = 'all', _opsSearch = '';
+let _opsData = null;
+const MONTHS_GEN = ['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const OPS_CHAR_LABEL = { fixed: 'Фиксированные', variable: 'Повседневные', episodic: 'Эпизодические' };
 
 async function loadOperations(yr, mo) {
   const now = new Date();
@@ -7300,107 +7305,93 @@ async function loadOperations(yr, mo) {
     const facts = factRes.data || [];
     const plans = planRes.data || [];
 
-    const income  = facts.filter(t => t.account_from === 'Доход').reduce((s,t) => s + +t.amount, 0);
-    const expense = facts.filter(t => t.account_to   === 'Расход').reduce((s,t) => s + +t.amount, 0);
-    const debt    = facts.filter(t => t.account_to   === 'Обязательства').reduce((s,t) => s + +t.amount, 0);
+    // category lookup (transactions are fetched without join)
+    const catById = {};
+    (cats || []).forEach(c => { catById[c.id] = c; });
+    const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
 
-    function matchFilter(t) {
-      if (_opsFilter === 'income')   return t.account_from === 'Доход';
-      if (_opsFilter === 'expense')  return t.account_to   === 'Расход';
-      if (_opsFilter === 'debt')     return t.account_to   === 'Обязательства';
-      if (_opsFilter === 'transfer') return t.account_from !== 'Доход' && t.account_to !== 'Расход' && t.account_to !== 'Обязательства';
-      return true;
+    const isSavings = t => getFlowType(t.account_from, t.account_to) === 'transfer' && reserveNames.has(t.account_to);
+
+    // ── KPI: факт vs план по 4 направлениям ───────────────────────────────────
+    const sumBy = (arr, pred) => arr.filter(pred).reduce((s,t) => s + +t.amount, 0);
+    const kpi = {
+      income:  { fact: sumBy(facts, t => getFlowType(t.account_from,t.account_to)==='income'),
+                 plan: sumBy(plans, t => getFlowType(t.account_from,t.account_to)==='income'), good: 'up' },
+      expense: { fact: sumBy(facts, t => getFlowType(t.account_from,t.account_to)==='expense'),
+                 plan: sumBy(plans, t => getFlowType(t.account_from,t.account_to)==='expense'), good: 'down' },
+      savings: { fact: sumBy(facts, isSavings),
+                 plan: sumBy(plans, isSavings), good: 'up' },
+      debt:    { fact: sumBy(facts, t => getFlowType(t.account_from,t.account_to)==='obligation'),
+                 plan: sumBy(plans, t => getFlowType(t.account_from,t.account_to)==='obligation'), good: 'down' },
+    };
+
+    function kpiCard(label, k, sign) {
+      const fact = k.fact, plan = k.plan, delta = fact - plan;
+      const onTarget = k.good === 'up' ? fact >= plan : fact <= plan;
+      const barW = plan > 0 ? Math.min(Math.round(fact / plan * 100), 100) : (fact > 0 ? 100 : 0);
+      const barClr = onTarget ? '#5FB36A' : '#E7B23E';
+      // delta «хорошо» зелёный / «плохо» янтарь по семантике направления
+      const deltaGood = k.good === 'up' ? delta >= 0 : delta <= 0;
+      const deltaClr = deltaGood ? '#5E9B1E' : '#C0741A';
+      const deltaStr = (delta > 0 ? '+' : delta < 0 ? '−' : '') + f(delta);
+      return `<div class="card" style="padding:16px 18px">
+        <div style="font-size:12.5px;font-weight:600;color:var(--text2);margin-bottom:9px">${label}</div>
+        <div style="font-size:24px;font-weight:700;letter-spacing:-.02em;color:#0F243C;font-variant-numeric:tabular-nums">${sign}${f(fact)} ₽</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:5px;font-variant-numeric:tabular-nums">план ${f(plan)} · <span style="color:${deltaClr};font-weight:600">${deltaStr}</span></div>
+        <div style="height:6px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:11px;overflow:hidden"><i style="display:block;height:100%;border-radius:99px;width:${barW}%;background:${barClr}"></i></div>
+      </div>`;
     }
 
-    const filteredFacts = facts.filter(matchFilter).sort((a,b) => b.date.localeCompare(a.date));
-    const futurePlan    = plans.filter(p => p.date > todayStr).filter(matchFilter).sort((a,b) => a.date.localeCompare(b.date));
-
-    function fmtDate(d) {
-      const dt = new Date(d + 'T00:00:00');
-      return dt.toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
-    }
-
-    function typeBadge(type) {
-      if (type === 'income')     return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:var(--income-bg);color:var(--income)">Доход</span>';
-      if (type === 'expense')    return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:#F3F4F6;color:var(--text2)">Расход</span>';
-      if (type === 'obligation') return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:#FEF3C7;color:#92400E">Долг</span>';
-      return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;background:#EFF6FF;color:#1D4ED8">Перевод</span>';
-    }
-
-    function charChip(type, c) {
-      if (!c || type === 'income' || type === 'transfer') return '<span style="color:var(--text3)">—</span>';
-      if (c.character === 'Эпизодический') return '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:#FAF5FF;color:#7C3AED">эпизод</span>';
-      if (c.expense_type === 'fixed')       return '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:#EFF6FF;color:#1D4ED8">фикс</span>';
-      if (c.expense_type === 'variable')    return '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:#F0FDF4;color:#166534">поток</span>';
-      return '<span style="color:var(--text3)">—</span>';
-    }
-
-    function txRow(t, isPlan) {
+    // ── Precompute fact rows (this is a pure FACT feed — no plan rows) ─────────
+    const rowsData = facts.map(t => {
       const type = getFlowType(t.account_from, t.account_to);
-      const sign = type === 'income' ? '+' : '−';
-      const amtColor = type === 'income' ? 'var(--income)' : type === 'expense' ? 'var(--expense)' : type === 'obligation' ? '#B45309' : 'var(--text2)';
-      const c = t.categories;
-      const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : t.account_to);
+      const reserve = isSavings(t);
+      const c = catById[t.category_id] || null;
+      const name = c?.subcategory || c?.category || (type === 'income' ? 'Доход' : type === 'obligation' ? 'Обязательства' : reserve ? t.account_to : t.account_to);
       let sub = '';
       if (c?.category && c?.subcategory && c.category !== c.subcategory) sub = c.category;
       else if (type === 'income') sub = t.account_to;
       else if (type === 'expense' || type === 'obligation') sub = t.account_from;
       else sub = `${t.account_from} → ${t.account_to}`;
-      const noteStr = t.note ? ` · ${esc(t.note)}` : '';
-      const searchKey = [name, sub, t.note, c?.group_name].filter(Boolean).join(' ').toLowerCase();
-      const dateCell = isPlan
-        ? `<td style="padding:11px 14px;color:var(--text3);font-size:12px;white-space:nowrap;vertical-align:middle"><span style="font-size:10px;background:#EFF6FF;color:#1D4ED8;padding:1px 5px;border-radius:4px;display:block;margin-bottom:3px">план</span>${fmtDate(t.date)}</td>`
-        : `<td style="padding:11px 14px;color:var(--text3);font-size:12px;white-space:nowrap;vertical-align:middle">${fmtDate(t.date)}</td>`;
-      const actions = isPlan ? '<td style="padding:11px 14px"></td>'
-        : `<td style="padding:11px 14px;text-align:right;white-space:nowrap;vertical-align:middle">
-            <button onclick="openEditOpsTx(${t.id})" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--text2);cursor:pointer;margin-right:4px">ред.</button>
-            <button onclick="deleteOpsTx(${t.id})" style="background:none;border:none;font-size:16px;color:var(--text3);cursor:pointer;line-height:1;padding:0 2px">×</button>
-          </td>`;
-      return `<tr data-search="${esc(searchKey)}" style="border-bottom:1px solid var(--border);${isPlan?'opacity:0.5':''}transition:.1s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
-        ${dateCell}
-        <td style="padding:11px 14px;vertical-align:middle">
-          <div style="font-size:13px;font-weight:500;color:var(--text)">${esc(name)}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:1px">${esc(sub)}${noteStr}</div>
-        </td>
-        <td style="padding:11px 14px;white-space:nowrap;vertical-align:middle">${typeBadge(type)}</td>
-        <td style="padding:11px 14px;white-space:nowrap;vertical-align:middle">${charChip(type, c)}</td>
-        <td style="padding:11px 14px;text-align:right;font-size:14px;font-weight:600;color:${amtColor};white-space:nowrap;vertical-align:middle">${sign}${f(t.amount)} ₽</td>
-        ${actions}
-      </tr>`;
-    }
+      // character key (only for expense/obligation)
+      let charKey = null;
+      if ((type === 'expense' || type === 'obligation') && c) {
+        if (c.character === 'Эпизодический') charKey = 'episodic';
+        else if (c.expense_type === 'fixed') charKey = 'fixed';
+        else if (c.expense_type === 'variable') charKey = 'variable';
+      }
+      const catName = c?.category || (type === 'income' ? 'Доход' : null);
+      const searchKey = [name, sub, t.note, c?.group_name, catName].filter(Boolean).join(' ').toLowerCase();
+      return { id: t.id, date: t.date, amount: +t.amount, type, reserve, name, sub, note: t.note || '', charKey, catName, searchKey };
+    });
 
-    function sectionDivider(label) {
-      return `<tr><td colspan="6" style="padding:10px 14px 4px;background:var(--bg)">
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-          <span style="font-size:10px;font-weight:600;color:var(--accent);white-space:nowrap;text-transform:uppercase;letter-spacing:.05em">${label}</span>
-          <div style="flex:1;height:1px;background:var(--border)"></div>
-        </div>
-      </td></tr>`;
-    }
+    _opsData = { rows: rowsData, todayStr };
 
-    let rows = filteredFacts.map(t => txRow(t, false)).join('');
-    const isPastMonth = yr < now.getFullYear() || (yr === now.getFullYear() && mo < now.getMonth() + 1);
-    if (futurePlan.length > 0 && !isPastMonth) {
-      rows += sectionDivider(`план · ${futurePlan.length} позиций`);
-      rows += futurePlan.map(t => txRow(t, true)).join('');
-    }
-    if (!rows) rows = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Нет операций за период</td></tr>`;
+    // dropdown option lists from present data
+    const catSet = [...new Set(rowsData.map(r => r.catName).filter(Boolean))].sort((a,b) => a.localeCompare(b,'ru'));
+    const catOpts = ['<option value="all">Категория: все</option>']
+      .concat(catSet.map(c => `<option value="${esc(c)}"${_opsCat===c?' selected':''}>${esc(c)}</option>`)).join('');
+    const typeDefs = [['all','Тип: все'],['income','Доход'],['expense','Расход'],['obligation','Долг'],['transfer','Перевод']];
+    const typeOpts = typeDefs.map(([v,l]) => `<option value="${v}"${_opsType===v?' selected':''}>${l}</option>`).join('');
+    const charDefs = [['all','Характер: все'],['fixed','Фиксированные'],['variable','Повседневные'],['episodic','Эпизодические']];
+    const charOpts = charDefs.map(([v,l]) => `<option value="${v}"${_opsChar===v?' selected':''}>${l}</option>`).join('');
 
-    const filterDefs = [{k:'all',label:'Все'},{k:'income',label:'Доходы'},{k:'expense',label:'Расходы'},{k:'debt',label:'Долги'},{k:'transfer',label:'Переводы'}];
-    const filterBtns = filterDefs.map(({k,label}) =>
-      `<button onclick="_opsFilter='${k}';loadOperations(${yr},${mo})" style="padding:5px 13px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:500;background:${_opsFilter===k?'var(--accent)':'transparent'};color:${_opsFilter===k?'white':'var(--text2)'}">${label}</button>`
+    const segDefs = [{k:'all',label:'Все'},{k:'income',label:'Доходы'},{k:'expense',label:'Расходы'},{k:'debt',label:'Долги'},{k:'transfer',label:'Переводы'}];
+    const segBtns = segDefs.map(({k,label}) =>
+      `<button onclick="opsSetSeg('${k}',this)" style="padding:6px 13px;border-radius:7px;border:none;cursor:pointer;font-size:12.5px;font-weight:500;background:${_opsFilter===k?'var(--accent)':'transparent'};color:${_opsFilter===k?'#fff':'var(--text2)'}">${label}</button>`
     ).join('');
+
+    const selStyle = 'padding:7px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12.5px;background:var(--bg2);color:var(--text2);box-shadow:var(--shadow);cursor:pointer';
 
     const prevY = mo===1?yr-1:yr, prevM = mo===1?12:mo-1;
     const nextY = mo===12?yr+1:yr, nextM = mo===12?1:mo+1;
 
     main.innerHTML = `
-      <div style="padding:0 0 48px">
+      <div style="padding:0 0 48px" onclick="opsCloseMenu()">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
           <div>
             <div class="page-title">Операции</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:2px">план и факт за месяц</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">лента фактических операций за месяц</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div style="display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;box-shadow:var(--shadow)">
@@ -7412,40 +7403,34 @@ async function loadOperations(yr, mo) {
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
-          <div class="card" style="padding:14px 16px">
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Доходы · факт</div>
-            <div style="font-size:20px;font-weight:600;color:var(--income)">+${f(income)} ₽</div>
-          </div>
-          <div class="card" style="padding:14px 16px">
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Расходы · факт</div>
-            <div style="font-size:20px;font-weight:600;color:var(--expense)">−${f(expense)} ₽</div>
-          </div>
-          <div class="card" style="padding:14px 16px">
-            <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Долги · факт</div>
-            <div style="font-size:20px;font-weight:600;color:#B45309">−${f(debt)} ₽</div>
-          </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px" class="ops-kpi">
+          ${kpiCard('Доходы · факт', kpi.income, '+')}
+          ${kpiCard('Расходы · факт', kpi.expense, '−')}
+          ${kpiCard('Сбережения · факт', kpi.savings, '+')}
+          ${kpiCard('Долги · факт', kpi.debt, '−')}
         </div>
 
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-          <div style="display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;box-shadow:var(--shadow)">${filterBtns}</div>
-          <input type="text" id="opsSearch" placeholder="Поиск…" oninput="opsFilterRows(this.value)"
-            style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12px;background:var(--bg2);color:var(--text);box-shadow:var(--shadow)">
+          <div id="opsSeg" style="display:flex;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px;box-shadow:var(--shadow)">${segBtns}</div>
+          <select style="${selStyle}" onchange="_opsCat=this.value;renderOpsRows()">${catOpts}</select>
+          <select style="${selStyle}" onchange="_opsType=this.value;renderOpsRows()">${typeOpts}</select>
+          <select style="${selStyle}" onchange="_opsChar=this.value;renderOpsRows()">${charOpts}</select>
+          <input type="text" id="opsSearch" placeholder="Поиск по операциям…" value="${esc(_opsSearch)}" oninput="_opsSearch=this.value;renderOpsRows()"
+            style="flex:1;min-width:160px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12.5px;background:var(--bg2);color:var(--text);box-shadow:var(--shadow)">
         </div>
 
         <div class="card" style="padding:0;overflow:hidden">
           <table style="width:100%;border-collapse:collapse">
             <thead>
               <tr style="border-bottom:1px solid var(--border);background:var(--bg)">
-                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">Дата</th>
-                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Операция</th>
+                <th style="padding:9px 16px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Операция</th>
                 <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Тип</th>
-                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Характер</th>
+                <th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em" class="ops-hide">Характер</th>
                 <th style="padding:9px 14px;text-align:right;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Сумма</th>
-                <th style="padding:9px 14px;width:90px"></th>
+                <th style="padding:9px 10px;width:40px"></th>
               </tr>
             </thead>
-            <tbody id="opsTbody">${rows}</tbody>
+            <tbody id="opsTbody"></tbody>
           </table>
         </div>
 
@@ -7461,16 +7446,135 @@ async function loadOperations(yr, mo) {
         </div>
       </div>`;
 
+    renderOpsRows();
+
   } catch(e) {
     main.innerHTML = `<div style="padding:24px;color:var(--expense)">Ошибка: ${e.message}</div>`;
   }
 }
 
-function opsFilterRows(q) {
-  const s = q.toLowerCase().trim();
-  document.querySelectorAll('#opsTbody tr[data-search]').forEach(tr => {
-    tr.style.display = (!s || tr.dataset.search.includes(s)) ? '' : 'none';
+function opsSetSeg(k, el) {
+  _opsFilter = k;
+  document.querySelectorAll('#opsSeg button').forEach(b => { b.style.background='transparent'; b.style.color='var(--text2)'; });
+  el.style.background = 'var(--accent)'; el.style.color = '#fff';
+  renderOpsRows();
+}
+
+function opsDateLabel(dateStr, todayStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const t = new Date(todayStr + 'T00:00:00');
+  const diff = Math.round((d - t) / 86400000);
+  if (diff === 0) return 'Сегодня';
+  if (diff === 1) return 'Завтра';
+  if (diff === -1) return 'Вчера';
+  return `${d.getDate()} ${MONTHS_GEN[d.getMonth() + 1]}`;
+}
+
+function opsTypeBadge(type, reserve) {
+  const S = 'font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap';
+  if (reserve)              return `<span style="${S};color:#167F73;background:rgba(31,164,151,.14)">Пополн. резерва</span>`;
+  if (type === 'income')    return `<span style="${S};color:#4E7D14;background:rgba(180,222,60,.20)">Доход</span>`;
+  if (type === 'expense')   return `<span style="${S};color:#46586E;background:rgba(15,36,60,.06)">Расход</span>`;
+  if (type === 'obligation')return `<span style="${S};color:#9A6B12;background:rgba(231,178,62,.20)">Долг</span>`;
+  return `<span style="${S};color:#1D7E97;background:rgba(42,167,204,.14)">Перевод</span>`;
+}
+
+function opsCharBadge(charKey) {
+  if (!charKey) return '<span style="color:var(--text3)">—</span>';
+  const S = 'font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;white-space:nowrap';
+  if (charKey === 'fixed')    return `<span style="${S};color:#1D7E97;background:rgba(42,167,204,.12)">Фиксированные</span>`;
+  if (charKey === 'variable') return `<span style="${S};color:#4E7D14;background:rgba(180,222,60,.16)">Повседневные</span>`;
+  if (charKey === 'episodic') return `<span style="${S};color:#7A8BA0;background:rgba(15,36,60,.05)">Эпизодические</span>`;
+  return '<span style="color:var(--text3)">—</span>';
+}
+
+function renderOpsRows() {
+  const tbody = document.getElementById('opsTbody');
+  if (!tbody || !_opsData) return;
+  const f = n => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
+  const s = _opsSearch.toLowerCase().trim();
+
+  const filtered = _opsData.rows.filter(r => {
+    if (_opsFilter === 'income'   && r.type !== 'income')     return false;
+    if (_opsFilter === 'expense'  && r.type !== 'expense')    return false;
+    if (_opsFilter === 'debt'     && r.type !== 'obligation') return false;
+    if (_opsFilter === 'transfer' && r.type !== 'transfer')   return false;
+    if (_opsType !== 'all' && r.type !== _opsType) return false;
+    if (_opsCat  !== 'all' && r.catName !== _opsCat) return false;
+    if (_opsChar !== 'all' && r.charKey !== _opsChar) return false;
+    if (s && !r.searchKey.includes(s)) return false;
+    return true;
+  }).sort((a,b) => b.date.localeCompare(a.date));
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Нет операций по фильтрам</td></tr>`;
+    return;
+  }
+
+  // group by day
+  const groups = [];
+  let cur = null;
+  filtered.forEach(r => {
+    if (!cur || cur.date !== r.date) { cur = { date: r.date, rows: [] }; groups.push(cur); }
+    cur.rows.push(r);
   });
+
+  const amtCell = r => {
+    let sign = '', clr = 'var(--text2)';
+    if (r.type === 'income')         { sign = '+'; clr = '#5E9B1E'; }
+    else if (r.type === 'expense')   { sign = '−'; clr = '#bf7419'; }
+    else if (r.type === 'obligation'){ sign = '−'; clr = '#9A6B12'; }
+    else if (r.reserve)              { sign = '';  clr = '#167F73'; }
+    return `<td style="padding:0 14px;text-align:right;font-size:13.5px;font-weight:600;color:${clr};white-space:nowrap;font-variant-numeric:tabular-nums">${sign}${f(r.amount)} ₽</td>`;
+  };
+
+  let html = '';
+  groups.forEach(g => {
+    const inc = g.rows.filter(r => r.type === 'income').reduce((a,r)=>a+r.amount,0);
+    const exp = g.rows.filter(r => r.type === 'expense' || r.type === 'obligation').reduce((a,r)=>a+r.amount,0);
+    const parts = [];
+    if (inc > 0) parts.push(`<span style="color:#5E9B1E">доход +${f(inc)} ₽</span>`);
+    if (exp > 0) parts.push(`<span style="color:#bf7419">расход −${f(exp)} ₽</span>`);
+    const sub = parts.join(' <span style="color:var(--text3)">·</span> ');
+    html += `<tr><td colspan="5" style="padding:13px 16px 6px;background:var(--bg)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px">
+        <span style="font-size:12px;font-weight:600;color:var(--text2)">${opsDateLabel(g.date, _opsData.todayStr)}</span>
+        <span style="font-size:12px;font-variant-numeric:tabular-nums">${sub}</span>
+      </div></td></tr>`;
+    g.rows.forEach(r => {
+      const noteStr = r.note ? ` <span style="color:var(--text3)">· ${esc(r.note)}</span>` : '';
+      html += `<tr style="border-top:1px solid var(--border);height:44px;transition:.1s" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">
+        <td style="padding:0 16px;vertical-align:middle">
+          <div style="font-size:13px;font-weight:500;color:var(--text);line-height:1.3">${esc(r.name)}</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.3">${esc(r.sub)}${noteStr}</div>
+        </td>
+        <td style="padding:0 14px;white-space:nowrap;vertical-align:middle">${opsTypeBadge(r.type, r.reserve)}</td>
+        <td style="padding:0 14px;white-space:nowrap;vertical-align:middle" class="ops-hide">${opsCharBadge(r.charKey)}</td>
+        ${amtCell(r)}
+        <td style="padding:0 10px;text-align:right;vertical-align:middle;white-space:nowrap">
+          <button onclick="event.stopPropagation();opsMenu(this,${r.id})" aria-label="Действия" style="background:none;border:none;font-size:18px;color:var(--text3);cursor:pointer;line-height:1;padding:2px 6px;border-radius:6px">⋮</button>
+        </td>
+      </tr>`;
+    });
+  });
+  tbody.innerHTML = html;
+}
+
+function opsCloseMenu() {
+  const m = document.getElementById('opsRowMenu');
+  if (m) m.remove();
+}
+
+function opsMenu(btn, id) {
+  opsCloseMenu();
+  const r = btn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.id = 'opsRowMenu';
+  menu.style.cssText = `position:fixed;top:${Math.round(r.bottom+4)}px;left:${Math.round(r.right-150)}px;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow2);padding:5px;min-width:150px`;
+  menu.innerHTML = `
+    <button onclick="opsCloseMenu();openEditOpsTx(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text);padding:8px 10px;border-radius:7px" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">Редактировать</button>
+    <button onclick="opsCloseMenu();deleteOpsTx(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:#bf7419;padding:8px 10px;border-radius:7px" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">Удалить</button>`;
+  document.body.appendChild(menu);
 }
 
 function _buildOpsForm(type) {
