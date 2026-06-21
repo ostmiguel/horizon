@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 # гарантируем импорт metrics_core независимо от рабочей директории запуска
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from metrics_core import safe_to_spend  # noqa: E402
+from plan_materialize import materialize_rules  # noqa: E402
 
 load_dotenv()
 DB_URL = os.getenv("DATABASE_URL")
@@ -119,6 +120,9 @@ async def run():
                     n = await generate_loan_plan(conn, uid, year, month)
                     if n:
                         print(f"  [{uid}] loan plan generated: {n} rows")
+                    nr = await materialize_rules(conn, uid, year, month)
+                    if nr:
+                        print(f"  [{uid}] plan rules materialized: {nr} rows")
                 r = await snapshot_user(conn, uid, today, month_end)
                 print(
                     f"  [{uid}] ok | b0={r['b0']:.0f} i={r['i_remain']:.0f} "

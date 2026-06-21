@@ -1,8 +1,16 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 
+from plan_materialize import materialize_rules, current_and_next_month
+
 router = APIRouter(prefix="/api/plan-rules", tags=["plan_rules"])
+
+
+async def _materialize_current_next(db, user_id):
+    """Материализовать активные правила на текущий и следующий месяц."""
+    for y, m in current_and_next_month():
+        await materialize_rules(db, user_id, y, m)
 
 
 class PlanRuleCreate(BaseModel):
@@ -65,6 +73,7 @@ async def create_plan_rule(data: PlanRuleCreate, request: Request):
         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
     """, user_id, data.name, data.amount, data.account_from, data.account_to,
         data.category_id, data.day_of_month)
+    await _materialize_current_next(db, user_id)
     return dict(row)
 
 
@@ -82,6 +91,7 @@ async def update_plan_rule(rule_id: int, data: PlanRuleUpdate, request: Request)
     )
     if not row:
         raise HTTPException(404, "Rule not found")
+    await _materialize_current_next(db, user_id)
     return dict(row)
 
 
@@ -89,5 +99,16 @@ async def update_plan_rule(rule_id: int, data: PlanRuleUpdate, request: Request)
 async def delete_plan_rule(rule_id: int, request: Request):
     user_id = request.state.user_id
     db = request.state.db
+    # ON DELETE CASCADE удалит материализованные строки plan этого правила
     await db.execute("DELETE FROM plan_rules WHERE id=$1 AND user_id=$2", rule_id, user_id)
     return {"ok": True}
+
+
+@router.post("/materialize")
+async def materialize(request: Request,
+                      year: int = Query(...), month: int = Query(...)):
+    """Ручной прогон материализации правил в plan на указанный месяц."""
+    user_id = request.state.user_id
+    db = request.state.db
+    n = await materialize_rules(db, user_id, year, month)
+    return {"ok": True, "created": n, "year": year, "month": month}
