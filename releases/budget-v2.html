@@ -7150,8 +7150,9 @@ window.onload = async () => {
   }
 
   // New-arch nav: hide old items, show Прогноз, rename Дашборд → Обзор
+  // (Сводка оставлена видимой — нужна для формирования правил)
   if (window.NEW_ARCH) {
-    ['navSummary', 'navSectionOld'].forEach(id => {
+    ['navSectionOld'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
