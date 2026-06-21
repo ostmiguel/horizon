@@ -1,8 +1,33 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
+from datetime import date
+import statistics
 
 router = APIRouter(prefix="/api/category-budgets", tags=["category_budgets"])
+
+
+@router.get("/suggest")
+async def suggest_budget(request: Request, category_id: int = Query(...)):
+    """Подсказка суммы конверта = медиана месячных трат по подкатегории за 3 мес.
+    Нет истории → 0 (фронт оставит поле пустым)."""
+    user_id = request.state.user_id
+    db = request.state.db
+    today = date.today()
+    sums = []
+    for i in range(1, 4):
+        m, y = today.month - i, today.year
+        if m <= 0:
+            m += 12; y -= 1
+        v = await db.fetchval("""
+            SELECT COALESCE(SUM(amount), 0) FROM transactions
+            WHERE user_id=$1 AND category_id=$2 AND account_to='Расход'
+              AND EXTRACT(YEAR FROM date)=$3 AND EXTRACT(MONTH FROM date)=$4
+        """, user_id, category_id, y, m)
+        sums.append(float(v))
+    nonzero = [s for s in sums if s > 0]
+    suggested = round(statistics.median(nonzero)) if nonzero else 0
+    return {"category_id": category_id, "suggested": suggested, "history": [round(s) for s in sums]}
 
 
 class BudgetUpsert(BaseModel):
