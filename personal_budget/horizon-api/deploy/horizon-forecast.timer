@@ -1,0 +1,10 @@
+[Unit]
+Description=Horizon — run forecast snapshot daily at 23:55
+
+[Timer]
+OnCalendar=*-*-* 23:55:00
+Persistent=true
+Unit=horizon-forecast.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=Horizon — daily Safe-to-Spend forecast snapshot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/horizon/personal_budget/horizon-api
+# .env подхватывается load_dotenv() внутри скрипта; дублируем через EnvironmentFile
+# на случай запуска не из CWD приложения. '-' = не падать, если файла нет.
+EnvironmentFile=-/opt/horizon/.env
+EnvironmentFile=-/opt/horizon/personal_budget/horizon-api/.env
+# ВАЖНО: интерпретатор должен быть ТОТ ЖЕ, что у сервиса horizon (с asyncpg/dotenv).
+# Узнать: systemctl cat horizon | grep ExecStart  → подставить путь к python из venv.
+# По умолчанию пробуем venv, иначе системный python3.
+ExecStart=/bin/bash -lc 'cd /opt/horizon/personal_budget/horizon-api && { [ -x /opt/horizon/venv/bin/python ] && P=/opt/horizon/venv/bin/python || P="$(command -v python3)"; } && exec "$P" forecast_cron.py'
+
+[Install]
+WantedBy=multi-user.target

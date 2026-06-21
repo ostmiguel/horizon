@@ -1,165 +1,16 @@
 from fastapi import APIRouter, Request
 from datetime import date, timedelta
-from calendar import monthrange
 import statistics
 import math
 
+from metrics_core import (
+    Z_80, FLOW_CHARS, EPISODIC_CHARS, FIXED_CHARS,
+    month_context, robust_rate, robust_sigma, _is_op, _is_rsv,
+    account_balances, flow_daily_rate, monthly_income_sum,
+    monthly_expense_sum, plan_remaining, safe_to_spend,
+)
+
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
-
-Z_80 = 1.2816
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def month_context(d=None):
-    today = d or date.today()
-    year, month = today.year, today.month
-    days_in_month = monthrange(year, month)[1]
-    d_left = days_in_month - today.day
-    month_start = date(year, month, 1)
-    month_end = date(year, month, days_in_month)
-    return today, year, month, today.day, d_left, days_in_month, month_start, month_end
-
-
-def robust_rate(values: list[float]) -> float:
-    if not values:
-        return 0.0
-    if len(values) < 4:
-        return statistics.mean(values)
-    return statistics.median(values)
-
-
-def robust_sigma(values: list[float]) -> float:
-    if len(values) < 2:
-        return 0.0
-    med = statistics.median(values)
-    mad = statistics.median([abs(x - med) for x in values])
-    return 1.4826 * mad
-
-
-def _is_op(a: dict) -> bool:
-    """Operational: Актив + include_in_balance=True.
-    Ignores is_operational flag — it is set to True for virtual accounts (Доход, Расход, Обязательства)."""
-    return (
-        a["account_type"] == "Актив"
-        and a.get("include_in_balance") is True
-        and not a.get("is_cushion")
-    )
-
-
-def _is_rsv(a: dict) -> bool:
-    """True reserve accounts only (is_reserve=True). Used for s_reserve and runway liquid.
-    Excludes non-operational investments (Брокерский) — those are capital but not liquid runway."""
-    return (
-        a["account_type"] == "Актив"
-        and a.get("is_reserve") is True
-        and not a.get("is_cushion")
-    )
-
-
-# ── DB helpers ────────────────────────────────────────────────────────────────
-
-async def account_balances(db, user_id: str) -> dict:
-    rows = await db.fetch("""
-        SELECT
-            a.id, a.name, a.account_type,
-            a.is_reserve, a.is_operational, a.is_cushion,
-            a.include_in_balance, a.initial_balance,
-            a.initial_balance
-            + COALESCE(SUM(CASE WHEN t.account_to   = a.name THEN t.amount ELSE 0 END), 0)
-            - COALESCE(SUM(CASE WHEN t.account_from = a.name THEN t.amount ELSE 0 END), 0)
-            AS balance
-        FROM accounts a
-        LEFT JOIN transactions t
-            ON (t.account_from = a.name OR t.account_to = a.name)
-            AND t.user_id = $1
-        WHERE a.user_id = $1 AND a.is_active = true
-        GROUP BY a.id, a.name, a.account_type,
-                 a.is_reserve, a.is_operational, a.is_cushion,
-                 a.include_in_balance, a.initial_balance
-    """, user_id)
-    return {r["name"]: dict(r) for r in rows}
-
-
-FLOW_CHARS = ('flow', 'Повседневный')       # supported character values for flow
-EPISODIC_CHARS = ('episodic', 'Эпизодический')
-FIXED_CHARS = ('fixed', 'Фиксированный')
-
-
-async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
-    """§3.3 Robust daily rate (r_var) and σ from last 30 calendar days.
-
-    Key fix vs. previous version: include zero-spend days in the window so
-    the rate is total_spending / 30, not median(spending-day amounts).
-    MAD filter is applied to non-zero values only to remove outlier days
-    (e.g. one-off large purchases in an otherwise flow category).
-    """
-    cutoff = today - timedelta(days=30)
-    rows = await db.fetch("""
-        SELECT t.date, SUM(t.amount) AS daily_total
-        FROM transactions t
-        LEFT JOIN categories c ON t.category_id = c.id
-        WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
-          AND t.account_to = 'Расход'
-          AND c.expense_type = 'variable'
-          AND c.character != 'Эпизодический'
-        GROUP BY t.date ORDER BY t.date
-    """, user_id, cutoff, today)
-
-    WINDOW = 30
-    daily_by_date = {r["date"]: float(r["daily_total"]) for r in rows}
-    # Full 30-day series including zero-spend days
-    daily = [daily_by_date.get(cutoff + timedelta(days=i), 0.0) for i in range(WINDOW)]
-
-    # MAD outlier filter on positive values only (zeros are valid, not outliers)
-    pos = [x for x in daily if x > 0]
-    if len(pos) >= 2:
-        med = statistics.median(pos)
-        mad = statistics.median([abs(x - med) for x in pos])
-        threshold = med + 3 * 1.4826 * mad
-        daily = [x if x <= threshold else 0.0 for x in daily]
-
-    rate = sum(daily) / WINDOW
-    sigma = robust_sigma(daily)
-    return rate, sigma
-
-
-async def monthly_income_sum(db, user_id: str, year: int, month: int) -> float:
-    val = await db.fetchval("""
-        SELECT COALESCE(SUM(amount), 0) FROM transactions
-        WHERE user_id=$1
-          AND EXTRACT(YEAR  FROM date)=$2
-          AND EXTRACT(MONTH FROM date)=$3
-          AND account_from = 'Доход'
-    """, user_id, year, month)
-    return float(val)
-
-
-async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
-    val = await db.fetchval("""
-        SELECT COALESCE(SUM(amount), 0) FROM transactions
-        WHERE user_id=$1
-          AND EXTRACT(YEAR  FROM date)=$2
-          AND EXTRACT(MONTH FROM date)=$3
-          AND account_to IN ('Расход', 'Обязательства')
-    """, user_id, year, month)
-    return float(val)
-
-
-async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -> list:
-    rows = await db.fetch("""
-        SELECT p.date, p.amount, p.account_from, p.account_to,
-               c.category AS cat_category,
-               c.character AS cat_character,
-               c.expense_type AS cat_expense_type
-        FROM plan p
-        LEFT JOIN categories c ON p.category_id = c.id
-        WHERE p.user_id=$1
-          AND EXTRACT(YEAR  FROM p.date)=$2
-          AND EXTRACT(MONTH FROM p.date)=$3
-          AND p.date > $4
-    """, user_id, year, month, today)
-    return [dict(r) for r in rows]
 
 
 # ── /api/metrics ──────────────────────────────────────────────────────────────
@@ -169,61 +20,18 @@ async def get_metrics(request: Request):
     user_id = request.state.user_id
     db = request.state.db
 
-    today, year, month, d_now, d_left, days_in_month, month_start, month_end = month_context()
-
-    # ── Balances ──────────────────────────────────────────────────────────────
-    accs = await account_balances(db, user_id)
-
-    b0_accounts = [
-        {"name": a["name"], "balance": round(float(a["balance"])),
-         "type": a["account_type"], "include_in_balance": a.get("include_in_balance"),
-         "is_operational": a.get("is_operational"), "is_active": a.get("is_active")}
-        for a in accs.values() if _is_op(a)
-    ]
-    B0 = sum(a["balance"] for a in b0_accounts)
-    C_cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
-    reserve_balance = sum(float(a["balance"]) for a in accs.values() if _is_rsv(a))
-    liabilities = sum(
-        abs(float(a["balance"])) for a in accs.values() if a["account_type"] == "Пассив"
-    )
-
-    # ── Flow rate ─────────────────────────────────────────────────────────────
-    r_var, sigma_day = await flow_daily_rate(db, user_id, today)
-    V_remain = r_var * d_left
-    sigma_remain = sigma_day * math.sqrt(d_left) if d_left > 0 else 0.0
-
-    # ── Plan remaining ────────────────────────────────────────────────────────
-    plan_rows = await plan_remaining(db, user_id, year, month, today)
-    I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_from") == "Доход")
-    plan_expenses = [r for r in plan_rows if r.get("account_to") == "Расход"]
-    # F_remain = fixed plan expenses (expense_type='fixed') + episodic (character='Эпизодический')
-    # Variable everyday (expense_type='variable', character!='Эпизодический') → covered by V_remain
-    F_remain = sum(
-        float(r["amount"]) for r in plan_expenses
-        if r.get("cat_expense_type") == "fixed"
-        or r.get("cat_character") in EPISODIC_CHARS
-    )
-    F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
-
-    # §4.1 R_topup: плановые пополнения резерва в оставшиеся дни месяца
-    reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
-    R_topup = sum(
-        float(r["amount"]) for r in plan_rows
-        if r.get("account_to") in reserve_names
-    )
-
-    # ── §4.1 Safe to spend ────────────────────────────────────────────────────
-    sts = B0 + I_remain - F_remain - V_remain - R_topup - C_cushion
-    sts_low  = sts - Z_80 * sigma_remain
-    sts_high = sts + Z_80 * sigma_remain
-
-    buffer = sts / max(V_remain, 1)
-    if sts < 0:
-        sts_status = "red"
-    elif buffer < 0.15:
-        sts_status = "yellow"
-    else:
-        sts_status = "green"
+    # Единый расчёт STS и его компонентов (см. metrics_core.safe_to_spend) — один источник истины с forecast_cron.
+    m = await safe_to_spend(db, user_id)
+    today = m["today"]; year = m["year"]; month = m["month"]
+    d_now = m["d_now"]; d_left = m["d_left"]; days_in_month = m["days_in_month"]
+    accs = m["accs"]; b0_accounts = m["b0_accounts"]
+    B0 = m["B0"]; C_cushion = m["C_cushion"]
+    reserve_balance = m["reserve_balance"]; liabilities = m["liabilities"]
+    r_var = m["r_var"]; sigma_day = m["sigma_day"]
+    V_remain = m["V_remain"]; sigma_remain = m["sigma_remain"]
+    plan_rows = m["plan_rows"]; reserve_names = m["reserve_names"]
+    I_remain = m["I_remain"]; F_remain = m["F_remain"]; R_topup = m["R_topup"]
+    sts = m["sts"]; sts_low = m["sts_low"]; sts_high = m["sts_high"]; sts_status = m["sts_status"]
 
     # ── §4.3 Net capital + Δ% ────────────────────────────────────────────────
     total_assets = sum(float(a["balance"]) for a in accs.values() if a["account_type"] == "Актив")

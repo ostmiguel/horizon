@@ -6,6 +6,7 @@ on:
     paths:
       - 'releases/budget-v2.html'
       - 'personal_budget/horizon-api/forecast_cron.py'
+      - 'personal_budget/horizon-api/metrics_core.py'
       - 'personal_budget/horizon-api/routers/metrics.py'
       - 'personal_budget/horizon-api/routers/accounts.py'
       - 'personal_budget/horizon-api/routers/categories.py'
@@ -76,7 +77,7 @@ jobs:
           host: 109.71.247.58
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "personal_budget/horizon-api/routers/metrics.py,personal_budget/horizon-api/routers/accounts.py,personal_budget/horizon-api/routers/categories.py,personal_budget/horizon-api/routers/goals.py,personal_budget/horizon-api/routers/plan_rules.py,personal_budget/horizon-api/routers/category_budgets.py,personal_budget/horizon-api/routers/loans.py,personal_budget/horizon-api/routers/transactions.py,personal_budget/horizon-api/routers/auth.py,personal_budget/horizon-api/main.py"
+          source: "personal_budget/horizon-api/routers/metrics.py,personal_budget/horizon-api/routers/accounts.py,personal_budget/horizon-api/routers/categories.py,personal_budget/horizon-api/routers/goals.py,personal_budget/horizon-api/routers/plan_rules.py,personal_budget/horizon-api/routers/category_budgets.py,personal_budget/horizon-api/routers/loans.py,personal_budget/horizon-api/routers/transactions.py,personal_budget/horizon-api/routers/auth.py,personal_budget/horizon-api/main.py,personal_budget/horizon-api/metrics_core.py"
           target: /opt/horizon/personal_budget/horizon-api/
           strip_components: 2
 
@@ -87,6 +88,16 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: personal_budget/horizon-api/migrations/
+          target: /opt/horizon/personal_budget/horizon-api/
+          strip_components: 2
+
+      - name: Copy systemd units (forecast timer templates)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "personal_budget/horizon-api/deploy/horizon-forecast.service,personal_budget/horizon-api/deploy/horizon-forecast.timer,personal_budget/horizon-api/deploy/README.md"
           target: /opt/horizon/personal_budget/horizon-api/
           strip_components: 2
 
@@ -109,6 +120,32 @@ jobs:
               psql "$DB_URL" -f "$f"
             done
             echo "Migrations done"
+
+      - name: Install & enable forecast timer
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 109.71.247.58
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            APP=/opt/horizon/personal_budget/horizon-api
+            # интерпретатор из того же venv, что у сервиса horizon
+            EXEC=$(systemctl show -p ExecStart --value horizon | sed -nE 's/.*path=([^ ;]+).*/\1/p')
+            BINDIR=$(dirname "$EXEC")
+            PY="$BINDIR/python"; [ -x "$PY" ] || PY="$BINDIR/python3"; [ -x "$PY" ] || PY=$(command -v python3)
+            echo "Forecast interpreter: $PY"
+            # подставляем интерпретатор в ExecStart и ставим юниты
+            sed "s#^ExecStart=.*#ExecStart=$PY $APP/forecast_cron.py#" \
+              "$APP/deploy/horizon-forecast.service" > /etc/systemd/system/horizon-forecast.service
+            cp "$APP/deploy/horizon-forecast.timer" /etc/systemd/system/horizon-forecast.timer
+            systemctl daemon-reload
+            systemctl enable --now horizon-forecast.timer
+            echo "=== прогон снапшота сейчас (проверка) ==="
+            systemctl start horizon-forecast.service || true
+            sleep 2
+            journalctl -u horizon-forecast.service -n 25 --no-pager || true
+            systemctl list-timers horizon-forecast.timer --no-pager || true
 
       - name: Restart API
         uses: appleboy/ssh-action@v1.0.3
