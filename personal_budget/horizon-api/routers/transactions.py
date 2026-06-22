@@ -1,9 +1,27 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 import datetime
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+
+@router.delete("/plan-cleanup")
+async def plan_cleanup(request: Request, source: str = Query(...)):
+    """Массовое удаление плановых строк (таблица plan) по источнику (source).
+    Используется для зачистки легаси-плана. Объявлено ДО /{tx_id}, чтобы путь
+    'plan-cleanup' не парсился как int id."""
+    user_id = request.state.user_id
+    db = request.state.db
+    if source == "__null__":
+        n = await db.fetchval(
+            "WITH d AS (DELETE FROM plan WHERE user_id=$1 AND source IS NULL RETURNING 1) SELECT count(*) FROM d",
+            user_id)
+    else:
+        n = await db.fetchval(
+            "WITH d AS (DELETE FROM plan WHERE user_id=$1 AND source=$2 RETURNING 1) SELECT count(*) FROM d",
+            user_id, source)
+    return {"ok": True, "deleted": int(n or 0), "source": source}
 
 class TxCreate(BaseModel):
     date: datetime.date

@@ -5884,7 +5884,8 @@ async function loadBudget() {
       + '@media(max-width:560px){.bgt-cards{grid-template-columns:1fr}}'
       + '</style>'
       + '<div class="topbar"><div><div class="page-title">Бюджет</div>'
-        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div></div>'
+        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div>'
+        + '<button class="qbtn" onclick="openPlanReview()" style="font-size:12px;margin-left:auto">Плановые операции</button></div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · правила', '+' + f(incomeTotal) + ' ₽/мес', incomeRules.length + ' правил')
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
@@ -6152,6 +6153,73 @@ async function deleteEnvelope(i) {
     if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
   }
   toast('✓ Конверт удалён'); loadBudget();
+}
+
+// ── Диагностика/зачистка плановых операций (таблица plan) ────────────────────
+const PLAN_SRC_LABEL = {
+  plan_rule: 'Правила (авто)',
+  loan_schedule: 'Кредиты (авто)',
+  recurring: 'Старые повторяющиеся',
+  manual: 'Ручные / события',
+  __null__: 'Без источника',
+};
+const PLAN_SRC_AUTO = new Set(['plan_rule', 'loan_schedule']);
+
+async function openPlanReview() {
+  const rows = await fetch(`${API_BASE}/api/transactions?plan=true&limit=5000`, { credentials: 'include' }).then(r => r.json()).catch(() => []);
+  const list = Array.isArray(rows) ? rows : [];
+  const f = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(+n || 0)));
+  const today = new Date().toISOString().split('T')[0];
+  const groups = {};
+  list.forEach(p => {
+    const key = p.source == null ? '__null__' : p.source;
+    if (!groups[key]) groups[key] = { key, rows: [], sum: 0, future: 0 };
+    groups[key].rows.push(p);
+    groups[key].sum += +p.amount || 0;
+    if ((p.date || '') > today) groups[key].future += 1;
+  });
+  const order = ['plan_rule', 'loan_schedule', 'recurring', 'manual', '__null__'];
+  const keys = Object.keys(groups).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
+
+  let html = '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Всего строк плана: ' + list.length
+    + '. Авто-источники (правила, кредиты) пересоздаются — их чистить не нужно. Удаляй легаси, если они невидимы и влияют на «Свободно».</div>';
+  if (!keys.length) html += '<div style="color:var(--text3)">План пуст.</div>';
+  keys.forEach(k => {
+    const g = groups[k];
+    const label = PLAN_SRC_LABEL[k] || k;
+    const auto = PLAN_SRC_AUTO.has(k);
+    const sample = g.rows.slice(0, 4).map(p => (p.date || '').slice(5) + ' · '
+      + ((p.categories && (p.categories.subcategory || p.categories.category)) || p.note || (p.account_from + '→' + p.account_to))
+      + ' ' + f(p.amount)).join('<br>');
+    html += '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+        + '<b style="font-size:13px;color:var(--text)">' + label + '</b>'
+        + '<span style="font-size:11px;color:var(--text3)">' + g.rows.length + ' строк · ' + g.future + ' в будущем · ' + f(g.sum) + ' ₽</span>'
+        + (auto
+            ? '<span style="margin-left:auto;font-size:11px;color:#167F73">авто — не трогать</span>'
+            : '<button class="del-btn" style="margin-left:auto" onclick="deletePlanSource(\'' + k + '\',' + g.rows.length + ')">Удалить все (' + g.rows.length + ')</button>')
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;font-variant-numeric:tabular-nums">' + sample + (g.rows.length > 4 ? '<br>…' : '') + '</div>'
+    + '</div>';
+  });
+
+  const mo = document.createElement('div'); mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal" style="max-width:580px;max-height:82vh;overflow:auto"><div class="modal-title">Плановые операции в базе</div>'
+    + html
+    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div>';
+  document.body.appendChild(mo);
+}
+
+async function deletePlanSource(source, count) {
+  const label = PLAN_SRC_LABEL[source] || source;
+  if (!confirm('Удалить все плановые строки «' + label + '» (' + count + ')?\nДействие необратимо.')) return;
+  const res = await fetch(`${API_BASE}/api/transactions/plan-cleanup?source=${encodeURIComponent(source)}`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
+  const j = await res.json().catch(() => ({}));
+  toast('✓ Удалено: ' + (j.deleted != null ? j.deleted : count));
+  document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+  loadBudget();
+  openPlanReview();
 }
 
 // ── Конверты (повседневные бюджеты) ──────────────────────────────────────────
