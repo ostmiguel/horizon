@@ -5716,22 +5716,29 @@ async function loadBudget() {
     const envMap = {};
     budgets.forEach(b => {
       const key = (b.categories && (b.categories.category || b.categories.subcategory)) || '—';
-      if (!envMap[key]) envMap[key] = { name: key, budget: 0 };
+      if (!envMap[key]) envMap[key] = { name: key, budget: 0, rows: [] };
       envMap[key].budget += +b.budget || 0;
+      envMap[key].rows.push({ id: b.id, category_id: b.category_id, subName: (b.categories && b.categories.subcategory) || key, budget: +b.budget || 0 });
     });
     const envelopes = Object.values(envMap).map(e => {
       const mc = metricByCat[e.name] || {};
-      return { name: e.name, budget: e.budget, fact: +mc.amount_fact || 0, forecast: +mc.amount_forecast || 0 };
+      return { name: e.name, budget: e.budget, rows: e.rows, fact: +mc.amount_fact || 0, forecast: +mc.amount_forecast || 0 };
     }).sort((a, b) => b.budget - a.budget);
+    window._bgtEnvelopes = envelopes;
     const envBudgetTotal = envelopes.reduce((s, e) => s + e.budget, 0);
     const envFactTotal   = envelopes.reduce((s, e) => s + e.fact, 0);
 
-    // ── эпизодические: резервы-цели + предстоящие события ──
+    // ── кредиты: плановые строки из графика (source='loan_schedule') ──
+    const loanPlan = planRows.filter(p => p.source === 'loan_schedule')
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const loanTotal = loanPlan.reduce((s, p) => s + (+p.amount || 0), 0);
+
+    // ── эпизодические: предстоящие события (резервы-цели — на листе «Цели») ──
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
     const episEvents = planRows
       .filter(p => p.categories && p.categories.character === 'Эпизодический' && (p.date || '') >= todayStr)
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const episReserveTotal = goals.reduce((s, g) => s + (+g.current_balance || 0), 0);
+    const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
@@ -5757,13 +5764,24 @@ async function loadBudget() {
         + '<div class="bgt-rn">' + esc(rule.name) + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
         + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(rule.amount) + ' ₽</span>'
-        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px">'
-          + '<button class="edit-btn" onclick="openEditRule(' + rule.id + ')">ред.</button>'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
           + statusHtml
-          + '<button class="del-btn" onclick="deleteRule(' + rule.id + ')">×</button>'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();ruleMenu(this,' + rule.id + ')">⋮</button>'
         + '</div></div>' + nested;
     }
-    function envelopeRow(e) {
+    function loanRow(p) {
+      const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
+      const nm = (p.categories && (p.categories.subcategory || p.categories.category))
+        || (p.account_to === 'Обязательства' ? 'Кредит — тело' : 'Кредит — процент');
+      return '<div class="bgt-frow">'
+        + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">из графика кредита</div></div>'
+        + '<span class="bgt-rule">' + d + '</span>'
+        + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
+        + '</div></div>';
+    }
+    function envelopeRow(e, i) {
       const pct = e.budget > 0 ? Math.min(100, Math.round(e.fact / e.budget * 100)) : (e.fact > 0 ? 100 : 0);
       const over = e.budget > 0 && e.forecast > e.budget;
       const barColor = pct >= 90 ? '#C0741A' : '#1FA497';
@@ -5771,7 +5789,8 @@ async function loadBudget() {
       return '<div class="bgt-flrow">'
         + '<div class="bgt-rn">' + esc(e.name) + '<span class="bgt-ch bgt-flow">поток</span></div>'
         + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barColor + '"></i></div>'
-        + '<span class="bgt-amt2">' + f(e.fact) + ' / ' + f(e.budget) + ' ₽</span>' + fc + '</div>';
+        + '<span class="bgt-amt2">' + f(e.fact) + ' / ' + f(e.budget) + ' ₽</span>' + fc
+        + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();envMenu(this,' + i + ')">⋮</button></div>';
     }
     function reserveRow(goal) {
       const cur = +goal.current_balance || 0, target = +goal.target_amount || 0;
@@ -5791,9 +5810,8 @@ async function loadBudget() {
         + '<div class="bgt-rn">' + esc(nm) + '<span class="bgt-ch bgt-epis">эпизод</span></div>'
         + '<span class="bgt-rule">' + d + '</span>' + badge
         + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
-        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px">'
-          + '<button class="edit-btn" onclick="editPlanEntry(' + p.id + ')">ред.</button>'
-          + '<button class="del-btn" onclick="deletePlanEntry(' + p.id + ')">×</button>'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
         + '</div></div>';
     }
     function bgtCard(color, title, big, sub) {
@@ -5813,15 +5831,15 @@ async function loadBudget() {
     }
 
     const incomeRowsHtml  = incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : emptyMsg('Нет правил дохода — «+ Доход».');
-    const fixedRowsHtml   = fixedRules.length  ? fixedRules.map(r => ruleRow(r, '-')).join('')  : emptyMsg('Нет правил — «+ Правило».');
-    const envRowsHtml     = envelopes.length   ? envelopes.map(envelopeRow).join('')           : emptyMsg('Нет конвертов — «+ Конверт».');
-    const reserveRowsHtml = goals.length       ? goals.map(reserveRow).join('')                : emptyMsg('Нет резервов-целей.');
+    const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
+    const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
+    const envRowsHtml     = envelopes.length   ? envelopes.map((e, i) => envelopeRow(e, i)).join('') : emptyMsg('Нет конвертов — «+ Конверт».');
     const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет предстоящих событий.');
 
     main.innerHTML = '<style>'
       + '.bgt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
       + '.bgt-frow{display:grid;grid-template-columns:1fr minmax(150px,auto) 120px minmax(130px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
-      + '.bgt-flrow{display:grid;grid-template-columns:minmax(160px,1.1fr) 1fr 150px auto;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
+      + '.bgt-flrow{display:grid;grid-template-columns:minmax(160px,1.1fr) 1fr 140px auto 28px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-eprow{display:grid;grid-template-columns:minmax(150px,1fr) auto 1fr 150px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-evrow{display:grid;grid-template-columns:1fr minmax(70px,auto) minmax(150px,auto) 110px minmax(110px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-rn{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
@@ -5853,23 +5871,24 @@ async function loadBudget() {
       + '.bgt-pe-btn{font-size:10.5px;border:none;background:none;color:var(--text3);cursor:pointer;padding:1px 3px;border-radius:5px}'
       + '.bgt-pe-btn:hover{background:var(--bg);color:var(--text2)}'
       + '.bgt-pe-del:hover{color:#bf7419}'
+      + '.bgt-dots{font-size:18px;line-height:1;border:none;background:none;color:var(--text3);cursor:pointer;padding:2px 6px;border-radius:6px;justify-self:end}'
+      + '.bgt-dots:hover{background:var(--bg);color:var(--text2)}'
       + '@media(max-width:1100px){.bgt-cards{grid-template-columns:1fr 1fr}}'
       + '@media(max-width:900px){.bgt-frow,.bgt-flrow,.bgt-eprow,.bgt-evrow{grid-template-columns:1fr auto;row-gap:8px}}'
       + '@media(max-width:560px){.bgt-cards{grid-template-columns:1fr}}'
       + '</style>'
       + '<div class="topbar"><div><div class="page-title">Бюджет</div>'
-        + '<div class="page-sub">Доходы, расходы, конверты и резервы · ' + periodLabel + '</div></div></div>'
+        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div></div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · правила', '+' + f(incomeTotal) + ' ₽/мес', incomeRules.length + ' правил')
-        + bgtCard('#2AA7CC', 'Фиксированные · правила', '−' + f(fixedTotal) + ' ₽/мес', fixedRules.length + ' правил')
+        + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
         + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', envelopes.length + ' конвертов')
-        + bgtCard('#8FBE1E', 'Эпизодические', f(episReserveTotal) + ' ₽', goals.length + ' резервов · ' + episEvents.length + ' событий')
+        + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' предстоящих')
       + '</div>'
       + bgtBlock('bgt-inc', 'доход', 'Доходы · правила', 'регулярные поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
-      + bgtBlock('bgt-fix', 'фикс', 'Фиксированные · правила', 'регулярные обязательные', '+ Правило', "openAddRule('fixed')", fixedRowsHtml)
+      + bgtBlock('bgt-fix', 'фикс', 'Фиксированные', 'правила и платежи по кредитам', '+ Правило', "openAddRule('fixed')", fixedBodyHtml)
       + bgtBlock('bgt-flow', 'поток', 'Повседневные · конверты', 'месячный бюджет против трат', '+ Конверт', 'openAddEnvelope()', envRowsHtml)
-      + bgtBlock('bgt-epis', 'эпизод', 'Эпизодические · резервы и события', 'цели и предстоящие разовые', '+ Добавить', 'openAddEpisodic()',
-          '<div class="bgt-subhead">Резервы-цели</div>' + reserveRowsHtml + '<div class="bgt-subhead">Предстоящие события</div>' + eventRowsHtml);
+      + bgtBlock('bgt-epis', 'эпизод', 'Эпизодические · события', 'предстоящие разовые траты', '+ Событие', 'openEpisodicEvent()', eventRowsHtml);
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
@@ -6037,6 +6056,96 @@ async function savePlanEntry(id, btn) {
   btn.closest('.modal-overlay').remove();
   toast('✓ Сохранено');
   loadBudget();
+}
+
+// ── Универсальное «⋮»-меню строк листа «Бюджет» ─────────────────────────────
+function bgtMenuOutside(e) {
+  const m = document.getElementById('bgtRowMenu');
+  if (m && !m.contains(e.target)) closeBgtMenu();
+}
+function closeBgtMenu() {
+  const m = document.getElementById('bgtRowMenu');
+  if (m) m.remove();
+  document.removeEventListener('click', bgtMenuOutside, true);
+}
+function bgtMenu(btn, items) {
+  closeBgtMenu();
+  const r = btn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.id = 'bgtRowMenu';
+  menu.style.cssText = 'position:fixed;top:' + Math.round(r.bottom + 4) + 'px;left:' + Math.round(r.right - 170) + 'px;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow2);padding:5px;min-width:170px';
+  items.forEach(it => {
+    const b = document.createElement('button');
+    b.textContent = it.label;
+    b.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:' + (it.danger ? '#bf7419' : 'var(--text)') + ';padding:8px 10px;border-radius:7px';
+    b.onmouseenter = () => b.style.background = 'var(--bg)';
+    b.onmouseleave = () => b.style.background = '';
+    b.onclick = () => { closeBgtMenu(); it.fn(); };
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', bgtMenuOutside, true), 0);
+}
+function ruleMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => openEditRule(id) },
+    { label: 'Удалить', danger: true, fn: () => deleteRule(id) },
+  ]);
+}
+function planMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => editPlanEntry(id) },
+    { label: 'Удалить', danger: true, fn: () => deletePlanEntry(id) },
+  ]);
+}
+function envMenu(btn, i) {
+  bgtMenu(btn, [
+    { label: 'Редактировать бюджет', fn: () => openEditEnvelope(i) },
+    { label: 'Удалить конверт', danger: true, fn: () => deleteEnvelope(i) },
+  ]);
+}
+
+function openEditEnvelope(i) {
+  const env = (window._bgtEnvelopes || [])[i];
+  if (!env) return;
+  const fields = env.rows.map(r =>
+    '<div class="field"><div class="field-label">' + esc(r.subName) + ', ₽</div>'
+    + '<input class="field-input" type="number" min="0" data-catid="' + r.category_id + '" value="' + r.budget + '"/></div>'
+  ).join('');
+  const mo = document.createElement('div'); mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Бюджет конверта «' + esc(env.name) + '»</div>'
+    + fields
+    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
+    + '<button class="btn-primary" onclick="saveEditEnvelope(this)">Сохранить</button></div></div>';
+  document.body.appendChild(mo);
+}
+
+async function saveEditEnvelope(btn) {
+  const { year, month } = window._bgtPeriod || {};
+  const inputs = btn.closest('.modal').querySelectorAll('input[data-catid]');
+  btn.disabled = true;
+  for (const inp of inputs) {
+    const category_id = +inp.dataset.catid;
+    const budget = parseFloat(inp.value);
+    if (!(budget >= 0)) continue;
+    const res = await fetch(`${API_BASE}/api/category-budgets`, {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_id, year, month, budget }),
+    });
+    if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
+  }
+  btn.closest('.modal-overlay').remove(); toast('✓ Бюджет сохранён'); loadBudget();
+}
+
+async function deleteEnvelope(i) {
+  const env = (window._bgtEnvelopes || [])[i];
+  if (!env) return;
+  if (!confirm('Удалить конверт «' + env.name + '»?')) return;
+  for (const r of env.rows) {
+    const res = await fetch(`${API_BASE}/api/category-budgets/${r.id}`, { method: 'DELETE', credentials: 'include' });
+    if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
+  }
+  toast('✓ Конверт удалён'); loadBudget();
 }
 
 // ── Конверты (повседневные бюджеты) ──────────────────────────────────────────
