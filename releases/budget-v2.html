@@ -5715,20 +5715,25 @@ async function loadBudget() {
             && (+rule.amount > 0) && Math.abs(+t.amount - +rule.amount) <= +rule.amount * 0.5);
     }
 
-    // ── конверты (повседневные, уровень КАТЕГОРИИ) ──
-    const metricByCat = {};
-    metricCats.forEach(c => { metricByCat[c.category] = c; });
-    // факт по категориям из транзакций ОТОБРАЖАЕМОГО месяца (метрика — всегда текущий)
+    // ── конверты: только ПОВСЕДНЕВНАЯ часть категории (variable, не эпизод) ──
+    // Эпизодические подкатегории той же категории (напр. «Автомобиль/ТО») идут
+    // в блок «Эпизодические» (события), а не в конверт.
+    const isFlow = cc => !!(cc && cc.expense_type === 'variable' && cc.character !== 'Эпизодический');
+    // факт повседневной части по категории за ОТОБРАЖАЕМЫЙ месяц
     const factByCat = {};
-    txs.filter(t => t.account_to === 'Расход' && t.categories && t.categories.category).forEach(t => {
+    txs.filter(t => t.account_to === 'Расход' && isFlow(t.categories)).forEach(t => {
       const c = t.categories.category;
       factByCat[c] = (factByCat[c] || 0) + (+t.amount || 0);
+    });
+    // прогноз повседневной части из метрики (агрегируем строки variable/не-эпизод по категории)
+    const flowByCat = {};
+    metricCats.filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический').forEach(c => {
+      flowByCat[c.category] = (flowByCat[c.category] || 0) + (+c.amount_forecast || 0);
     });
     const envelopes = budgets.map(b => {
       const fact = factByCat[b.category] || 0;
       // прогноз: текущий месяц — проекция из метрики; иначе — равен факту
-      const mc = metricByCat[b.category];
-      const forecast = isCurrentMonth ? (+(mc && mc.amount_forecast) || fact) : fact;
+      const forecast = isCurrentMonth ? (flowByCat[b.category] || fact) : fact;
       return { id: b.id, name: b.category, budget: +b.budget || 0, fact, forecast };
     }).sort((a, b) => b.budget - a.budget);
     window._bgtEnvelopes = envelopes;
