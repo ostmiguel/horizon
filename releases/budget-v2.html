@@ -5669,10 +5669,6 @@ async function loadBudget() {
     const todayStr = now.toISOString().split('T')[0];
     window._bgtPeriod = { year, month };
 
-    // Идемпотентно генерируем план кредитов из графика за месяц (тело→Обязательства,
-    // процент→Расход) — чтобы кредиты были и в блоке «Фиксированные», и в метриках.
-    await fetch(`${API_BASE}/api/loans/generate-plan?year=${year}&month=${month}`, { method: 'POST', credentials: 'include' }).catch(() => {});
-
     const [rulesRaw, budgetsRaw, goalsRaw, txRaw, planRaw, metricRaw] = await Promise.all([
       fetch(`${API_BASE}/api/plan-rules`, {credentials:'include'}).then(r => r.json()).catch(() => []),
       fetch(`${API_BASE}/api/category-budgets?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => []),
@@ -6219,7 +6215,8 @@ async function openPlanReview() {
   const keys = Object.keys(groups).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
 
   let html = '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Всего строк плана: ' + list.length
-    + '. Авто-источники (правила, кредиты) пересоздаются — их чистить не нужно. Удаляй легаси, если они невидимы и влияют на «Свободно».</div>';
+    + '. Можно удалить точечно по источнику или стереть весь план целиком (внесёшь заново вручную).</div>'
+    + '<button class="del-btn" style="width:100%;margin-bottom:14px;padding:9px" onclick="wipeAllPlan(' + list.length + ')">Очистить ВЕСЬ план (' + list.length + ')</button>';
   if (!keys.length) html += '<div style="color:var(--text3)">План пуст.</div>';
   keys.forEach(k => {
     const g = groups[k];
@@ -6257,6 +6254,16 @@ async function deletePlanSource(source, count) {
   document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
   loadBudget();
   openPlanReview();
+}
+
+async function wipeAllPlan(total) {
+  if (!confirm('Удалить ВЕСЬ план (' + total + ' строк)?\nВключая правила, кредиты и события. Они исчезнут из бюджета и метрик. Внесёшь заново вручную. Необратимо.')) return;
+  const res = await fetch(`${API_BASE}/api/transactions/plan-cleanup?all=true`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
+  const j = await res.json().catch(() => ({}));
+  toast('✓ План очищен: ' + (j.deleted != null ? j.deleted : total));
+  document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+  loadBudget();
 }
 
 async function deleteVariablePlan(count) {

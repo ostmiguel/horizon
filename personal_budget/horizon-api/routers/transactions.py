@@ -9,13 +9,21 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 @router.delete("/plan-cleanup")
 async def plan_cleanup(request: Request,
                        source: Optional[str] = Query(None),
-                       kind: Optional[str] = Query(None)):
+                       kind: Optional[str] = Query(None),
+                       all_: bool = Query(False, alias="all")):
     """Массовое удаление плановых строк (таблица plan).
+    - all=true          — весь план пользователя (включая правила/кредиты);
     - source=<...>      — по источнику ('recurring','manual', '__null__' для NULL);
     - kind=variable     — повседневные (variable, не эпизод, account_to='Расход').
     Объявлено ДО /{tx_id}, чтобы путь 'plan-cleanup' не парсился как int id."""
     user_id = request.state.user_id
     db = request.state.db
+
+    if all_:
+        n = await db.fetchval(
+            "WITH d AS (DELETE FROM plan WHERE user_id=$1 RETURNING 1) SELECT count(*) FROM d",
+            user_id)
+        return {"ok": True, "deleted": int(n or 0), "all": True}
 
     if kind == "variable":
         n = await db.fetchval("""
