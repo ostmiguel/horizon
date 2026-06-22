@@ -384,11 +384,10 @@ async def get_metrics(request: Request):
     # Месячный бюджет-конверт по категориям (additive для листа «Бюджет»;
     # формулы метрик не трогаем — просто кладём budget рядом с факт/прогноз).
     budget_rows = await db.fetch("""
-        SELECT c.category AS cat, COALESCE(SUM(cb.budget), 0) AS budget
-        FROM category_budgets cb
-        JOIN categories c ON cb.category_id = c.id
-        WHERE cb.user_id=$1 AND cb.year=$2 AND cb.month=$3
-        GROUP BY c.category
+        SELECT category AS cat, COALESCE(SUM(budget), 0) AS budget
+        FROM category_budgets
+        WHERE user_id=$1 AND year=$2 AND month=$3
+        GROUP BY category
     """, user_id, year, month)
     budget_by_cat = {r["cat"]: float(r["budget"]) for r in budget_rows}
     for c in categories:

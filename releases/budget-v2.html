@@ -5718,21 +5718,24 @@ async function loadBudget() {
     // ── конверты (повседневные): бюджет + факт/прогноз из метрики ──
     const metricByCat = {};
     metricCats.forEach(c => { metricByCat[c.category] = c; });
-    const envMap = {};
-    budgets.forEach(b => {
-      const key = (b.categories && (b.categories.category || b.categories.subcategory)) || '—';
-      if (!envMap[key]) envMap[key] = { name: key, budget: 0, rows: [] };
-      envMap[key].budget += +b.budget || 0;
-      envMap[key].rows.push({ id: b.id, category_id: b.category_id, subName: (b.categories && b.categories.subcategory) || key, budget: +b.budget || 0 });
-    });
-    const envelopes = Object.values(envMap).map(e => {
-      const mc = metricByCat[e.name] || {};
-      return { name: e.name, budget: e.budget, rows: e.rows, fact: +mc.amount_fact || 0, forecast: +mc.amount_forecast || 0 };
+    // конверты теперь на уровне КАТЕГОРИИ (одна строка бюджета на категорию)
+    const envelopes = budgets.map(b => {
+      const mc = metricByCat[b.category] || {};
+      return { id: b.id, name: b.category, budget: +b.budget || 0,
+               fact: +mc.amount_fact || 0, forecast: +mc.amount_forecast || 0 };
     }).sort((a, b) => b.budget - a.budget);
     window._bgtEnvelopes = envelopes;
     const envBudgetTotal   = envelopes.reduce((s, e) => s + e.budget, 0);
     const envFactTotal     = envelopes.reduce((s, e) => s + e.fact, 0);
     const envForecastTotal = envelopes.reduce((s, e) => s + e.forecast, 0);
+
+    // предложения конвертов (если на месяц ещё нет ни одного конверта)
+    let suggestions = [];
+    if (!envelopes.length) {
+      const sg = await fetch(`${API_BASE}/api/category-budgets/suggestions?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => ({}));
+      suggestions = (sg && Array.isArray(sg.suggestions)) ? sg.suggestions : [];
+      window._bgtSuggest = suggestions;
+    }
 
     // ── кредиты: плановые строки из графика (source='loan_schedule') ──
     const loanPlan = planRows.filter(p => p.source === 'loan_schedule')
@@ -5799,6 +5802,15 @@ async function loadBudget() {
         + '<span class="bgt-amt2">' + f(e.fact) + ' / ' + f(e.budget) + ' ₽</span>' + fc
         + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();envMenu(this,' + i + ')">⋮</button></div>';
     }
+    function suggestionRow(s, i) {
+      const hist = (s.history || []).map(f).join(' / ');
+      return '<div class="bgt-sugg">'
+        + '<div class="bgt-rn">' + esc(s.category) + '<span class="bgt-ch bgt-flow">поток</span></div>'
+        + '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + s.months + ' мес: ' + hist + ' ₽</span>'
+        + '<input class="sugg-amt field-input" type="number" min="0" data-cat="' + esc(s.category) + '" value="' + s.suggested + '" style="width:120px;text-align:right;padding:6px 8px">'
+        + '<button class="qbtn qbtn-income" style="font-size:12px;padding:6px 12px" onclick="acceptEnvelope(this)">Принять</button>'
+      + '</div>';
+    }
     function reserveRow(goal) {
       const cur = +goal.current_balance || 0, target = +goal.target_amount || 0;
       const pct = target > 0 ? Math.min(100, Math.round(cur / target * 100)) : 0;
@@ -5840,7 +5852,13 @@ async function loadBudget() {
     const incomeRowsHtml  = incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : emptyMsg('Нет правил дохода — «+ Доход».');
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
     const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
-    const envRowsHtml     = envelopes.length   ? envelopes.map((e, i) => envelopeRow(e, i)).join('') : emptyMsg('Нет конвертов — «+ Конверт».');
+    const envRowsHtml     = envelopes.length
+      ? envelopes.map((e, i) => envelopeRow(e, i)).join('')
+      : (suggestions.length
+          ? '<div class="bgt-subhead">Предложено на основе трат за прошлые месяцы — прими или поправь</div>'
+            + suggestions.map((s, i) => suggestionRow(s, i)).join('')
+            + '<div style="padding:12px 18px;border-top:1px solid var(--border)"><button class="qbtn qbtn-income" onclick="acceptAllEnvelopes()">Принять все</button></div>'
+          : emptyMsg('Нет конвертов — «+ Конверт».'));
     const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет предстоящих событий.');
 
     main.innerHTML = '<style>'
@@ -5870,6 +5888,8 @@ async function loadBudget() {
       + '.bgt-done{font-size:11px;font-weight:600;color:#5E9B1E;text-align:right;white-space:nowrap}'
       + '.bgt-wait{font-size:11px;font-weight:600;color:var(--text3);text-align:right;white-space:nowrap}'
       + '.bgt-subhead{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;padding:12px 18px 2px}'
+      + '.bgt-sugg{display:grid;grid-template-columns:minmax(150px,1fr) auto 120px auto;align-items:center;gap:14px;padding:11px 18px;border-top:1px solid var(--border)}'
+      + '@media(max-width:900px){.bgt-sugg{grid-template-columns:1fr auto;row-gap:8px}}'
       + '.bgt-pe-wrap{display:flex;flex-wrap:wrap;gap:6px;padding:2px 18px 12px 18px;background:var(--bg3)}'
       + '.bgt-pe-empty{font-size:11px;color:var(--text3);padding-top:8px}'
       + '.bgt-pe{display:inline-flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px 8px}'
@@ -6115,13 +6135,10 @@ function envMenu(btn, i) {
 function openEditEnvelope(i) {
   const env = (window._bgtEnvelopes || [])[i];
   if (!env) return;
-  const fields = env.rows.map(r =>
-    '<div class="field"><div class="field-label">' + esc(r.subName) + ', ₽</div>'
-    + '<input class="field-input" type="number" min="0" data-catid="' + r.category_id + '" value="' + r.budget + '"/></div>'
-  ).join('');
   const mo = document.createElement('div'); mo.className = 'modal-overlay open';
-  mo.innerHTML = '<div class="modal"><div class="modal-title">Бюджет конверта «' + esc(env.name) + '»</div>'
-    + fields
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Бюджет «' + esc(env.name) + '»</div>'
+    + '<div class="field"><div class="field-label">Бюджет на месяц, ₽</div>'
+    + '<input class="field-input" type="number" id="envEditAmt" min="0" data-cat="' + esc(env.name) + '" value="' + env.budget + '"/></div>'
     + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
     + '<button class="btn-primary" onclick="saveEditEnvelope(this)">Сохранить</button></div></div>';
   document.body.appendChild(mo);
@@ -6129,18 +6146,16 @@ function openEditEnvelope(i) {
 
 async function saveEditEnvelope(btn) {
   const { year, month } = window._bgtPeriod || {};
-  const inputs = btn.closest('.modal').querySelectorAll('input[data-catid]');
+  const inp = document.getElementById('envEditAmt');
+  const category = inp.dataset.cat;
+  const budget = parseFloat(inp.value);
+  if (!(budget >= 0)) { toast('Укажи сумму', false); return; }
   btn.disabled = true;
-  for (const inp of inputs) {
-    const category_id = +inp.dataset.catid;
-    const budget = parseFloat(inp.value);
-    if (!(budget >= 0)) continue;
-    const res = await fetch(`${API_BASE}/api/category-budgets`, {
-      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_id, year, month, budget }),
-    });
-    if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
-  }
+  const res = await fetch(`${API_BASE}/api/category-budgets`, {
+    method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, year, month, budget }),
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
   btn.closest('.modal-overlay').remove(); toast('✓ Бюджет сохранён'); loadBudget();
 }
 
@@ -6148,19 +6163,17 @@ async function deleteEnvelope(i) {
   const env = (window._bgtEnvelopes || [])[i];
   if (!env) return;
   if (!confirm('Удалить конверт «' + env.name + '»?')) return;
-  for (const r of env.rows) {
-    const res = await fetch(`${API_BASE}/api/category-budgets/${r.id}`, { method: 'DELETE', credentials: 'include' });
-    if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
-  }
+  const res = await fetch(`${API_BASE}/api/category-budgets/${env.id}`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
   toast('✓ Конверт удалён'); loadBudget();
 }
 
-// ── Конверты (повседневные бюджеты) ──────────────────────────────────────────
+// ── Конверты (повседневные бюджеты, уровень КАТЕГОРИИ) ───────────────────────
 function openAddEnvelope() {
-  const subs = (cats || []).filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический')
-    .sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
-  const opts = '<option value="">— выбери —</option>'
-    + subs.map(c => '<option value="' + c.id + '">' + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>').join('');
+  const existing = new Set((window._bgtEnvelopes || []).map(e => e.name));
+  const catNames = [...new Set((cats || []).filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический').map(c => c.category))]
+    .filter(c => c && !existing.has(c)).sort((a, b) => a.localeCompare(b, 'ru'));
+  const opts = '<option value="">— выбери —</option>' + catNames.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
   const mo = document.createElement('div'); mo.className = 'modal-overlay open';
   mo.innerHTML = '<div class="modal"><div class="modal-title">Новый конверт</div>'
     + '<div class="field"><div class="field-label">Категория</div><select class="field-select" id="envCat" onchange="onEnvelopeCatChange()">' + opts + '</select></div>'
@@ -6172,29 +6185,59 @@ function openAddEnvelope() {
 
 async function onEnvelopeCatChange() {
   const sel = document.getElementById('envCat'), amt = document.getElementById('envAmt'), hint = document.getElementById('envHint');
-  const id = +sel.value; if (!id) { if (hint) hint.textContent = ''; return; }
-  if (hint) hint.textContent = 'Считаю медиану трат…';
+  const cat = sel.value; if (!cat) { if (hint) hint.textContent = ''; return; }
+  if (hint) hint.textContent = 'Считаю среднее…';
   try {
-    const r = await fetch(`${API_BASE}/api/category-budgets/suggest?category_id=${id}`, {credentials:'include'}).then(x => x.json());
+    const r = await fetch(`${API_BASE}/api/category-budgets/suggest?category=${encodeURIComponent(cat)}`, {credentials:'include'}).then(x => x.json());
     if (r && r.suggested > 0) {
       if (amt && !amt.value) amt.value = r.suggested;
-      if (hint) hint.textContent = 'Подсказка: медиана трат за 3 мес ≈ ' + new Intl.NumberFormat('ru-RU').format(r.suggested) + ' ₽';
+      if (hint) hint.textContent = 'Подсказка: ' + r.months + ' мес → ≈ ' + new Intl.NumberFormat('ru-RU').format(r.suggested) + ' ₽';
     } else if (hint) { hint.textContent = 'Нет истории по категории'; }
   } catch (e) { if (hint) hint.textContent = ''; }
 }
 
 async function saveEnvelope(btn) {
-  const id = +document.getElementById('envCat')?.value;
+  const category = document.getElementById('envCat')?.value;
   const amt = parseFloat(document.getElementById('envAmt')?.value);
-  if (!id || !(amt > 0)) { toast('Выбери категорию и сумму', false); return; }
+  if (!category || !(amt > 0)) { toast('Выбери категорию и сумму', false); return; }
   const { year, month } = window._bgtPeriod || {};
   btn.disabled = true;
   const res = await fetch(`${API_BASE}/api/category-budgets`, {
     method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ category_id: id, year, month, budget: amt }),
+    body: JSON.stringify({ category, year, month, budget: amt }),
   });
   if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
   btn.closest('.modal-overlay').remove(); toast('✓ Конверт создан'); loadBudget();
+}
+
+async function _putEnvelope(category, budget) {
+  const { year, month } = window._bgtPeriod || {};
+  return fetch(`${API_BASE}/api/category-budgets`, {
+    method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category, year, month, budget }),
+  });
+}
+
+async function acceptEnvelope(btn) {
+  const inp = btn.closest('.bgt-sugg').querySelector('.sugg-amt');
+  const budget = parseFloat(inp.value);
+  if (!(budget > 0)) { toast('Укажи сумму', false); return; }
+  btn.disabled = true;
+  const res = await _putEnvelope(inp.dataset.cat, budget);
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
+  toast('✓ Конверт создан'); loadBudget();
+}
+
+async function acceptAllEnvelopes() {
+  const inputs = [...document.querySelectorAll('.sugg-amt')];
+  let n = 0;
+  for (const inp of inputs) {
+    const budget = parseFloat(inp.value);
+    if (!(budget > 0)) continue;
+    const res = await _putEnvelope(inp.dataset.cat, budget);
+    if (res.ok) n++;
+  }
+  toast('✓ Создано конвертов: ' + n); loadBudget();
 }
 
 // ── Эпизодические: выбор «Резерв» / «Разовое событие» ────────────────────────
