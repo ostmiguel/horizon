@@ -5669,6 +5669,11 @@ async function loadBudget() {
     const todayStr = now.toISOString().split('T')[0];
     window._bgtPeriod = { year, month };
 
+    // Кредиты автоматически переносятся из графика в план на отображаемый месяц
+    // (тело→Обязательства, процент→Расход). Досрочные погашения отражаются через
+    // график на листе «Кредиты». Идемпотентно.
+    await fetch(`${API_BASE}/api/loans/generate-plan?year=${year}&month=${month}`, { method: 'POST', credentials: 'include' }).catch(() => {});
+
     const [rulesRaw, budgetsRaw, goalsRaw, txRaw, planRaw, metricRaw] = await Promise.all([
       fetch(`${API_BASE}/api/plan-rules`, {credentials:'include'}).then(r => r.json()).catch(() => []),
       fetch(`${API_BASE}/api/category-budgets?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => []),
@@ -5741,22 +5746,6 @@ async function loadBudget() {
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
-    // ── «свободные» плановые строки (не из правил, не кредиты, не эпизод) —
-    //    показываем по характеру, чтобы пройтись вручную. Variable → под удаление.
-    const byDate = (a, b) => (a.date || '').localeCompare(b.date || '');
-    const loose = planRows.filter(p =>
-      p.source_rule_id == null && p.source !== 'loan_schedule' && (p.date || '') >= todayStr);
-    const looseIncome = loose.filter(p => p.account_from === 'Доход').sort(byDate);
-    const looseFixed  = loose.filter(p =>
-      p.account_from !== 'Доход'
-      && !(p.categories && p.categories.character === 'Эпизодический')
-      && (p.account_to === 'Обязательства'
-          || (p.account_to === 'Расход' && (!p.categories || p.categories.expense_type !== 'variable')))
-    ).sort(byDate);
-    const looseVariable = loose.filter(p =>
-      p.account_to === 'Расход' && p.categories
-      && p.categories.expense_type === 'variable' && p.categories.character !== 'Эпизодический');
-
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
     // ── строители строк ──
@@ -5794,18 +5783,6 @@ async function loadBudget() {
         + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">из графика кредита</div></div>'
         + '<span class="bgt-rule">' + d + '</span>'
         + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
-        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
-          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
-        + '</div></div>';
-    }
-    function planOpRow(p, sign) {
-      const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
-      const nm = (p.categories && (p.categories.subcategory || p.categories.category)) || (p.note && p.note.trim()) || (sign === '+' ? 'Доход' : 'Расход');
-      const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
-      return '<div class="bgt-frow">'
-        + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">из плана</div></div>'
-        + '<span class="bgt-rule">' + d + '</span>'
-        + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(p.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
         + '</div></div>';
@@ -5860,19 +5837,10 @@ async function loadBudget() {
         + '</div>' + rows + '</div>';
     }
 
-    const looseSub = (label, rows, sign) => rows.length ? '<div class="bgt-subhead">' + label + '</div>' + rows.map(p => planOpRow(p, sign)).join('') : '';
-
-    const incomeRowsHtml  = (incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : (looseIncome.length ? '' : emptyMsg('Нет правил дохода — «+ Доход».')))
-      + looseSub('Из плана', looseIncome, '+');
+    const incomeRowsHtml  = incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : emptyMsg('Нет правил дохода — «+ Доход».');
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
-    const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : ((loanPlan.length || looseFixed.length) ? '' : emptyMsg('Нет правил — «+ Правило».')))
-      + looseSub('Из плана', looseFixed, '-') + loanRowsHtml;
-    const varBanner = looseVariable.length
-      ? '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--border);background:rgba(192,116,26,.06)">'
-        + '<span style="font-size:12px;color:var(--text2)">В плане ' + looseVariable.length + ' повседневных операций — их заменяют конверты.</span>'
-        + '<button class="del-btn" style="margin-left:auto" onclick="deleteVariablePlan(' + looseVariable.length + ')">Удалить из плана (' + looseVariable.length + ')</button></div>'
-      : '';
-    const envRowsHtml     = (envelopes.length   ? envelopes.map((e, i) => envelopeRow(e, i)).join('') : emptyMsg('Нет конвертов — «+ Конверт».')) + varBanner;
+    const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
+    const envRowsHtml     = envelopes.length   ? envelopes.map((e, i) => envelopeRow(e, i)).join('') : emptyMsg('Нет конвертов — «+ Конверт».');
     const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет предстоящих событий.');
 
     main.innerHTML = '<style>'
@@ -5917,8 +5885,7 @@ async function loadBudget() {
       + '@media(max-width:560px){.bgt-cards{grid-template-columns:1fr}}'
       + '</style>'
       + '<div class="topbar"><div><div class="page-title">Бюджет</div>'
-        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div>'
-        + '<button class="qbtn" onclick="openPlanReview()" style="font-size:12px;margin-left:auto">Плановые операции</button></div>'
+        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div></div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · правила', '+' + f(incomeTotal) + ' ₽/мес', incomeRules.length + ' правил')
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
@@ -6186,93 +6153,6 @@ async function deleteEnvelope(i) {
     if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
   }
   toast('✓ Конверт удалён'); loadBudget();
-}
-
-// ── Диагностика/зачистка плановых операций (таблица plan) ────────────────────
-const PLAN_SRC_LABEL = {
-  plan_rule: 'Правила (авто)',
-  loan_schedule: 'Кредиты (авто)',
-  recurring: 'Старые повторяющиеся',
-  manual: 'Ручные / события',
-  __null__: 'Без источника',
-};
-const PLAN_SRC_AUTO = new Set(['plan_rule', 'loan_schedule']);
-
-async function openPlanReview() {
-  const rows = await fetch(`${API_BASE}/api/transactions?plan=true&limit=5000`, { credentials: 'include' }).then(r => r.json()).catch(() => []);
-  const list = Array.isArray(rows) ? rows : [];
-  const f = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(+n || 0)));
-  const today = new Date().toISOString().split('T')[0];
-  const groups = {};
-  list.forEach(p => {
-    const key = p.source == null ? '__null__' : p.source;
-    if (!groups[key]) groups[key] = { key, rows: [], sum: 0, future: 0 };
-    groups[key].rows.push(p);
-    groups[key].sum += +p.amount || 0;
-    if ((p.date || '') > today) groups[key].future += 1;
-  });
-  const order = ['plan_rule', 'loan_schedule', 'recurring', 'manual', '__null__'];
-  const keys = Object.keys(groups).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
-
-  let html = '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Всего строк плана: ' + list.length
-    + '. Можно удалить точечно по источнику или стереть весь план целиком (внесёшь заново вручную).</div>'
-    + '<button class="del-btn" style="width:100%;margin-bottom:14px;padding:9px" onclick="wipeAllPlan(' + list.length + ')">Очистить ВЕСЬ план (' + list.length + ')</button>';
-  if (!keys.length) html += '<div style="color:var(--text3)">План пуст.</div>';
-  keys.forEach(k => {
-    const g = groups[k];
-    const label = PLAN_SRC_LABEL[k] || k;
-    const auto = PLAN_SRC_AUTO.has(k);
-    const sample = g.rows.slice(0, 4).map(p => (p.date || '').slice(5) + ' · '
-      + ((p.categories && (p.categories.subcategory || p.categories.category)) || p.note || (p.account_from + '→' + p.account_to))
-      + ' ' + f(p.amount)).join('<br>');
-    html += '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'
-      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-        + '<b style="font-size:13px;color:var(--text)">' + label + '</b>'
-        + '<span style="font-size:11px;color:var(--text3)">' + g.rows.length + ' строк · ' + g.future + ' в будущем · ' + f(g.sum) + ' ₽</span>'
-        + (auto
-            ? '<span style="margin-left:auto;font-size:11px;color:#167F73">авто — не трогать</span>'
-            : '<button class="del-btn" style="margin-left:auto" onclick="deletePlanSource(\'' + k + '\',' + g.rows.length + ')">Удалить все (' + g.rows.length + ')</button>')
-      + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;font-variant-numeric:tabular-nums">' + sample + (g.rows.length > 4 ? '<br>…' : '') + '</div>'
-    + '</div>';
-  });
-
-  const mo = document.createElement('div'); mo.className = 'modal-overlay open';
-  mo.innerHTML = '<div class="modal" style="max-width:580px;max-height:82vh;overflow:auto"><div class="modal-title">Плановые операции в базе</div>'
-    + html
-    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Закрыть</button></div></div>';
-  document.body.appendChild(mo);
-}
-
-async function deletePlanSource(source, count) {
-  const label = PLAN_SRC_LABEL[source] || source;
-  if (!confirm('Удалить все плановые строки «' + label + '» (' + count + ')?\nДействие необратимо.')) return;
-  const res = await fetch(`${API_BASE}/api/transactions/plan-cleanup?source=${encodeURIComponent(source)}`, { method: 'DELETE', credentials: 'include' });
-  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
-  const j = await res.json().catch(() => ({}));
-  toast('✓ Удалено: ' + (j.deleted != null ? j.deleted : count));
-  document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
-  loadBudget();
-  openPlanReview();
-}
-
-async function wipeAllPlan(total) {
-  if (!confirm('Удалить ВЕСЬ план (' + total + ' строк)?\nВключая правила, кредиты и события. Они исчезнут из бюджета и метрик. Внесёшь заново вручную. Необратимо.')) return;
-  const res = await fetch(`${API_BASE}/api/transactions/plan-cleanup?all=true`, { method: 'DELETE', credentials: 'include' });
-  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
-  const j = await res.json().catch(() => ({}));
-  toast('✓ План очищен: ' + (j.deleted != null ? j.deleted : total));
-  document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
-  loadBudget();
-}
-
-async function deleteVariablePlan(count) {
-  if (!confirm('Удалить все повседневные операции из плана (' + count + ')?\nИх заменяют конверты. Необратимо.')) return;
-  const res = await fetch(`${API_BASE}/api/transactions/plan-cleanup?kind=variable`, { method: 'DELETE', credentials: 'include' });
-  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
-  const j = await res.json().catch(() => ({}));
-  toast('✓ Удалено: ' + (j.deleted != null ? j.deleted : count));
-  loadBudget();
 }
 
 // ── Конверты (повседневные бюджеты) ──────────────────────────────────────────
