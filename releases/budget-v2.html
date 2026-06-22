@@ -5715,27 +5715,32 @@ async function loadBudget() {
             && (+rule.amount > 0) && Math.abs(+t.amount - +rule.amount) <= +rule.amount * 0.5);
     }
 
-    // ── конверты (повседневные): бюджет + факт/прогноз из метрики ──
+    // ── конверты (повседневные, уровень КАТЕГОРИИ) ──
     const metricByCat = {};
     metricCats.forEach(c => { metricByCat[c.category] = c; });
-    // конверты теперь на уровне КАТЕГОРИИ (одна строка бюджета на категорию)
+    // факт по категориям из транзакций ОТОБРАЖАЕМОГО месяца (метрика — всегда текущий)
+    const factByCat = {};
+    txs.filter(t => t.account_to === 'Расход' && t.categories && t.categories.category).forEach(t => {
+      const c = t.categories.category;
+      factByCat[c] = (factByCat[c] || 0) + (+t.amount || 0);
+    });
     const envelopes = budgets.map(b => {
-      const mc = metricByCat[b.category] || {};
-      return { id: b.id, name: b.category, budget: +b.budget || 0,
-               fact: +mc.amount_fact || 0, forecast: +mc.amount_forecast || 0 };
+      const fact = factByCat[b.category] || 0;
+      // прогноз: текущий месяц — проекция из метрики; иначе — равен факту
+      const mc = metricByCat[b.category];
+      const forecast = isCurrentMonth ? (+(mc && mc.amount_forecast) || fact) : fact;
+      return { id: b.id, name: b.category, budget: +b.budget || 0, fact, forecast };
     }).sort((a, b) => b.budget - a.budget);
     window._bgtEnvelopes = envelopes;
     const envBudgetTotal   = envelopes.reduce((s, e) => s + e.budget, 0);
     const envFactTotal     = envelopes.reduce((s, e) => s + e.fact, 0);
     const envForecastTotal = envelopes.reduce((s, e) => s + e.forecast, 0);
 
-    // предложения конвертов (если на месяц ещё нет ни одного конверта)
-    let suggestions = [];
-    if (!envelopes.length) {
-      const sg = await fetch(`${API_BASE}/api/category-budgets/suggestions?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => ({}));
-      suggestions = (sg && Array.isArray(sg.suggestions)) ? sg.suggestions : [];
-      window._bgtSuggest = suggestions;
-    }
+    // предложения по категориям БЕЗ конверта (показываем под конвертами, не исчезают после принятия одного)
+    const envNames = new Set(envelopes.map(e => e.name));
+    const sgRaw = await fetch(`${API_BASE}/api/category-budgets/suggestions?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => ({}));
+    const suggestions = (sgRaw && Array.isArray(sgRaw.suggestions)) ? sgRaw.suggestions.filter(s => !envNames.has(s.category)) : [];
+    window._bgtSuggest = suggestions;
 
     // ── кредиты: плановые строки из графика (source='loan_schedule') ──
     const loanPlan = planRows.filter(p => p.source === 'loan_schedule')
@@ -5793,12 +5798,12 @@ async function loadBudget() {
     function envelopeRow(e, i) {
       const pct = e.budget > 0 ? Math.min(100, Math.round(e.fact / e.budget * 100)) : (e.fact > 0 ? 100 : 0);
       const over = e.budget > 0 && e.forecast > e.budget;
-      const barColor = pct >= 90 ? '#C0741A' : '#1FA497';
+      const barBg = over ? '#C0741A' : 'linear-gradient(90deg,#2AA7CC,#1FA497,#B4DE3C)';
       const fcColor = over ? '#C0741A' : 'var(--text3)';
-      const fc = '<span style="font-size:11px;font-weight:' + (over ? '600' : '400') + ';color:' + fcColor + ';text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums">прогноз ' + f(e.forecast) + ' ₽</span>';
+      const fc = '<span class="bgt-fc2" style="color:' + fcColor + ';font-weight:' + (over ? '600' : '400') + '">прогноз ' + f(e.forecast) + ' ₽</span>';
       return '<div class="bgt-flrow">'
         + '<div class="bgt-rn">' + esc(e.name) + '<span class="bgt-ch bgt-flow">поток</span></div>'
-        + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barColor + '"></i></div>'
+        + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barBg + '"></i></div>'
         + '<span class="bgt-amt2">' + f(e.fact) + ' / ' + f(e.budget) + ' ₽</span>' + fc
         + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();envMenu(this,' + i + ')">⋮</button></div>';
     }
@@ -5806,9 +5811,12 @@ async function loadBudget() {
       const hist = (s.history || []).map(f).join(' / ');
       return '<div class="bgt-sugg">'
         + '<div class="bgt-rn">' + esc(s.category) + '<span class="bgt-ch bgt-flow">поток</span></div>'
-        + '<span style="font-size:11px;color:var(--text3);white-space:nowrap">' + s.months + ' мес: ' + hist + ' ₽</span>'
-        + '<input class="sugg-amt field-input" type="number" min="0" data-cat="' + esc(s.category) + '" value="' + s.suggested + '" style="width:120px;text-align:right;padding:6px 8px">'
-        + '<button class="qbtn qbtn-income" style="font-size:12px;padding:6px 12px" onclick="acceptEnvelope(this)">Принять</button>'
+        + '<span class="bgt-sugg-h">' + s.months + ' мес: ' + hist + ' ₽</span>'
+        + '<input class="sugg-amt field-input" type="number" min="0" data-cat="' + esc(s.category) + '" value="' + s.suggested + '">'
+        + '<div style="display:flex;gap:6px;justify-content:flex-end">'
+          + '<button class="qbtn qbtn-income" style="font-size:12px;padding:6px 12px" onclick="acceptEnvelope(this)">Принять</button>'
+          + '<button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="this.closest(\'.bgt-sugg\').remove()">Отменить</button>'
+        + '</div>'
       + '</div>';
     }
     function reserveRow(goal) {
@@ -5852,19 +5860,21 @@ async function loadBudget() {
     const incomeRowsHtml  = incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : emptyMsg('Нет правил дохода — «+ Доход».');
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
     const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
-    const envRowsHtml     = envelopes.length
-      ? envelopes.map((e, i) => envelopeRow(e, i)).join('')
-      : (suggestions.length
-          ? '<div class="bgt-subhead">Предложено на основе трат за прошлые месяцы — прими или поправь</div>'
-            + suggestions.map((s, i) => suggestionRow(s, i)).join('')
-            + '<div style="padding:12px 18px;border-top:1px solid var(--border)"><button class="qbtn qbtn-income" onclick="acceptAllEnvelopes()">Принять все</button></div>'
-          : emptyMsg('Нет конвертов — «+ Конверт».'));
+    const suggBlock = suggestions.length
+      ? '<div class="bgt-subhead">Предложено на основе трат — прими или поправь</div>'
+        + suggestions.map((s, i) => suggestionRow(s, i)).join('')
+        + '<div style="padding:12px 18px;border-top:1px solid var(--border)"><button class="qbtn qbtn-income" onclick="acceptAllEnvelopes()">Принять все</button></div>'
+      : '';
+    const envRowsHtml = (envelopes.length || suggestions.length)
+      ? envelopes.map((e, i) => envelopeRow(e, i)).join('') + suggBlock
+      : emptyMsg('Нет конвертов — «+ Конверт».');
     const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет предстоящих событий.');
 
     main.innerHTML = '<style>'
       + '.bgt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
       + '.bgt-frow{display:grid;grid-template-columns:1fr minmax(150px,auto) 120px minmax(130px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
-      + '.bgt-flrow{display:grid;grid-template-columns:minmax(160px,1.1fr) 1fr 140px auto 28px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
+      + '.bgt-flrow{display:grid;grid-template-columns:minmax(150px,1.2fr) 1fr 130px 120px 28px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
+      + '.bgt-fc2{font-size:11px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}'
       + '.bgt-eprow{display:grid;grid-template-columns:minmax(150px,1fr) auto 1fr 150px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-evrow{display:grid;grid-template-columns:1fr minmax(70px,auto) minmax(150px,auto) 110px minmax(110px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-rn{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
@@ -5888,7 +5898,9 @@ async function loadBudget() {
       + '.bgt-done{font-size:11px;font-weight:600;color:#5E9B1E;text-align:right;white-space:nowrap}'
       + '.bgt-wait{font-size:11px;font-weight:600;color:var(--text3);text-align:right;white-space:nowrap}'
       + '.bgt-subhead{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;padding:12px 18px 2px}'
-      + '.bgt-sugg{display:grid;grid-template-columns:minmax(150px,1fr) auto 120px auto;align-items:center;gap:14px;padding:11px 18px;border-top:1px solid var(--border)}'
+      + '.bgt-sugg{display:grid;grid-template-columns:minmax(150px,1.4fr) 1fr 120px auto;align-items:center;gap:14px;padding:11px 18px;border-top:1px solid var(--border)}'
+      + '.bgt-sugg .sugg-amt{width:120px;text-align:right;padding:6px 8px}'
+      + '.bgt-sugg-h{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}'
       + '@media(max-width:900px){.bgt-sugg{grid-template-columns:1fr auto;row-gap:8px}}'
       + '.bgt-pe-wrap{display:flex;flex-wrap:wrap;gap:6px;padding:2px 18px 12px 18px;background:var(--bg3)}'
       + '.bgt-pe-empty{font-size:11px;color:var(--text3);padding-top:8px}'
