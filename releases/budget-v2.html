@@ -5669,6 +5669,10 @@ async function loadBudget() {
     const todayStr = now.toISOString().split('T')[0];
     window._bgtPeriod = { year, month };
 
+    // Идемпотентно генерируем план кредитов из графика за месяц (тело→Обязательства,
+    // процент→Расход) — чтобы кредиты были и в блоке «Фиксированные», и в метриках.
+    await fetch(`${API_BASE}/api/loans/generate-plan?year=${year}&month=${month}`, { method: 'POST', credentials: 'include' }).catch(() => {});
+
     const [rulesRaw, budgetsRaw, goalsRaw, txRaw, planRaw, metricRaw] = await Promise.all([
       fetch(`${API_BASE}/api/plan-rules`, {credentials:'include'}).then(r => r.json()).catch(() => []),
       fetch(`${API_BASE}/api/category-budgets?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => []),
@@ -5725,8 +5729,9 @@ async function loadBudget() {
       return { name: e.name, budget: e.budget, rows: e.rows, fact: +mc.amount_fact || 0, forecast: +mc.amount_forecast || 0 };
     }).sort((a, b) => b.budget - a.budget);
     window._bgtEnvelopes = envelopes;
-    const envBudgetTotal = envelopes.reduce((s, e) => s + e.budget, 0);
-    const envFactTotal   = envelopes.reduce((s, e) => s + e.fact, 0);
+    const envBudgetTotal   = envelopes.reduce((s, e) => s + e.budget, 0);
+    const envFactTotal     = envelopes.reduce((s, e) => s + e.fact, 0);
+    const envForecastTotal = envelopes.reduce((s, e) => s + e.forecast, 0);
 
     // ── кредиты: плановые строки из графика (source='loan_schedule') ──
     const loanPlan = planRows.filter(p => p.source === 'loan_schedule')
@@ -5785,7 +5790,8 @@ async function loadBudget() {
       const pct = e.budget > 0 ? Math.min(100, Math.round(e.fact / e.budget * 100)) : (e.fact > 0 ? 100 : 0);
       const over = e.budget > 0 && e.forecast > e.budget;
       const barColor = pct >= 90 ? '#C0741A' : '#1FA497';
-      const fc = over ? '<span class="bgt-over">прогноз +' + f(e.forecast - e.budget) + '</span>' : '<span class="bgt-fc">прогноз ' + f(e.forecast) + '</span>';
+      const fcColor = over ? '#C0741A' : 'var(--text3)';
+      const fc = '<span style="font-size:11px;font-weight:' + (over ? '600' : '400') + ';color:' + fcColor + ';text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums">прогноз ' + f(e.forecast) + ' ₽</span>';
       return '<div class="bgt-flrow">'
         + '<div class="bgt-rn">' + esc(e.name) + '<span class="bgt-ch bgt-flow">поток</span></div>'
         + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barColor + '"></i></div>'
@@ -5882,7 +5888,7 @@ async function loadBudget() {
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · правила', '+' + f(incomeTotal) + ' ₽/мес', incomeRules.length + ' правил')
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
-        + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', envelopes.length + ' конвертов')
+        + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', 'прогноз ' + f(envForecastTotal) + ' ₽ · ' + envelopes.length + ' конвертов')
         + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' предстоящих')
       + '</div>'
       + bgtBlock('bgt-inc', 'доход', 'Доходы · правила', 'регулярные поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
