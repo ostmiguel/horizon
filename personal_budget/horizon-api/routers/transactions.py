@@ -7,20 +7,40 @@ router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 
 @router.delete("/plan-cleanup")
-async def plan_cleanup(request: Request, source: str = Query(...)):
-    """Массовое удаление плановых строк (таблица plan) по источнику (source).
-    Используется для зачистки легаси-плана. Объявлено ДО /{tx_id}, чтобы путь
-    'plan-cleanup' не парсился как int id."""
+async def plan_cleanup(request: Request,
+                       source: Optional[str] = Query(None),
+                       kind: Optional[str] = Query(None)):
+    """Массовое удаление плановых строк (таблица plan).
+    - source=<...>      — по источнику ('recurring','manual', '__null__' для NULL);
+    - kind=variable     — повседневные (variable, не эпизод, account_to='Расход').
+    Объявлено ДО /{tx_id}, чтобы путь 'plan-cleanup' не парсился как int id."""
     user_id = request.state.user_id
     db = request.state.db
+
+    if kind == "variable":
+        n = await db.fetchval("""
+            WITH d AS (
+              DELETE FROM plan p USING categories c
+              WHERE p.category_id = c.id
+                AND p.user_id = $1
+                AND p.account_to = 'Расход'
+                AND c.expense_type = 'variable'
+                AND c.character != 'Эпизодический'
+              RETURNING 1
+            ) SELECT count(*) FROM d
+        """, user_id)
+        return {"ok": True, "deleted": int(n or 0), "kind": "variable"}
+
     if source == "__null__":
         n = await db.fetchval(
             "WITH d AS (DELETE FROM plan WHERE user_id=$1 AND source IS NULL RETURNING 1) SELECT count(*) FROM d",
             user_id)
-    else:
+    elif source:
         n = await db.fetchval(
             "WITH d AS (DELETE FROM plan WHERE user_id=$1 AND source=$2 RETURNING 1) SELECT count(*) FROM d",
             user_id, source)
+    else:
+        raise HTTPException(400, "source or kind required")
     return {"ok": True, "deleted": int(n or 0), "source": source}
 
 class TxCreate(BaseModel):

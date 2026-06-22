@@ -5745,6 +5745,22 @@ async function loadBudget() {
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
+    // ── «свободные» плановые строки (не из правил, не кредиты, не эпизод) —
+    //    показываем по характеру, чтобы пройтись вручную. Variable → под удаление.
+    const byDate = (a, b) => (a.date || '').localeCompare(b.date || '');
+    const loose = planRows.filter(p =>
+      p.source_rule_id == null && p.source !== 'loan_schedule' && (p.date || '') >= todayStr);
+    const looseIncome = loose.filter(p => p.account_from === 'Доход').sort(byDate);
+    const looseFixed  = loose.filter(p =>
+      p.account_from !== 'Доход'
+      && !(p.categories && p.categories.character === 'Эпизодический')
+      && (p.account_to === 'Обязательства'
+          || (p.account_to === 'Расход' && (!p.categories || p.categories.expense_type !== 'variable')))
+    ).sort(byDate);
+    const looseVariable = loose.filter(p =>
+      p.account_to === 'Расход' && p.categories
+      && p.categories.expense_type === 'variable' && p.categories.character !== 'Эпизодический');
+
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
     // ── строители строк ──
@@ -5782,6 +5798,18 @@ async function loadBudget() {
         + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">из графика кредита</div></div>'
         + '<span class="bgt-rule">' + d + '</span>'
         + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
+        + '</div></div>';
+    }
+    function planOpRow(p, sign) {
+      const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
+      const nm = (p.categories && (p.categories.subcategory || p.categories.category)) || (p.note && p.note.trim()) || (sign === '+' ? 'Доход' : 'Расход');
+      const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
+      return '<div class="bgt-frow">'
+        + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">из плана</div></div>'
+        + '<span class="bgt-rule">' + d + '</span>'
+        + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(p.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
         + '</div></div>';
@@ -5836,10 +5864,19 @@ async function loadBudget() {
         + '</div>' + rows + '</div>';
     }
 
-    const incomeRowsHtml  = incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : emptyMsg('Нет правил дохода — «+ Доход».');
+    const looseSub = (label, rows, sign) => rows.length ? '<div class="bgt-subhead">' + label + '</div>' + rows.map(p => planOpRow(p, sign)).join('') : '';
+
+    const incomeRowsHtml  = (incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : (looseIncome.length ? '' : emptyMsg('Нет правил дохода — «+ Доход».')))
+      + looseSub('Из плана', looseIncome, '+');
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
-    const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
-    const envRowsHtml     = envelopes.length   ? envelopes.map((e, i) => envelopeRow(e, i)).join('') : emptyMsg('Нет конвертов — «+ Конверт».');
+    const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : ((loanPlan.length || looseFixed.length) ? '' : emptyMsg('Нет правил — «+ Правило».')))
+      + looseSub('Из плана', looseFixed, '-') + loanRowsHtml;
+    const varBanner = looseVariable.length
+      ? '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-top:1px solid var(--border);background:rgba(192,116,26,.06)">'
+        + '<span style="font-size:12px;color:var(--text2)">В плане ' + looseVariable.length + ' повседневных операций — их заменяют конверты.</span>'
+        + '<button class="del-btn" style="margin-left:auto" onclick="deleteVariablePlan(' + looseVariable.length + ')">Удалить из плана (' + looseVariable.length + ')</button></div>'
+      : '';
+    const envRowsHtml     = (envelopes.length   ? envelopes.map((e, i) => envelopeRow(e, i)).join('') : emptyMsg('Нет конвертов — «+ Конверт».')) + varBanner;
     const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет предстоящих событий.');
 
     main.innerHTML = '<style>'
@@ -6220,6 +6257,15 @@ async function deletePlanSource(source, count) {
   document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
   loadBudget();
   openPlanReview();
+}
+
+async function deleteVariablePlan(count) {
+  if (!confirm('Удалить все повседневные операции из плана (' + count + ')?\nИх заменяют конверты. Необратимо.')) return;
+  const res = await fetch(`${API_BASE}/api/transactions/plan-cleanup?kind=variable`, { method: 'DELETE', credentials: 'include' });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
+  const j = await res.json().catch(() => ({}));
+  toast('✓ Удалено: ' + (j.deleted != null ? j.deleted : count));
+  loadBudget();
 }
 
 // ── Конверты (повседневные бюджеты) ──────────────────────────────────────────
