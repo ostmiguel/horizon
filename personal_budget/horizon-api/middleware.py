@@ -1,8 +1,16 @@
-from fastapi import Request, HTTPException
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 PUBLIC_PATHS = {"/health", "/api/auth/google", "/api/auth/google/callback",
                 "/api/auth/yandex", "/api/auth/yandex/callback", "/docs", "/openapi.json"}
+
+
+def _unauth(detail: str):
+    # ВАЖНО: HTTPException, поднятый внутри BaseHTTPMiddleware, не перехватывается
+    # обработчиками FastAPI и отдаётся как 500. Поэтому возвращаем ответ напрямую.
+    return JSONResponse({"detail": detail}, status_code=401)
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -17,7 +25,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Check session cookie
             token = request.cookies.get("session")
             if not token:
-                raise HTTPException(401, "Not authenticated")
+                return _unauth("Not authenticated")
 
             row = await conn.fetchrow("""
                 SELECT u.* FROM sessions s
@@ -26,9 +34,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             """, token)
 
             if not row:
-                raise HTTPException(401, "Session expired")
+                return _unauth("Session expired")
 
             request.state.user = dict(row)
             request.state.user_id = row["id"]
 
-        return await call_next(request)
+            return await call_next(request)

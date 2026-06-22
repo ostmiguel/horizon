@@ -52,16 +52,17 @@ jobs:
             cp -f "$SRC/migrations/"*.sql "$APP/migrations/"
             cp -f "$SRC/deploy/"* "$APP/deploy/" 2>/dev/null || true
 
-            # ── DB-миграции (падаем явно при ошибке) ──
+            # ── DB-миграции (ошибка помечает деплой красным, но НЕ блокирует рестарт) ──
+            MIGFAIL=0
             ENV_FILE=$(find /opt/horizon -maxdepth 3 -name '.env' | head -1)
             if [ -n "$ENV_FILE" ]; then
               DB_URL=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | head -1 | cut -d= -f2-)
               if [ -n "$DB_URL" ]; then
                 for f in "$APP/migrations/"*.sql; do
                   echo "migrate: $f"
-                  psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+                  if ! psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$f"; then echo "!!! MIGRATION FAILED: $f"; MIGFAIL=1; fi
                 done
-                echo "migrations ok"
+                echo "migrations done (fail=$MIGFAIL)"
               else echo "DATABASE_URL not set; skip migrations"; fi
             else echo "no .env; skip migrations"; fi
 
@@ -75,7 +76,8 @@ jobs:
             systemctl daemon-reload
             systemctl enable --now horizon-forecast.timer
 
-            # ── рестарт API ──
+            # ── рестарт API (всегда, даже если миграция упала — чтобы код применился) ──
             systemctl restart horizon
             rm -rf "$S"
             echo "deploy done"
+            [ "$MIGFAIL" = 1 ] && { echo "deploy completed, but a migration failed (see above)"; exit 1; } || true
