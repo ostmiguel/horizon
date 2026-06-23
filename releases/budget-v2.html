@@ -5720,18 +5720,6 @@ async function loadBudget() {
     const incomeTotal = incomeRules.reduce((s, r) => s + (+r.amount || 0), 0);
     const fixedTotal  = fixedRules.reduce((s, r) => s + (+r.amount || 0), 0);
 
-    // ── статус правила (фикс): «Исполнено» только если день уже наступил ──
-    const statusTxs = isCurrentMonth ? txs.filter(t => (t.date || '') <= todayStr) : txs;
-    function ruleDone(rule) {
-      const dueDay = rule.day_of_month || 1;
-      const isDue  = !isCurrentMonth || dueDay <= now.getDate();
-      if (!isDue) return false;
-      return rule.category_id
-        ? statusTxs.some(t => t.category_id === rule.category_id)
-        : statusTxs.some(t => t.account_from === rule.account_from && t.account_to === rule.account_to
-            && (+rule.amount > 0) && Math.abs(+t.amount - +rule.amount) <= +rule.amount * 0.5);
-    }
-
     // ── конверты: только ПОВСЕДНЕВНАЯ часть категории (variable, не эпизод) ──
     // Эпизодические подкатегории той же категории (напр. «Автомобиль/ТО») идут
     // в блок «Эпизодические» (события), а не в конверт.
@@ -5789,16 +5777,13 @@ async function loadBudget() {
       const sub = (rule.categories && (rule.categories.subcategory || rule.categories.category)) || '';
       const sched = rule.day_of_month ? rule.day_of_month + '-го · ежемесячно' : 'ежемесячно';
       const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
-      // Вложенные плановые «пилюли» убраны: материализованная строка дублирует само
-      // правило (STS учитывает правило по умолчанию). Правка строк месяца — через ⋮.
-      let statusHtml = '';
-      if (sign === '-') { const done = ruleDone(rule); statusHtml = '<span class="' + (done ? 'bgt-done' : 'bgt-wait') + '">' + (done ? 'Исполнено' : 'Ожидается') + '</span>'; }
+      // Вложенные плановые «пилюли» и статус «Исполнено/Ожидается» убраны:
+      // строка дублировала правило (STS учитывает правило по умолчанию).
       return '<div class="bgt-frow">'
         + '<div class="bgt-rn">' + esc(rule.name) + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
         + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(rule.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
-          + statusHtml
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();ruleMenu(this,' + rule.id + ')">⋮</button>'
         + '</div></div>';
     }
@@ -5914,8 +5899,6 @@ async function loadBudget() {
       + '.bgt-pbar i{display:block;height:100%;border-radius:99px}'
       + '.bgt-fc{font-size:11px;color:var(--text3);text-align:right;white-space:nowrap}'
       + '.bgt-over{font-size:11px;color:#C0741A;font-weight:600;text-align:right;white-space:nowrap}'
-      + '.bgt-done{font-size:11px;font-weight:600;color:#5E9B1E;text-align:right;white-space:nowrap}'
-      + '.bgt-wait{font-size:11px;font-weight:600;color:var(--text3);text-align:right;white-space:nowrap}'
       + '.bgt-subhead{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;padding:12px 18px 2px}'
       + '.bgt-sugg{display:grid;grid-template-columns:minmax(150px,1.4fr) 1fr 120px auto;align-items:center;gap:14px;padding:11px 18px;border-top:1px solid var(--border)}'
       + '.bgt-sugg .sugg-amt{width:120px;text-align:right;padding:6px 8px}'
