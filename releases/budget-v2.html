@@ -3355,7 +3355,8 @@ async function saveAccount(btn) {
 }
 
 async function editAccount(id) {
-  const { data: acc } = await sb.from('accounts').select('*').eq('id', id).single();
+  // берём из кэша (GET /api/accounts/{id} нет — только список)
+  const acc = (window._allAccs || accounts_cache || []).find(a => a.id === id);
   if (!acc) return;
   const isSystemAcc = ['Доход','Расход','Обязательства','Дебиторка'].includes(acc.name);
   const isRenameOnly = ['Обязательства','Дебиторка'].includes(acc.name);
