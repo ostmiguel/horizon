@@ -370,6 +370,8 @@ body {
 .ref-tbl tr:hover td { background: var(--bg3); }
 .edit-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 2px 7px; font-size: 10px; color: var(--accent); cursor: pointer; }
 .edit-btn:hover { background: rgba(42,167,204,.10); border-color: var(--accent); }
+.bgt-dots { font-size: 18px; line-height: 1; border: none; background: none; color: var(--text3); cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+.bgt-dots:hover { background: var(--bg); color: var(--text2); }
 .add-row-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; font-size: 11.5px; color: var(--accent);
@@ -3146,7 +3148,7 @@ async function loadReferences() {
         </div>
         <table class="ref-tbl">
           <thead><tr>
-            <th>Подкатегория</th><th>Категория</th><th>Группа</th><th>Характер</th><th>Тип</th><th></th>
+            <th>Категория</th><th>Подкатегория</th><th>Группа</th><th>Характер</th><th style="width:44px"></th>
           </tr></thead>
           <tbody id="catBody">${renderCatRows(cats_all||[])}</tbody>
         </table>
@@ -3183,26 +3185,23 @@ function renderAccRows(rows) {
         <span class="toggle-slider"></span>
       </label>` : '—'}
     </td>
-    <td style="white-space:nowrap">
-      <button class="edit-btn" onclick="editAccount(${a.id})" style="margin-right:3px">ред.</button>
-      ${!['Доход','Расход','Обязательства','Дебиторка'].includes(a.name) ? `<button class="del-btn" onclick="deleteAccount(${a.id},'${a.name}')" style="margin-right:3px">×</button>` : ''}
+    <td style="white-space:nowrap;text-align:right">
       <button class="edit-btn" onclick="moveAcc(${idx},-1)" style="padding:2px 5px" ${idx===0?'disabled':''}>↑</button>
       <button class="edit-btn" onclick="moveAcc(${idx},1)"  style="padding:2px 5px" ${idx===rows.length-1?'disabled':''}>↓</button>
+      <button class="bgt-dots" title="Действия" onclick="event.stopPropagation();accMenu(this,${a.id})">⋮</button>
     </td>
   </tr>`).join('');
 }
 
 function renderCatRows(rows) {
-  if (!rows.length) return '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Нет категорий</td></tr>';
+  if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Нет категорий</td></tr>';
   return rows.map(c => `<tr>
-    <td>${c.subcategory}</td>
-    <td style="color:var(--text2)">${c.category}</td>
+    <td>${c.category}</td>
+    <td style="color:var(--text2)">${c.subcategory}</td>
     <td><span class="tag">${c.group_name}</span></td>
     <td>${c.character?`<span class="tag">${c.character}</span>`:'—'}</td>
-    <td>${c.expense_type === 'fixed' ? '<span class="tag" style="color:var(--income)">фикс</span>' : c.expense_type === 'variable' ? '<span class="tag" style="color:var(--text3)">перем.</span>' : '—'}</td>
-    <td style="white-space:nowrap">
-      <button class="edit-btn" onclick="editCat(${c.id})" style="margin-right:4px">ред.</button>
-      <button class="del-btn" onclick="deleteCat(${c.id})">×</button>
+    <td style="text-align:right">
+      <button class="bgt-dots" title="Действия" onclick="event.stopPropagation();catMenu(this,${c.id})">⋮</button>
     </td>
   </tr>`).join('');
 }
@@ -3432,11 +3431,13 @@ function openAddCategory() {
     </div>
     <div class="field"><div class="field-label">Группа</div>
       <select class="field-select" id="cGrp">
+        <option value="">— выбери —</option>
         ${groups.map(g=>`<option>${g}</option>`).join('')}
       </select>
     </div>
     <div class="field"><div class="field-label">Характер</div>
       <select class="field-select" id="cChar">
+        <option value="">— выбери —</option>
         <option value="Повседневный">Повседневный</option>
         <option value="Фиксированный">Фиксированный</option>
         <option value="Эпизодический">Эпизодический</option>
@@ -3466,7 +3467,7 @@ async function saveCategory(btn) {
     : sel?.value;
   const grp  = document.getElementById('cGrp')?.value;
   const char = document.getElementById('cChar')?.value || null;
-  if (!sub || !cat || !grp) { toast('Заполни все поля', false); return; }
+  if (!sub || !cat || !grp || !char) { toast('Заполни все поля', false); return; }
   const { error } = await sb.from('categories').insert({ subcategory: sub, category: cat, group_name: grp, character: char });
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   btn.closest('.modal-overlay').remove();
@@ -3490,13 +3491,13 @@ function editCat(id) {
   if (!targetRow) return;
 
   targetRow.innerHTML = `
+    <td><input class="field-input" id="eCat_${id}" value="${c.category}" style="padding:4px 8px;font-size:12px;width:130px"></td>
     <td><input class="field-input" id="eSub_${id}" value="${c.subcategory}" style="padding:4px 8px;font-size:12px;width:140px"></td>
-    <td><input class="field-input" id="eCat_${id}" value="${c.category}" style="padding:4px 8px;font-size:12px;width:120px"></td>
-    <td><input class="field-input" id="eGrp_${id}" value="${c.group_name}" style="padding:4px 8px;font-size:12px;width:140px"></td>
+    <td><input class="field-input" id="eGrp_${id}" value="${c.group_name}" style="padding:4px 8px;font-size:12px;width:130px"></td>
     <td><select class="field-select" id="eChr_${id}" style="padding:4px 8px;font-size:12px;width:140px">
       ${['Повседневный','Фиксированный','Эпизодический'].map(v=>`<option${c.character===v?' selected':''}>${v}</option>`).join('')}
     </select></td>
-    <td style="white-space:nowrap">
+    <td style="white-space:nowrap;text-align:right">
       <button class="btn-primary" onclick="updateCategory(${id})" style="font-size:11px;padding:4px 10px;margin-right:4px">✓</button>
       <button class="btn-ghost" onclick="loadReferences()" style="font-size:11px;padding:4px 8px">✕</button>
     </td>`;
@@ -3525,6 +3526,23 @@ async function deleteCat(id) {
   if (error) { toast('Ошибка: ' + error.message, false); return; }
   toast('✓ Удалено');
   loadReferences();
+}
+
+// ── «⋮»-меню в Справочниках (категории и счета) ──────────────────────────────
+function catMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => editCat(id) },
+    { label: 'Удалить', danger: true, fn: () => deleteCat(id) },
+  ]);
+}
+function accMenu(btn, id) {
+  const a = (window._allAccs || []).find(x => x.id === id);
+  if (!a) return;
+  const items = [{ label: 'Редактировать', fn: () => editAccount(id) }];
+  if (!['Доход', 'Расход', 'Обязательства', 'Дебиторка'].includes(a.name)) {
+    items.push({ label: 'Удалить', danger: true, fn: () => deleteAccount(id, a.name) });
+  }
+  bgtMenu(btn, items);
 }
 
 function openAddParticipant() {
@@ -6117,10 +6135,10 @@ function closeBgtMenu() {
 }
 function bgtMenu(btn, items) {
   closeBgtMenu();
-  const r = btn.getBoundingClientRect();
   const menu = document.createElement('div');
   menu.id = 'bgtRowMenu';
-  menu.style.cssText = 'position:fixed;top:' + Math.round(r.bottom + 4) + 'px;left:' + Math.round(r.right - 170) + 'px;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow2);padding:5px;min-width:170px';
+  // сначала невидимо — чтобы измерить размеры и спозиционировать без выезда за экран
+  menu.style.cssText = 'position:fixed;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow2);padding:5px;min-width:170px;visibility:hidden';
   items.forEach(it => {
     const b = document.createElement('button');
     b.textContent = it.label;
@@ -6131,7 +6149,22 @@ function bgtMenu(btn, items) {
     menu.appendChild(b);
   });
   document.body.appendChild(menu);
+  positionMenu(menu, btn);
   setTimeout(() => document.addEventListener('click', bgtMenuOutside, true), 0);
+}
+
+// Универсальное позиционирование плавающего меню у кнопки с учётом краёв экрана
+function positionMenu(menu, btn) {
+  const r = btn.getBoundingClientRect();
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const pad = 8;
+  let top = r.bottom + 4;
+  if (top + mh > window.innerHeight - pad) top = Math.max(pad, r.top - mh - 4); // флип вверх
+  let left = r.right - mw;                                                       // правый край по кнопке
+  left = Math.max(pad, Math.min(left, window.innerWidth - mw - pad));            // прижать к экрану
+  menu.style.top = Math.round(top) + 'px';
+  menu.style.left = Math.round(left) + 'px';
+  menu.style.visibility = 'visible';
 }
 function ruleMenu(btn, id) {
   bgtMenu(btn, [
@@ -7745,14 +7778,14 @@ function opsCloseMenu() {
 
 function opsMenu(btn, id) {
   opsCloseMenu();
-  const r = btn.getBoundingClientRect();
   const menu = document.createElement('div');
   menu.id = 'opsRowMenu';
-  menu.style.cssText = `position:fixed;top:${Math.round(r.bottom+4)}px;left:${Math.round(r.right-150)}px;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow2);padding:5px;min-width:150px`;
+  menu.style.cssText = `position:fixed;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow2);padding:5px;min-width:150px;visibility:hidden`;
   menu.innerHTML = `
     <button onclick="opsCloseMenu();openEditOpsTx(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text);padding:8px 10px;border-radius:7px" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">Редактировать</button>
     <button onclick="opsCloseMenu();deleteOpsTx(${id})" style="display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:#bf7419;padding:8px 10px;border-radius:7px" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''">Удалить</button>`;
   document.body.appendChild(menu);
+  positionMenu(menu, btn);
   setTimeout(() => document.addEventListener('click', opsMenuOutside, true), 0);
 }
 
