@@ -5772,8 +5772,12 @@ async function loadBudget() {
 
     // ── эпизодические: предстоящие события (резервы-цели — на листе «Цели») ──
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
+    // В текущем/будущем месяце показываем все эпизодические события месяца (planRows уже
+    // отфильтрованы по месяцу), чтобы при правке даты «в прошлое» строка не исчезала.
+    // В прошлых месяцах оставляем прежнее поведение (только ещё не наступившие — т.е. пусто).
+    const episShowAll = (year > now.getFullYear()) || (year === now.getFullYear() && month >= now.getMonth() + 1);
     const episEvents = planRows
-      .filter(p => p.categories && p.categories.character === 'Эпизодический' && (p.date || '') >= todayStr)
+      .filter(p => p.categories && p.categories.character === 'Эпизодический' && (episShowAll || (p.date || '') >= todayStr))
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
@@ -5861,7 +5865,7 @@ async function loadBudget() {
         + '<span class="bgt-rule">' + d + '</span>' + badge
         + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
-          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();planMenu(this,' + p.id + ')">⋮</button>'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();eventMenu(this,' + p.id + ')">⋮</button>'
         + '</div></div>';
     }
     function bgtCard(color, title, big, sub) {
@@ -6218,6 +6222,12 @@ function planMenu(btn, id) {
     { label: 'Удалить', danger: true, fn: () => deletePlanEntry(id) },
   ]);
 }
+function eventMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => openEditEvent(id) },
+    { label: 'Удалить', danger: true, fn: () => deletePlanEntry(id) },
+  ]);
+}
 function envMenu(btn, i) {
   bgtMenu(btn, [
     { label: 'Редактировать бюджет', fn: () => openEditEnvelope(i) },
@@ -6383,35 +6393,57 @@ async function saveReserveGoal(btn) {
   btn.closest('.modal-overlay').remove(); toast('✓ Резерв создан'); loadBudget();
 }
 
-function openEpisodicEvent() {
+// Поля модалки события — общие для создания и редактирования (p = существующая строка или null).
+function _eventModalFields(p) {
   const subs = (cats || []).filter(c => c.character === 'Эпизодический').sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
   const catOpts = '<option value="">— выбери —</option>'
-    + subs.map(c => '<option value="' + c.id + '">' + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>').join('');
+    + subs.map(c => '<option value="' + c.id + '"' + (p && +p.category_id === c.id ? ' selected' : '') + '>'
+        + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>').join('');
   const accs = (accounts_cache || []).filter(a => a.account_type === 'Актив');
-  const accOpts = accs.map(a => '<option value="' + esc(a.name) + '"' + (a.is_reserve ? ' selected' : '') + '>' + esc(a.name) + (a.is_reserve ? ' (резерв)' : '') + '</option>').join('');
-  // Дата по умолчанию — в отображаемом месяце (текущий → сегодня, иначе 1-е число месяца),
-  // иначе событие, созданное при просмотре будущего месяца, попадёт в текущий и не появится в блоке.
+  const accOpts = accs.map(a => {
+    const sel = p ? (a.name === p.account_from) : a.is_reserve;
+    return '<option value="' + esc(a.name) + '"' + (sel ? ' selected' : '') + '>' + esc(a.name) + (a.is_reserve ? ' (резерв)' : '') + '</option>';
+  }).join('');
+  // Дата по умолчанию (только для создания) — в отображаемом месяце, иначе событие в будущем
+  // месяце попадёт в текущий и не появится в блоке. При редактировании берём дату строки.
   const now = new Date();
-  const p = window._bgtPeriod || { year: now.getFullYear(), month: now.getMonth() + 1 };
-  const isCur = p.year === now.getFullYear() && p.month === now.getMonth() + 1;
-  const today = isCur
-    ? now.toISOString().split('T')[0]
-    : p.year + '-' + String(p.month).padStart(2, '0') + '-01';
-  const mo = document.createElement('div'); mo.className = 'modal-overlay open';
-  mo.innerHTML = '<div class="modal"><div class="modal-title">Разовое событие</div>'
-    + '<div class="field"><div class="field-label">Название</div><input class="field-input" id="evName" placeholder="Подарок / ремонт"/></div>'
+  const per = window._bgtPeriod || { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const isCur = per.year === now.getFullYear() && per.month === now.getMonth() + 1;
+  const dateVal = p ? (p.date || '').slice(0, 10)
+    : (isCur ? now.toISOString().split('T')[0] : per.year + '-' + String(per.month).padStart(2, '0') + '-01');
+  return '<div class="field"><div class="field-label">Название</div>'
+      + '<input class="field-input" id="evName" placeholder="Подарок / ремонт" value="' + (p && p.note ? esc(p.note) : '') + '"/></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-      + '<div class="field"><div class="field-label">Дата</div><input class="field-input" type="date" id="evDate" value="' + today + '"/></div>'
-      + '<div class="field"><div class="field-label">Сумма, ₽</div><input class="field-input" type="number" id="evAmt" min="0" placeholder="0"/></div>'
+      + '<div class="field"><div class="field-label">Дата</div><input class="field-input" type="date" id="evDate" value="' + dateVal + '"/></div>'
+      + '<div class="field"><div class="field-label">Сумма, ₽</div><input class="field-input" type="number" id="evAmt" min="0" placeholder="0" value="' + (p ? +p.amount : '') + '"/></div>'
     + '</div>'
     + '<div class="field"><div class="field-label">Категория (эпизодическая)</div><select class="field-select" id="evCat">' + catOpts + '</select></div>'
-    + '<div class="field"><div class="field-label">Счёт списания</div><select class="field-select" id="evFrom">' + accOpts + '</select><div class="field-note">резервный счёт → «обеспечено резервом»</div></div>'
+    + '<div class="field"><div class="field-label">Счёт списания</div><select class="field-select" id="evFrom">' + accOpts + '</select><div class="field-note">резервный счёт → «обеспечено резервом»</div></div>';
+}
+
+function openEpisodicEvent() {
+  const mo = document.createElement('div'); mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Разовое событие</div>'
+    + _eventModalFields(null)
     + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
     + '<button class="btn-primary" onclick="saveEpisodicEvent(this)">Создать</button></div></div>';
   document.body.appendChild(mo);
 }
 
-async function saveEpisodicEvent(btn) {
+async function openEditEvent(id) {
+  const res = await fetch(`${API_BASE}/api/transactions/${id}?plan=true`, { credentials: 'include' });
+  if (!res.ok) { toast('Ошибка загрузки', false); return; }
+  const p = await res.json();
+  const mo = document.createElement('div'); mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Редактировать событие</div>'
+    + _eventModalFields(p)
+    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
+    + '<button class="btn-primary" onclick="saveEpisodicEvent(this,' + id + ')">Сохранить</button></div></div>';
+  document.body.appendChild(mo);
+}
+
+// btn — кнопка модалки; id передан → редактирование (PATCH), иначе создание (POST).
+async function saveEpisodicEvent(btn, id) {
   const name = document.getElementById('evName')?.value.trim();
   const date = document.getElementById('evDate')?.value;
   const amt  = parseFloat(document.getElementById('evAmt')?.value);
@@ -6420,12 +6452,15 @@ async function saveEpisodicEvent(btn) {
   if (!date || !(amt > 0) || !from) { toast('Дата, сумма и счёт обязательны', false); return; }
   if (!catId) { toast('Выбери эпизодическую категорию', false); return; }
   btn.disabled = true;
-  const res = await fetch(`${API_BASE}/api/transactions?plan=true`, {
-    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, amount: amt, account_from: from, account_to: 'Расход', category_id: catId, note: name || null, source: 'manual' }),
+  const body = { date, amount: amt, account_from: from, account_to: 'Расход', category_id: catId, note: name || null };
+  const url  = id ? `${API_BASE}/api/transactions/${id}?plan=true` : `${API_BASE}/api/transactions?plan=true`;
+  if (!id) body.source = 'manual';
+  const res = await fetch(url, {
+    method: id ? 'PATCH' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
-  btn.closest('.modal-overlay').remove(); toast('✓ Событие добавлено'); loadBudget();
+  btn.closest('.modal-overlay').remove(); toast(id ? '✓ Событие сохранено' : '✓ Событие добавлено'); loadBudget();
 }
 
 // ── PURE SVG CHART UTILITIES (no library) ────────────────────────────────────
