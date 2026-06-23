@@ -133,6 +133,22 @@ async def monthly_income_sum(db, user_id: str, year: int, month: int) -> float:
     return float(val)
 
 
+async def monthly_fixed_income_sum(db, user_id: str, year: int, month: int) -> float:
+    """Гарантированный (фиксированный) доход за месяц — приход по категориям с
+    character='Фиксированный' (зарплата и т.п.). Используется для честного DSR:
+    платежи по долгам соотносим со стабильным доходом, а не со всем приходом."""
+    val = await db.fetchval("""
+        SELECT COALESCE(SUM(t.amount), 0) FROM transactions t
+        JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id=$1
+          AND EXTRACT(YEAR  FROM t.date)=$2
+          AND EXTRACT(MONTH FROM t.date)=$3
+          AND t.account_from = 'Доход'
+          AND c.character = 'Фиксированный'
+    """, user_id, year, month)
+    return float(val)
+
+
 async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
     val = await db.fetchval("""
         SELECT COALESCE(SUM(amount), 0) FROM transactions

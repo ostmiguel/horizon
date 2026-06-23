@@ -7,7 +7,7 @@ from metrics_core import (
     Z_80, FLOW_CHARS, EPISODIC_CHARS, FIXED_CHARS,
     month_context, robust_rate, robust_sigma, _is_op, _is_rsv,
     account_balances, flow_daily_rate, monthly_income_sum,
-    monthly_expense_sum, plan_remaining, safe_to_spend,
+    monthly_fixed_income_sum, monthly_expense_sum, plan_remaining, safe_to_spend,
 )
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -82,7 +82,24 @@ async def get_metrics(request: Request):
             prev_incomes.append(await monthly_income_sum(db, user_id, y, m))
         cur_income = statistics.mean(prev_incomes) if prev_incomes else 1
 
-    dsr = monthly_payments / cur_income if cur_income > 0 else 0.0
+    # DSR считаем от ГАРАНТИРОВАННОГО (фиксированного) дохода: платежи по долгам
+    # должны соотноситься со стабильным приходом (зарплата), а не со всем доходом,
+    # который может включать разовые/нерегулярные поступления.
+    dsr_income = await monthly_fixed_income_sum(db, user_id, year, month)
+    if dsr_income == 0:
+        prev_fixed = []
+        for i in range(1, 4):
+            m, y = month - i, year
+            if m <= 0:
+                m += 12; y -= 1
+            prev_fixed.append(await monthly_fixed_income_sum(db, user_id, y, m))
+        prev_fixed = [v for v in prev_fixed if v > 0]
+        dsr_income = statistics.mean(prev_fixed) if prev_fixed else 0.0
+
+    # Если фиксированный доход нигде не размечен — деградируем к общему доходу,
+    # чтобы не показывать обманчивые 0%/«зелёный» при наличии долговых платежей.
+    dsr_base = dsr_income if dsr_income > 0 else cur_income
+    dsr = monthly_payments / dsr_base if dsr_base > 0 else 0.0
     if dsr < 0.30:
         dsr_status = "green"
     elif dsr <= 0.45:
@@ -433,6 +450,8 @@ async def get_metrics(request: Request):
         "dsr": {
             "value":            round(dsr * 100, 1),
             "monthly_payments": round(monthly_payments),
+            "income_base":      round(dsr_base),
+            "income_kind":      "fixed" if dsr_income > 0 else "total",
             "status":           dsr_status,
         },
         "runway": {

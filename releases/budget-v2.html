@@ -6943,7 +6943,7 @@ async function loadDashboardNew() {
         <div class="card">
           <div class="kpi-label">Кредитная нагрузка</div>
           <div class="kpi-val" style="font-size:22px;color:${dsrColor}">${dsr.value}%</div>
-          <div class="kpi-sub" style="margin-bottom:4px">${f(dsr.monthly_payments)} ₽/мес · DSR</div>
+          <div class="kpi-sub" style="margin-bottom:4px">${f(dsr.monthly_payments)} ₽/мес · ${dsr.income_kind === 'total' ? 'от общего дохода' : 'от фикс. дохода'}</div>
           <div style="font-size:11.5px;color:${dsrSubColor};font-weight:600;margin-bottom:8px">${dsrSubText}</div>
           <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
             <div style="height:100%;width:${dsrW}%;background:linear-gradient(90deg,#2AA7CC,#B4DE3C);border-radius:2px"></div>
