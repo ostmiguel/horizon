@@ -120,8 +120,8 @@ body {
   background: linear-gradient(90deg, rgba(42,167,204,.14), rgba(180,222,60,.10));
   border-left-color: transparent;
 }
-.nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; color: var(--text3); }
-.nav-item.active .nav-icon { color: var(--accent); }
+.nav-dot { width: 8px; height: 8px; border-radius: 2px; background: #C4D0DD; flex-shrink: 0; transition: background 0.15s; }
+.nav-item.active .nav-dot { background: linear-gradient(135deg, #2AA7CC, #B4DE3C); }
 .nav-divider { height: 1px; background: var(--border); margin: 8px 14px; }
 
 .sidebar-bottom {
@@ -962,21 +962,19 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <img src="/horizon-lockup-horizontal-light.svg" alt="Horizon" style="height:28px;width:122px;display:block">
   </div>
   <div class="nav">
-    <div class="nav-section" id="navSectionOld">Обзор</div>
-    <div class="nav-item active" id="navDashboard" data-page="dashboard"><span class="nav-icon">◈</span><span id="navDashboardLabel">Дашборд</span></div>
-    <div class="nav-item" id="navForecast" data-page="forecast" style="display:none"><span class="nav-icon">◌</span>Прогноз</div>
-    <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-icon">◑</span>Сводка</div>
-    <div class="nav-section" id="navSectionOps">Операции</div>
-    <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Кредиты</div>
-    <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-icon">◆</span>Цели</div>
-    <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-icon">▤</span>Операции</div>
-    <div class="nav-item" id="navBudget" data-page="budget" style="display:none"><span class="nav-icon">◑</span>Бюджет</div>
+    <div class="nav-item active" id="navDashboard" data-page="dashboard"><span class="nav-dot" aria-hidden="true"></span>Обзор</div>
+    <div class="nav-item" id="navForecast" data-page="forecast" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Прогноз</div>
+    <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-dot" aria-hidden="true"></span>Сводка</div>
+    <div class="nav-item" id="navBudget" data-page="budget" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Бюджет</div>
+    <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Операции</div>
+    <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Цели</div>
+    <div class="nav-item" data-page="loans"><span class="nav-dot" aria-hidden="true"></span>Кредиты</div>
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
-    <div class="nav-item" data-page="references"><span class="nav-icon">◉</span>Справочники</div>
-    <div class="nav-item" data-page="help"><span class="nav-icon">?</span>Справка</div>
-    <div class="nav-item" id="navLab" data-page="lab" style="display:none"><span class="nav-icon">⚗</span>Лаборатория</div>
-    <div class="nav-item" data-page="profile"><span class="nav-icon">◯</span>Профиль</div>
+    <div class="nav-item" data-page="references"><span class="nav-dot" aria-hidden="true"></span>Справочники</div>
+    <div class="nav-item" data-page="help"><span class="nav-dot" aria-hidden="true"></span>Справка</div>
+    <div class="nav-item" id="navLab" data-page="lab" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Лаборатория</div>
+    <div class="nav-item" data-page="profile"><span class="nav-dot" aria-hidden="true"></span>Профиль</div>
   </div>
   <div class="sidebar-bottom">
     <div class="period-label">Период</div>
@@ -6788,17 +6786,10 @@ window.onload = async () => {
     });
   }
 
-  // New-arch nav: hide old items, show Прогноз, rename Дашборд → Обзор
-  // (Сводка оставлена видимой — нужна для формирования правил)
+  // New-arch nav: показать «Прогноз» (в обычном режиме — стаб, скрыт)
   if (window.NEW_ARCH) {
-    ['navSectionOld'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
     const fEl = document.getElementById('navForecast');
     if (fEl) fEl.style.display = '';
-    const lbl = document.getElementById('navDashboardLabel');
-    if (lbl) lbl.textContent = 'Обзор';
   }
 
   await loadMeta();
