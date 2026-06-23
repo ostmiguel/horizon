@@ -2,14 +2,11 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-PUBLIC_PATHS = {"/health", "/api/auth/google", "/api/auth/google/callback",
-                "/api/auth/yandex", "/api/auth/yandex/callback", "/docs", "/openapi.json"}
-
-
-def _unauth(detail: str):
-    # ВАЖНО: HTTPException, поднятый внутри BaseHTTPMiddleware, не перехватывается
-    # обработчиками FastAPI и отдаётся как 500. Поэтому возвращаем ответ напрямую.
-    return JSONResponse({"detail": detail}, status_code=401)
+# /api/* эндпоинты, доступные без сессии (OAuth-флоу)
+PUBLIC_API_PATHS = {
+    "/api/auth/google", "/api/auth/google/callback",
+    "/api/auth/yandex", "/api/auth/yandex/callback",
+}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -18,14 +15,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         async with request.app.state.pool.acquire() as conn:
             request.state.db = conn
 
-            # Skip auth for public paths
-            if request.url.path in PUBLIC_PATHS:
+            path = request.url.path
+            # Защищаем ТОЛЬКО API (кроме auth-флоу). Статика, SPA (/), /health,
+            # /docs — публичны: SPA сам обращается к /api/auth/me и решает, что показать.
+            if not path.startswith("/api/") or path in PUBLIC_API_PATHS:
                 return await call_next(request)
 
-            # Check session cookie
             token = request.cookies.get("session")
             if not token:
-                return _unauth("Not authenticated")
+                # ВАЖНО: HTTPException внутри middleware отдаётся как 500 — возвращаем ответ напрямую
+                return JSONResponse({"detail": "Not authenticated"}, status_code=401)
 
             row = await conn.fetchrow("""
                 SELECT u.* FROM sessions s
@@ -34,7 +33,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             """, token)
 
             if not row:
-                return _unauth("Session expired")
+                return JSONResponse({"detail": "Session expired"}, status_code=401)
 
             request.state.user = dict(row)
             request.state.user_id = row["id"]
