@@ -5353,10 +5353,15 @@ function openEditRule(id) {
   const r = (window._bgtRules || []).find(x => x.id === id);
   if (!r) return;
   const kind = r.account_from === 'Доход' ? 'income' : 'fixed';
+  // Префилл суммы — эффективная за отображаемый месяц (как в строке): при правке
+  // «только этот месяц» само правило не меняется, сумма живёт в плановой строке.
+  const ents = (window._bgtPlanByRule || {})[id] || [];
+  const effAmt = ents.length ? ents.reduce((s, e) => s + (+e.amount || 0), 0) : (+r.amount || 0);
+  const rView = Object.assign({}, r, { amount: effAmt });
   const mo = document.createElement('div');
   mo.className = 'modal-overlay open';
   mo.innerHTML = '<div class="modal"><div class="modal-title">Редактировать правило</div>'
-    + ruleFormHtml(r, kind)
+    + ruleFormHtml(rView, kind)
     + '<div class="modal-btns">'
       + '<button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
       + '<button class="btn-primary" onclick="updateRule(' + id + ',this)">Сохранить</button>'
