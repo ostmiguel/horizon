@@ -967,7 +967,6 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <div class="nav-item" id="navForecast" data-page="forecast" style="display:none"><span class="nav-icon">◌</span>Прогноз</div>
     <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-icon">◑</span>Сводка</div>
     <div class="nav-section" id="navSectionOps">Операции</div>
-    <div class="nav-item" id="navTx" data-page="transactions"><span class="nav-icon">↕</span>Транзакции</div>
     <div class="nav-item" data-page="loans"><span class="nav-icon">◎</span>Кредиты</div>
     <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-icon">◆</span>Цели</div>
     <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-icon">▤</span>Операции</div>
@@ -1004,14 +1003,6 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
   <div class="mob-nav-item" onclick="loadPage('summary')">
     <i class="ti ti-chart-bar mob-nav-icon" id="mnav-summary" aria-hidden="true"></i>
     <span class="mob-nav-label" id="mnavl-summary">Сводка</span>
-  </div>
-  <div class="mob-nav-item" onclick="loadPage('transactions')">
-    <i class="ti ti-arrows-exchange mob-nav-icon" id="mnav-transactions" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-transactions">Транзакции</span>
-  </div>
-  <div class="mob-nav-item" onclick="loadPage('plan')">
-    <i class="ti ti-calendar-event mob-nav-icon" id="mnav-plan" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-plan">План</span>
   </div>
   <div class="mob-nav-item" onclick="loadPage('loans')">
     <i class="ti ti-credit-card mob-nav-icon" id="mnav-loans" aria-hidden="true"></i>
@@ -1334,7 +1325,7 @@ function loadPage(page) {
     el.classList.toggle('active', el.dataset.page === page);
   });
   // Sync mobile bottom nav
-  ['dashboard','summary','transactions','plan','loans','references','help'].forEach(p => {
+  ['dashboard','summary','loans','references','help'].forEach(p => {
     const icon  = document.getElementById('mnav-' + p);
     const label = document.getElementById('mnavl-' + p);
     if (icon)  icon.classList.toggle('act',  p === page);
@@ -1342,7 +1333,6 @@ function loadPage(page) {
   });
   if (page === 'dashboard')     (window.NEW_ARCH ? loadDashboardNew() : loadDashboard());
   else if (page === 'forecast')     loadForecastStub();
-  else if (page === 'transactions') loadTransactions(false);
   else if (page === 'references')   loadReferences();
   else if (page === 'loans')        loadLoans();
   else if (page === 'help')         loadHelp();
@@ -4974,7 +4964,7 @@ function loadHelp() {
           <span style="font-size:16px;font-weight:500;color:var(--text)">Внеси транзакции</span>
           <span style="font-size:11px;color:var(--text3);margin-left:4px">~5 мин</span>
         </div>
-        <p class="help-p" style="margin-bottom:10px">Начни с текущего месяца — нажми <b>+</b> на дашборде или открой страницу <b>Транзакции</b>. Каждая операция это движение денег между двумя счетами.</p>
+        <p class="help-p" style="margin-bottom:10px">Начни с текущего месяца — нажми <b>+</b> на дашборде или открой страницу <b>Операции</b>. Каждая операция это движение денег между двумя счетами.</p>
         <div class="help-note">Не нужно вносить всю историю с начала года. Достаточно текущего месяца чтобы дашборд заработал.</div>
       </div>
       <div style="width:200px;flex-shrink:0;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden">
@@ -7450,7 +7440,8 @@ window.onload = async () => {
 
   await loadMeta();
   let savedPage = localStorage.getItem('hz_page') || 'dashboard';
-  if (savedPage === 'plan') savedPage = 'budget';  // лист «План» снят
+  if (savedPage === 'plan') savedPage = 'budget';            // лист «План» снят
+  if (savedPage === 'transactions') savedPage = 'operations'; // лист «Транзакции» снят → «Операции»
   loadPage(savedPage);
 };
 // ── LAB FORECAST MODAL ──────────────────────────────────────────────────────
