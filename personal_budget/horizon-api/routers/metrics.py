@@ -221,7 +221,7 @@ async def get_metrics(request: Request):
         WHERE t.user_id=$1
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
-          AND t.account_to = 'Расход'
+          AND t.account_to IN ('Расход', 'Обязательства')
         GROUP BY c.category, c.character, c.expense_type
         ORDER BY total DESC
     """, user_id, year, month)
@@ -233,14 +233,28 @@ async def get_metrics(request: Request):
 
     for r in cat_rows:
         fact = float(r["total"])
-        cat_remaining = 0.0  # forecasted remaining flow until month end (variable-everyday only)
+        cat_remaining = 0.0  # поведенческий остаток до конца месяца (только повседневные)
         is_variable_everyday = (
             r["cat_expense_type"] == "variable"
             and r["cat_char"] not in EPISODIC_CHARS
         )
+        # План категории за месяц = сумма материализованных плановых строк (правила +
+        # график кредита), включая тело долга (Обязательства) и процент (Расход).
+        # Правила — основа плана: есть план → показываем его, иначе поведение/факт.
+        # Считаем по (категория, характер), чтобы фронт корректно суммировал плечи.
+        plan_cat_total = float(await db.fetchval("""
+            SELECT COALESCE(SUM(p.amount), 0)
+            FROM plan p
+            JOIN categories c ON p.category_id = c.id
+            WHERE p.user_id=$1
+              AND EXTRACT(YEAR  FROM p.date)=$2
+              AND EXTRACT(MONTH FROM p.date)=$3
+              AND c.category=$4 AND c.character=$5
+              AND p.account_to IN ('Расход', 'Обязательства')
+        """, user_id, year, month, r["category"], r["cat_char"]) or 0)
+
         if is_variable_everyday and d_left > 0:
-            # §3.3 fix: rate = total_in_window / window_days (not median of spending-days)
-            # MAD filter removes outlier days before summing.
+            # §3.3: rate = total_in_window / window_days, MAD-фильтр выбросов
             cat_cutoff = today - timedelta(days=CAT_WINDOW)
             cat_daily_rows = await db.fetch("""
                 SELECT t.date, SUM(t.amount) AS dt
@@ -256,7 +270,6 @@ async def get_metrics(request: Request):
                 daily_by_date.get(cat_cutoff + timedelta(days=i), 0.0)
                 for i in range(CAT_WINDOW)
             ]
-            # MAD outlier filter (same logic as flow_daily_rate)
             pos = [x for x in cat_daily if x > 0]
             if len(pos) >= 2:
                 med = statistics.median(pos)
@@ -265,23 +278,13 @@ async def get_metrics(request: Request):
                 cat_daily = [x if x <= threshold else 0.0 for x in cat_daily]
             cat_rate = sum(cat_daily) / CAT_WINDOW
             cat_remaining = cat_rate * d_left
-            forecast = fact + cat_remaining
-        elif r["cat_expense_type"] == "fixed":
-            # Fixed: show plan amount for the month (max of fact vs plan)
-            plan_cat_total = await db.fetchval("""
-                SELECT COALESCE(SUM(p.amount), 0)
-                FROM plan p
-                JOIN categories c ON p.category_id = c.id
-                WHERE p.user_id=$1
-                  AND EXTRACT(YEAR  FROM p.date)=$2
-                  AND EXTRACT(MONTH FROM p.date)=$3
-                  AND c.category=$4
-                  AND p.account_to = 'Расход'
-            """, user_id, year, month, r["category"])
-            forecast = max(fact, float(plan_cat_total or 0))
+
+        if plan_cat_total > 0:
+            forecast = plan_cat_total          # основа — правила/график кредита
+        elif is_variable_everyday:
+            forecast = fact + cat_remaining    # поведенческий прогноз
         else:
-            # Episodic: show only what was actually spent
-            forecast = fact
+            forecast = fact                    # fixed/episodic без правил — факт
 
         seen_cat_chars.add((r["category"], r["cat_char"]))
         categories.append({
@@ -293,8 +296,9 @@ async def get_metrics(request: Request):
             "flow_remaining":  round(cat_remaining),
         })
 
-    # Add fixed categories that have plan entries but no fact yet this month
-    plan_fixed_cats = await db.fetch("""
+    # Категории с планом (правила/график кредита), но без факта в этом месяце —
+    # оба плеча: тело долга (Обязательства) и процент/расход (Расход).
+    plan_extra_cats = await db.fetch("""
         SELECT c.category, c.character AS cat_char, c.expense_type AS cat_expense_type,
                SUM(p.amount) AS plan_total
         FROM plan p
@@ -302,18 +306,18 @@ async def get_metrics(request: Request):
         WHERE p.user_id=$1
           AND EXTRACT(YEAR  FROM p.date)=$2
           AND EXTRACT(MONTH FROM p.date)=$3
-          AND p.account_to = 'Расход'
-          AND c.expense_type = 'fixed'
+          AND p.account_to IN ('Расход', 'Обязательства')
         GROUP BY c.category, c.character, c.expense_type
     """, user_id, year, month)
-    for r in plan_fixed_cats:
+    for r in plan_extra_cats:
         if (r["category"], r["cat_char"]) not in seen_cat_chars:
             categories.append({
                 "category":        r["category"],
                 "character":       r["cat_char"],
-                "expense_type":    "fixed",
+                "expense_type":    r["cat_expense_type"],
                 "amount_fact":     0,
                 "amount_forecast": round(float(r["plan_total"])),
+                "flow_remaining":  0,
             })
 
     # ── Flow fact this month ──────────────────────────────────────────────────
