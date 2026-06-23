@@ -5712,6 +5712,7 @@ async function loadBudget() {
     const planByRule = {};
     planRows.forEach(p => { if (p.source_rule_id) (planByRule[p.source_rule_id] = planByRule[p.source_rule_id] || []).push(p); });
     Object.values(planByRule).forEach(a => a.sort((x, y) => (x.date || '').localeCompare(y.date || '')));
+    window._bgtPlanByRule = planByRule; // для правки правила «только текущий месяц» (баг 4)
 
     // ── разбивка правил ──
     const incomeRules = rules.filter(r => r.account_from === 'Доход');
@@ -5757,10 +5758,11 @@ async function loadBudget() {
     const envFactTotal     = envelopes.reduce((s, e) => s + e.fact, 0);
     const envForecastTotal = envelopes.reduce((s, e) => s + e.forecast, 0);
 
-    // предложения по категориям БЕЗ конверта (показываем под конвертами, не исчезают после принятия одного)
+    // предложения по категориям БЕЗ конверта и НЕ отменённым ранее (за этот месяц)
     const envNames = new Set(envelopes.map(e => e.name));
     const sgRaw = await fetch(`${API_BASE}/api/category-budgets/suggestions?year=${year}&month=${month}`, {credentials:'include'}).then(r => r.json()).catch(() => ({}));
-    const suggestions = (sgRaw && Array.isArray(sgRaw.suggestions)) ? sgRaw.suggestions.filter(s => !envNames.has(s.category)) : [];
+    const suggestions = (sgRaw && Array.isArray(sgRaw.suggestions))
+      ? sgRaw.suggestions.filter(s => !envNames.has(s.category) && !bgtIsDismissed(s.category)) : [];
     window._bgtSuggest = suggestions;
 
     // ── кредиты: плановые строки из графика (source='loan_schedule') ──
@@ -5836,7 +5838,7 @@ async function loadBudget() {
         + '<input class="sugg-amt field-input" type="number" min="0" data-cat="' + esc(s.category) + '" value="' + s.suggested + '">'
         + '<div style="display:flex;gap:6px;justify-content:flex-end">'
           + '<button class="qbtn qbtn-income" style="font-size:12px;padding:6px 12px" onclick="acceptEnvelope(this)">Принять</button>'
-          + '<button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="this.closest(\'.bgt-sugg\').remove()">Отменить</button>'
+          + '<button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="dismissSuggestion(this)">Отменить</button>'
         + '</div>'
       + '</div>';
     }
@@ -5882,9 +5884,9 @@ async function loadBudget() {
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
     const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
     const suggBlock = suggestions.length
-      ? '<div class="bgt-subhead">Предложено на основе трат — прими или поправь</div>'
+      ? '<div id="bgtSuggBlock"><div class="bgt-subhead">Предложено на основе трат — прими или поправь</div>'
         + suggestions.map((s, i) => suggestionRow(s, i)).join('')
-        + '<div style="padding:12px 18px;border-top:1px solid var(--border)"><button class="qbtn qbtn-income" onclick="acceptAllEnvelopes()">Принять все</button></div>'
+        + '<div style="padding:12px 18px;border-top:1px solid var(--border)"><button class="qbtn qbtn-income" onclick="acceptAllEnvelopes()">Принять все</button></div></div>'
       : '';
     const envRowsHtml = (envelopes.length || suggestions.length)
       ? envelopes.map((e, i) => envelopeRow(e, i)).join('') + suggBlock
@@ -5984,7 +5986,14 @@ function ruleFormHtml(r, kind) {
       + '<input class="field-input" type="number" id="ruleDom" min="1" max="31" placeholder="—"'
       + ' value="' + (r?.day_of_month || '') + '"/></div>'
     + '<div class="field"><div class="field-label">Категория (необязательно)</div>'
-      + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>';
+      + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>'
+    + (r
+        ? '<label class="field" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">'
+          + '<input type="checkbox" id="ruleAllFuture" style="margin-top:3px"/>'
+          + '<span><span style="font-weight:600">Изменить все будущие</span>'
+          + '<div class="field-note">вкл — правка применится к текущему и будущим месяцам; '
+          + 'выкл — только к текущему месяцу</div></span></label>'
+        : '');
 }
 
 function openAddRule(kind) {
@@ -6049,22 +6058,58 @@ async function updateRule(id, btn) {
   const to    = document.getElementById('ruleTo')?.value;
   const domV  = document.getElementById('ruleDom')?.value;
   const catV  = document.getElementById('ruleCat')?.value;
+  const allFuture = document.getElementById('ruleAllFuture')?.checked;
   if (!name || amt <= 0 || !from || !to) { toast('Заполни название, сумму и счета', false); return; }
   btn.disabled = true;
-  const res = await fetch(`${API_BASE}/api/plan-rules/${id}`, {
-    method: 'PATCH', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name, amount: amt,
-      account_from: from,
-      account_to:   to,
-      day_of_month: domV ? +domV : null,
-      category_id:  catV ? +catV : null,
-    }),
-  });
-  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
+
+  if (allFuture) {
+    // Правка самого правила — затрагивает текущий и будущие месяцы (бэк ре-материализует).
+    const res = await fetch(`${API_BASE}/api/plan-rules/${id}`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, amount: amt,
+        account_from: from,
+        account_to:   to,
+        day_of_month: domV ? +domV : null,
+        category_id:  catV ? +catV : null,
+      }),
+    });
+    if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
+    btn.closest('.modal-overlay').remove();
+    toast('✓ Правило сохранено для всех будущих месяцев');
+    loadBudget();
+    return;
+  }
+
+  // Только текущий месяц: правим материализованные плановые строки этого месяца,
+  // само правило не трогаем (будущие месяцы сохраняют прежние значения).
+  const entries = (window._bgtPlanByRule || {})[id] || [];
+  if (!entries.length) {
+    toast('В этом месяце нет плановой строки. Включи «Изменить все будущие».', false);
+    btn.disabled = false; return;
+  }
+  const { year, month } = window._bgtPeriod || {};
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const day = Math.max(1, Math.min(domV ? +domV : new Date(entries[0].date).getDate() || 1, daysInMonth));
+  const dateStr = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  let ok = true;
+  for (const e of entries) {
+    const res = await fetch(`${API_BASE}/api/transactions/${e.id}?plan=true`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: dateStr, amount: amt,
+        account_from: from, account_to: to,
+        category_id: catV ? +catV : null,
+        note: name,
+      }),
+    });
+    if (!res.ok) ok = false;
+  }
+  if (!ok) { toast('Ошибка сохранения строки месяца', false); btn.disabled = false; return; }
   btn.closest('.modal-overlay').remove();
-  toast('✓ Правило сохранено');
+  toast('✓ Изменено только в этом месяце');
   loadBudget();
 }
 
@@ -6266,6 +6311,23 @@ async function _putEnvelope(category, budget) {
   });
 }
 
+// ── Отклонённые предложения конвертов (per месяц, localStorage) ──────────────
+function bgtDismissKey() { const p = window._bgtPeriod || {}; return p.year + '-' + p.month; }
+function bgtDismissedSet() { try { return new Set(JSON.parse(localStorage.getItem('hz_dismissed_sugg') || '[]')); } catch (e) { return new Set(); } }
+function bgtIsDismissed(cat) { return bgtDismissedSet().has(bgtDismissKey() + '·' + cat); }
+function bgtDismiss(cat) {
+  const s = bgtDismissedSet(); s.add(bgtDismissKey() + '·' + cat);
+  localStorage.setItem('hz_dismissed_sugg', JSON.stringify([...s]));
+}
+function dismissSuggestion(btn) {
+  const row = btn.closest('.bgt-sugg');
+  const cat = row.querySelector('.sugg-amt') && row.querySelector('.sugg-amt').dataset.cat;
+  if (cat) bgtDismiss(cat);
+  const block = document.getElementById('bgtSuggBlock');
+  row.remove();
+  if (block && !block.querySelector('.bgt-sugg')) block.remove();
+}
+
 async function acceptEnvelope(btn) {
   const inp = btn.closest('.bgt-sugg').querySelector('.sugg-amt');
   const budget = parseFloat(inp.value);
@@ -6327,7 +6389,14 @@ function openEpisodicEvent() {
     + subs.map(c => '<option value="' + c.id + '">' + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>').join('');
   const accs = (accounts_cache || []).filter(a => a.account_type === 'Актив');
   const accOpts = accs.map(a => '<option value="' + esc(a.name) + '"' + (a.is_reserve ? ' selected' : '') + '>' + esc(a.name) + (a.is_reserve ? ' (резерв)' : '') + '</option>').join('');
-  const today = new Date().toISOString().split('T')[0];
+  // Дата по умолчанию — в отображаемом месяце (текущий → сегодня, иначе 1-е число месяца),
+  // иначе событие, созданное при просмотре будущего месяца, попадёт в текущий и не появится в блоке.
+  const now = new Date();
+  const p = window._bgtPeriod || { year: now.getFullYear(), month: now.getMonth() + 1 };
+  const isCur = p.year === now.getFullYear() && p.month === now.getMonth() + 1;
+  const today = isCur
+    ? now.toISOString().split('T')[0]
+    : p.year + '-' + String(p.month).padStart(2, '0') + '-01';
   const mo = document.createElement('div'); mo.className = 'modal-overlay open';
   mo.innerHTML = '<div class="modal"><div class="modal-title">Разовое событие</div>'
     + '<div class="field"><div class="field-label">Название</div><input class="field-input" id="evName" placeholder="Подарок / ремонт"/></div>'
