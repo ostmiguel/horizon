@@ -3195,7 +3195,7 @@ function renderAccRows(rows) {
 
 function renderCatRows(rows) {
   if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Нет категорий</td></tr>';
-  return rows.map(c => `<tr>
+  return rows.map(c => `<tr data-cat-id="${c.id}">
     <td>${c.category}</td>
     <td style="color:var(--text2)">${c.subcategory}</td>
     <td><span class="tag">${c.group_name}</span></td>
@@ -3480,14 +3480,8 @@ function editCat(id) {
   const c = (window._allCats||[]).find(c => c.id === id);
   if (!c) return;
 
-  // Inline edit — replace the row with an edit form
-  const row = document.querySelector(`#catBody tr`);
-  const tbody = document.getElementById('catBody');
-  if (!tbody) return;
-
-  // Find which tr corresponds to this id
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  const targetRow = rows.find(r => r.innerHTML.includes(`editCat(${id})`));
+  // Inline edit — replace the row with an edit form (строку ищем по data-атрибуту)
+  const targetRow = document.querySelector(`#catBody tr[data-cat-id="${id}"]`);
   if (!targetRow) return;
 
   targetRow.innerHTML = `
