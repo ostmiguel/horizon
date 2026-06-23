@@ -5065,11 +5065,19 @@ async function loadBudget() {
     Object.values(planByRule).forEach(a => a.sort((x, y) => (x.date || '').localeCompare(y.date || '')));
     window._bgtPlanByRule = planByRule; // для правки правила «только текущий месяц» (баг 4)
 
+    // Эффективная сумма правила за ОТОБРАЖАЕМЫЙ месяц: материализованная плановая
+    // строка (в т.ч. правленная «только этот месяц») или дефолт правила. Используется
+    // и в KPI-карточках, и в строках правил — чтобы правка суммы была всюду видна.
+    const ruleEffAmt = rule => {
+      const ents = planByRule[rule.id] || [];
+      return ents.length ? ents.reduce((s, e) => s + (+e.amount || 0), 0) : +rule.amount || 0;
+    };
+
     // ── разбивка правил ──
     const incomeRules = rules.filter(r => r.account_from === 'Доход');
     const fixedRules  = rules.filter(r => r.account_to === 'Расход' || r.account_to === 'Обязательства');
-    const incomeTotal = incomeRules.reduce((s, r) => s + (+r.amount || 0), 0);
-    const fixedTotal  = fixedRules.reduce((s, r) => s + (+r.amount || 0), 0);
+    const incomeTotal = incomeRules.reduce((s, r) => s + ruleEffAmt(r), 0);
+    const fixedTotal  = fixedRules.reduce((s, r) => s + ruleEffAmt(r), 0);
 
     // ── конверты: только ПОВСЕДНЕВНАЯ часть категории (variable, не эпизод) ──
     // Эпизодические подкатегории той же категории (напр. «Автомобиль/ТО») идут
@@ -5128,11 +5136,9 @@ async function loadBudget() {
       const sub = (rule.categories && (rule.categories.subcategory || rule.categories.category)) || '';
       const sched = rule.day_of_month ? rule.day_of_month + '-го · ежемесячно' : 'ежемесячно';
       const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
-      // Показываем эффективную сумму за ОТОБРАЖАЕМЫЙ месяц: если есть материализованная
-      // плановая строка (в т.ч. правленная «только этот месяц») — берём её сумму, иначе
-      // дефолт правила. Так правка суммы всегда видна. Пилюли и статус убраны ранее.
-      const ents = planByRule[rule.id] || [];
-      const eff  = ents.length ? ents.reduce((s, e) => s + (+e.amount || 0), 0) : +rule.amount;
+      // Эффективная сумма за отображаемый месяц (см. ruleEffAmt) — чтобы правка суммы
+      // (в т.ч. «только этот месяц») была видна. Пилюли и статус убраны ранее.
+      const eff = ruleEffAmt(rule);
       return '<div class="bgt-frow">'
         + '<div class="bgt-rn">' + esc(rule.name) + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
