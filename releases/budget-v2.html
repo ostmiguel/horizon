@@ -5128,12 +5128,15 @@ async function loadBudget() {
       const sub = (rule.categories && (rule.categories.subcategory || rule.categories.category)) || '';
       const sched = rule.day_of_month ? rule.day_of_month + '-го · ежемесячно' : 'ежемесячно';
       const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
-      // Вложенные плановые «пилюли» и статус «Исполнено/Ожидается» убраны:
-      // строка дублировала правило (STS учитывает правило по умолчанию).
+      // Показываем эффективную сумму за ОТОБРАЖАЕМЫЙ месяц: если есть материализованная
+      // плановая строка (в т.ч. правленная «только этот месяц») — берём её сумму, иначе
+      // дефолт правила. Так правка суммы всегда видна. Пилюли и статус убраны ранее.
+      const ents = planByRule[rule.id] || [];
+      const eff  = ents.length ? ents.reduce((s, e) => s + (+e.amount || 0), 0) : +rule.amount;
       return '<div class="bgt-frow">'
         + '<div class="bgt-rn">' + esc(rule.name) + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
-        + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(rule.amount) + ' ₽</span>'
+        + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(eff) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();ruleMenu(this,' + rule.id + ')">⋮</button>'
         + '</div></div>';
@@ -5318,11 +5321,11 @@ function ruleFormHtml(r, kind) {
     + '<div class="field"><div class="field-label">Категория (необязательно)</div>'
       + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>'
     + (r
-        ? '<label class="field" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">'
-          + '<input type="checkbox" id="ruleAllFuture" style="margin-top:3px"/>'
+        ? '<div class="field" style="display:flex;align-items:flex-start;gap:10px">'
+          + '<label class="toggle" style="margin-top:2px"><input type="checkbox" id="ruleAllFuture"/><span class="toggle-slider"></span></label>'
           + '<span><span style="font-weight:600">Изменить все будущие</span>'
           + '<div class="field-note">вкл — правка применится к текущему и будущим месяцам; '
-          + 'выкл — только к текущему месяцу</div></span></label>'
+          + 'выкл — только к текущему месяцу</div></span></div>'
         : '');
 }
 
