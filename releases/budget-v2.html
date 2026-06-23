@@ -5785,20 +5785,12 @@ async function loadBudget() {
 
     // ── строители строк ──
     function emptyMsg(t) { return '<div style="padding:18px;color:var(--text3);font-size:13px">' + t + '</div>'; }
-    function planEntry(p) {
-      const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
-      return '<div class="bgt-pe"><span class="bgt-pe-d">' + d + '</span><span class="bgt-pe-a">' + f(p.amount) + ' ₽</span>'
-        + '<button class="bgt-pe-btn" title="Изменить" onclick="editPlanEntry(' + p.id + ')">ред.</button>'
-        + '<button class="bgt-pe-btn bgt-pe-del" title="Удалить" onclick="deletePlanEntry(' + p.id + ')">✕</button></div>';
-    }
     function ruleRow(rule, sign) {
       const sub = (rule.categories && (rule.categories.subcategory || rule.categories.category)) || '';
       const sched = rule.day_of_month ? rule.day_of_month + '-го · ежемесячно' : 'ежемесячно';
       const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
-      const entries = planByRule[rule.id] || [];
-      const nested = entries.length
-        ? '<div class="bgt-pe-wrap">' + entries.map(planEntry).join('') + '</div>'
-        : '<div class="bgt-pe-wrap bgt-pe-empty">нет плановых строк за месяц</div>';
+      // Вложенные плановые «пилюли» убраны: материализованная строка дублирует само
+      // правило (STS учитывает правило по умолчанию). Правка строк месяца — через ⋮.
       let statusHtml = '';
       if (sign === '-') { const done = ruleDone(rule); statusHtml = '<span class="' + (done ? 'bgt-done' : 'bgt-wait') + '">' + (done ? 'Исполнено' : 'Ожидается') + '</span>'; }
       return '<div class="bgt-frow">'
@@ -5808,7 +5800,7 @@ async function loadBudget() {
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
           + statusHtml
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();ruleMenu(this,' + rule.id + ')">⋮</button>'
-        + '</div></div>' + nested;
+        + '</div></div>';
     }
     function loanRow(p) {
       const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
