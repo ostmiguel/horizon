@@ -4,19 +4,25 @@ from typing import Optional
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
+# Характер — единственный источник истины (3 значения):
+# Повседневный / Фиксированный / Эпизодический. expense_type выводим из него,
+# чтобы на время перехода старый код (читающий expense_type) не расходился.
+def _etype(character: Optional[str]) -> str:
+    return 'fixed' if character == 'Фиксированный' else 'variable'
+
 class CategoryCreate(BaseModel):
     group_name: str
     category: str
     subcategory: str
     character: Optional[str] = None
-    expense_type: Optional[str] = None  # 'fixed' | 'variable'
+    expense_type: Optional[str] = None  # игнорируется: выводится из character
 
 class CategoryUpdate(BaseModel):
     group_name: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
     character: Optional[str] = None
-    expense_type: Optional[str] = None
+    expense_type: Optional[str] = None  # игнорируется: выводится из character
 
 @router.get("")
 async def get_categories(request: Request):
@@ -35,7 +41,7 @@ async def create_category(data: CategoryCreate, request: Request):
     row = await db.fetchrow("""
         INSERT INTO categories (user_id, group_name, category, subcategory, character, expense_type)
         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
-    """, user_id, data.group_name, data.category, data.subcategory, data.character, data.expense_type)
+    """, user_id, data.group_name, data.category, data.subcategory, data.character, _etype(data.character))
     return dict(row)
 
 @router.patch("/{cat_id}")
@@ -45,6 +51,9 @@ async def update_category(cat_id: int, data: CategoryUpdate, request: Request):
     updates = data.dict(exclude_none=True)
     if not updates:
         raise HTTPException(400, "No fields")
+    # держим expense_type синхронным с character
+    if "character" in updates:
+        updates["expense_type"] = _etype(updates["character"])
     sets = ", ".join(f"{k} = ${i+3}" for i, k in enumerate(updates))
     row = await db.fetchrow(
         f"UPDATE categories SET {sets} WHERE id=$1 AND user_id=$2 RETURNING *",

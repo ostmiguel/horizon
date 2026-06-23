@@ -3140,6 +3140,7 @@ async function loadReferences() {
           <select class="ref-filter-sel" id="catCharFilter" onchange="filterCats()">
             <option value="">Все характеры</option>
             <option value="Повседневный">Повседневный</option>
+            <option value="Фиксированный">Фиксированный</option>
             <option value="Эпизодический">Эпизодический</option>
           </select>
         </div>
@@ -3436,8 +3437,8 @@ function openAddCategory() {
     </div>
     <div class="field"><div class="field-label">Характер</div>
       <select class="field-select" id="cChar">
-        <option value="">—</option>
         <option value="Повседневный">Повседневный</option>
+        <option value="Фиксированный">Фиксированный</option>
         <option value="Эпизодический">Эпизодический</option>
       </select>
     </div>
@@ -3492,7 +3493,9 @@ function editCat(id) {
     <td><input class="field-input" id="eSub_${id}" value="${c.subcategory}" style="padding:4px 8px;font-size:12px;width:140px"></td>
     <td><input class="field-input" id="eCat_${id}" value="${c.category}" style="padding:4px 8px;font-size:12px;width:120px"></td>
     <td><input class="field-input" id="eGrp_${id}" value="${c.group_name}" style="padding:4px 8px;font-size:12px;width:140px"></td>
-    <td><input class="field-input" id="eChr_${id}" value="${c.character||''}" placeholder="необяз." style="padding:4px 8px;font-size:12px;width:90px"></td>
+    <td><select class="field-select" id="eChr_${id}" style="padding:4px 8px;font-size:12px;width:140px">
+      ${['Повседневный','Фиксированный','Эпизодический'].map(v=>`<option${c.character===v?' selected':''}>${v}</option>`).join('')}
+    </select></td>
     <td style="white-space:nowrap">
       <button class="btn-primary" onclick="updateCategory(${id})" style="font-size:11px;padding:4px 10px;margin-right:4px">✓</button>
       <button class="btn-ghost" onclick="loadReferences()" style="font-size:11px;padding:4px 8px">✕</button>
