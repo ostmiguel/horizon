@@ -7107,19 +7107,33 @@ async function loadOperations() {
     (cats || []).forEach(c => { catById[c.id] = c; });
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
 
-    const isSavings = t => getFlowType(t.account_from, t.account_to) === 'transfer' && reserveNames.has(t.account_to);
+    const isDebtAcc = a => a === 'Обязательства' || a === 'Дебиторка';
+    // Кредитные операции (тело → Обязательства, процент → Расход) относим к «Долгам» —
+    // как в Бюджете, где кредит единый блок. Иначе процент уходил бы в «Расходы»,
+    // и KPI Операций расходились бы с планом Бюджета.
+    const isLoanTx = t => {
+      const c = catById[t.category_id];
+      return !!(c && ((c.category && c.category.includes('Кредит')) || (c.subcategory && c.subcategory.includes('Кредит'))));
+    };
+    const opFlow = t => {
+      if (t.account_from === 'Доход') return 'income';
+      if (isDebtAcc(t.account_from) || isDebtAcc(t.account_to) || isLoanTx(t)) return 'obligation';
+      if (t.account_to === 'Расход') return 'expense';
+      return 'transfer';
+    };
+    const isSavings = t => opFlow(t) === 'transfer' && reserveNames.has(t.account_to);
 
     // ── KPI: факт vs план по 4 направлениям ───────────────────────────────────
     const sumBy = (arr, pred) => arr.filter(pred).reduce((s,t) => s + +t.amount, 0);
     const kpi = {
-      income:  { fact: sumBy(facts, t => getFlowType(t.account_from,t.account_to)==='income'),
-                 plan: sumBy(plans, t => getFlowType(t.account_from,t.account_to)==='income'), good: 'up' },
-      expense: { fact: sumBy(facts, t => getFlowType(t.account_from,t.account_to)==='expense'),
-                 plan: sumBy(plans, t => getFlowType(t.account_from,t.account_to)==='expense'), good: 'down' },
+      income:  { fact: sumBy(facts, t => opFlow(t)==='income'),
+                 plan: sumBy(plans, t => opFlow(t)==='income'), good: 'up' },
+      expense: { fact: sumBy(facts, t => opFlow(t)==='expense'),
+                 plan: sumBy(plans, t => opFlow(t)==='expense'), good: 'down' },
       savings: { fact: sumBy(facts, isSavings),
                  plan: sumBy(plans, isSavings), good: 'up' },
-      debt:    { fact: sumBy(facts, t => getFlowType(t.account_from,t.account_to)==='obligation'),
-                 plan: sumBy(plans, t => getFlowType(t.account_from,t.account_to)==='obligation'), good: 'down' },
+      debt:    { fact: sumBy(facts, t => opFlow(t)==='obligation'),
+                 plan: sumBy(plans, t => opFlow(t)==='obligation'), good: 'down' },
     };
 
     function kpiCard(label, k, sign) {
@@ -7140,16 +7154,15 @@ async function loadOperations() {
     }
 
     // ── Precompute fact rows (this is a pure FACT feed — no plan rows) ─────────
-    const isDebtAcc = a => a === 'Обязательства' || a === 'Дебиторка';
     const rowsData = facts.map(t => {
-      let type = getFlowType(t.account_from, t.account_to);
+      let type = opFlow(t);
       let reserve = false;
       let debtDir = null;  // 'received' (+зелёный) | 'paid' (−янтарь)
-      // Долговые операции (Обязательства/Дебиторка) — направленные:
-      //   счёт-долг в «куда» → деньги уходят (оплатил/дал) → −;  в «откуда» → приходят (получил/занял) → +
-      if (type !== 'income' && type !== 'expense' && (isDebtAcc(t.account_from) || isDebtAcc(t.account_to))) {
+      // Долговые операции (вкл. кредиты) — направленные: долговой счёт-ИСТОЧНИК →
+      //   деньги приходят (заняли/вернули нам) → +;  иначе деньги уходят (тело/процент/выдал) → −
+      if (type === 'obligation') {
         type = 'debt';
-        debtDir = isDebtAcc(t.account_to) ? 'paid' : 'received';
+        debtDir = isDebtAcc(t.account_from) ? 'received' : 'paid';
       } else if (type === 'transfer' && reserveNames.has(t.account_to)) {
         reserve = true;
       }
