@@ -5194,15 +5194,6 @@ async function loadBudget() {
         + '</div>'
       + '</div>';
     }
-    function reserveRow(goal) {
-      const cur = +goal.current_balance || 0, target = +goal.target_amount || 0;
-      const pct = target > 0 ? Math.min(100, Math.round(cur / target * 100)) : 0;
-      return '<div class="bgt-eprow">'
-        + '<div class="bgt-rn">' + esc(goal.name) + '<span class="bgt-ch bgt-epis">резерв</span></div>'
-        + '<span class="bgt-resv">цель «' + esc(goal.name) + '»</span>'
-        + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:linear-gradient(90deg,#1FA497,#8FBE1E)"></i></div>'
-        + '<span class="bgt-amt2">' + f(cur) + ' / ' + f(target) + ' ₽</span></div>';
-    }
     function eventRow(p) {
       const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
       const nm = (p.note && p.note.trim()) || (p.categories && (p.categories.subcategory || p.categories.category)) || 'Событие';
@@ -5263,17 +5254,10 @@ async function loadBudget() {
       + '.bgt-frow{display:grid;grid-template-columns:1fr minmax(150px,auto) 120px minmax(130px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-flrow{display:grid;grid-template-columns:minmax(150px,1.2fr) 1fr 130px 120px 28px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-fc2{font-size:11px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}'
-      + '.bgt-eprow{display:grid;grid-template-columns:minmax(150px,1fr) auto 1fr 150px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-evrow{display:grid;grid-template-columns:1fr minmax(70px,auto) minmax(150px,auto) 110px minmax(110px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-rn{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
       + '.bgt-rsub{flex-basis:100%;font-size:11px;color:var(--text3);font-weight:400;margin-top:1px}'
-      + '.bgt-ch{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;white-space:nowrap}'
-      + '.bgt-inc{color:#4E7D14;background:rgba(180,222,60,.22)}'
-      + '.bgt-fix{color:#1D7E97;background:rgba(42,167,204,.14)}'
-      + '.bgt-flow{color:#167F73;background:rgba(31,164,151,.14)}'
-      + '.bgt-epis{color:#5E7A12;background:rgba(143,190,30,.22)}'
       + '.bgt-rule{font-size:11px;color:var(--text2);background:var(--bg);border:1px solid var(--border);padding:5px 10px;border-radius:7px;white-space:nowrap;font-variant-numeric:tabular-nums}'
-      + '.bgt-resv{font-size:11px;color:#167F73;background:rgba(31,164,151,.10);border:1px solid rgba(31,164,151,.18);padding:5px 10px;border-radius:7px;white-space:nowrap}'
       + '.bgt-cov{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap;justify-self:start}'
       + '.bgt-cov-ok{color:#167F73;background:rgba(31,164,151,.14)}'
       + '.bgt-cov-no{color:#9A6B12;background:rgba(231,178,62,.20)}'
@@ -5288,18 +5272,10 @@ async function loadBudget() {
       + '.bgt-sugg .sugg-amt{width:120px;text-align:right;padding:6px 8px}'
       + '.bgt-sugg-h{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}'
       + '@media(max-width:900px){.bgt-sugg{grid-template-columns:1fr auto;row-gap:8px}}'
-      + '.bgt-pe-wrap{display:flex;flex-wrap:wrap;gap:6px;padding:2px 18px 12px 18px;background:var(--bg3)}'
-      + '.bgt-pe-empty{font-size:11px;color:var(--text3);padding-top:8px}'
-      + '.bgt-pe{display:inline-flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:4px 8px}'
-      + '.bgt-pe-d{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums}'
-      + '.bgt-pe-a{font-size:12px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}'
-      + '.bgt-pe-btn{font-size:10.5px;border:none;background:none;color:var(--text3);cursor:pointer;padding:1px 3px;border-radius:5px}'
-      + '.bgt-pe-btn:hover{background:var(--bg);color:var(--text2)}'
-      + '.bgt-pe-del:hover{color:#bf7419}'
       + '.bgt-dots{font-size:18px;line-height:1;border:none;background:none;color:var(--text3);cursor:pointer;padding:2px 6px;border-radius:6px;justify-self:end}'
       + '.bgt-dots:hover{background:var(--bg);color:var(--text2)}'
       + '@media(max-width:1100px){.bgt-cards{grid-template-columns:1fr 1fr}}'
-      + '@media(max-width:900px){.bgt-frow,.bgt-flrow,.bgt-eprow,.bgt-evrow{grid-template-columns:1fr auto;row-gap:8px}}'
+      + '@media(max-width:900px){.bgt-frow,.bgt-flrow,.bgt-evrow{grid-template-columns:1fr auto;row-gap:8px}}'
       + '@media(max-width:560px){.bgt-cards{grid-template-columns:1fr}}'
       + '</style>'
       + '<div class="topbar"><div><div class="page-title">Бюджет</div>'
