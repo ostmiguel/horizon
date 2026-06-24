@@ -5177,7 +5177,7 @@ async function loadBudget() {
       const fcColor = over ? '#C0741A' : 'var(--text3)';
       const fc = '<span class="bgt-fc2" style="color:' + fcColor + ';font-weight:' + (over ? '600' : '400') + '">прогноз ' + f(e.forecast) + ' ₽</span>';
       return '<div class="bgt-flrow">'
-        + '<div class="bgt-rn">' + esc(e.name) + '<span class="bgt-ch bgt-flow">поток</span></div>'
+        + '<div class="bgt-rn">' + esc(e.name) + '</div>'
         + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barBg + '"></i></div>'
         + '<span class="bgt-amt2">' + f(e.fact) + ' / ' + f(e.budget) + ' ₽</span>' + fc
         + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();envMenu(this,' + i + ')">⋮</button></div>';
@@ -5185,7 +5185,7 @@ async function loadBudget() {
     function suggestionRow(s, i) {
       const hist = (s.history || []).map(f).join(' / ');
       return '<div class="bgt-sugg">'
-        + '<div class="bgt-rn">' + esc(s.category) + '<span class="bgt-ch bgt-flow">поток</span></div>'
+        + '<div class="bgt-rn">' + esc(s.category) + '</div>'
         + '<span class="bgt-sugg-h">' + s.months + ' мес: ' + hist + ' ₽</span>'
         + '<input class="sugg-amt field-input" type="number" min="0" data-cat="' + esc(s.category) + '" value="' + s.suggested + '">'
         + '<div style="display:flex;gap:6px;justify-content:flex-end">'
@@ -5209,7 +5209,7 @@ async function loadBudget() {
       const covered = reserveNames.has(p.account_from);
       const badge = covered ? '<span class="bgt-cov bgt-cov-ok">обеспечено резервом</span>' : '<span class="bgt-cov bgt-cov-no">нет резерва</span>';
       return '<div class="bgt-evrow">'
-        + '<div class="bgt-rn">' + esc(nm) + '<span class="bgt-ch bgt-epis">эпизод</span></div>'
+        + '<div class="bgt-rn">' + esc(nm) + '</div>'
         + '<span class="bgt-rule">' + d + '</span>' + badge
         + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
@@ -5233,10 +5233,10 @@ async function loadBudget() {
         + '<div style="font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">' + big + '</div>'
         + '<div style="font-size:11px;color:var(--text3);margin-top:4px">' + sub + '</div></div>';
     }
-    function bgtBlock(badgeCls, badgeTxt, title, sub, btnTxt, btnFn, rows) {
+    function bgtBlock(color, title, sub, btnTxt, btnFn, rows) {
       return '<div class="card" style="padding:0;margin-bottom:16px">'
         + '<div style="padding:14px 18px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-          + '<span class="bgt-ch ' + badgeCls + '">' + badgeTxt + '</span>'
+          + '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>'
           + '<span style="font-size:14px;font-weight:600;color:var(--text)">' + title + '</span>'
           + '<span style="font-size:11px;color:var(--text3)">' + sub + '</span>'
           + '<button class="qbtn qbtn-income" style="margin-left:auto" onclick="' + btnFn + '">' + btnTxt + '</button>'
@@ -5310,10 +5310,10 @@ async function loadBudget() {
         + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', 'прогноз ' + f(envForecastTotal) + ' ₽ · ' + envelopes.length + ' конвертов')
         + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' предстоящих')
       + '</div>'
-      + bgtBlock('bgt-inc', 'доход', 'Доходы', 'регулярные правила и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
-      + bgtBlock('bgt-fix', 'фикс', 'Фиксированные', 'правила и платежи по кредитам', '+ Правило', "openAddRule('fixed')", fixedBodyHtml)
-      + bgtBlock('bgt-flow', 'поток', 'Повседневные · конверты', 'месячный бюджет против трат', '+ Конверт', 'openAddEnvelope()', envRowsHtml)
-      + bgtBlock('bgt-epis', 'эпизод', 'Эпизодические · события', 'предстоящие разовые траты', '+ Событие', 'openEpisodicEvent()', eventRowsHtml);
+      + bgtBlock('#5E9B1E', 'Доходы', 'регулярные правила и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
+      + bgtBlock('#2AA7CC', 'Фиксированные', 'правила и платежи по кредитам', '+ Правило', "openAddRule('fixed')", fixedBodyHtml)
+      + bgtBlock('#1FA497', 'Повседневные · конверты', 'месячный бюджет против трат', '+ Конверт', 'openAddEnvelope()', envRowsHtml)
+      + bgtBlock('#8FBE1E', 'Эпизодические · события', 'предстоящие разовые траты', '+ Событие', 'openEpisodicEvent()', eventRowsHtml);
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
