@@ -124,20 +124,6 @@ body {
 .nav-item.active .nav-dot { background: linear-gradient(135deg, #2AA7CC, #B4DE3C); }
 .nav-divider { height: 1px; background: var(--border); margin: 8px 14px; }
 
-.sidebar-bottom {
-  padding: 14px 20px;
-  border-top: 1px solid var(--border);
-}
-.period-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
-.period-row { display: flex; gap: 6px; }
-.period-select {
-  flex: 1; background: var(--bg3); border: 1px solid var(--border);
-  color: var(--text2); border-radius: var(--radius-xs);
-  padding: 6px 8px; font-size: 11px; font-family: Inter, sans-serif;
-  cursor: pointer; appearance: none; text-align: center;
-}
-.period-select:focus { outline: none; border-color: var(--accent); }
-
 /* ── MAIN ── */
 .main { margin-left: 210px; padding: 24px; min-height: 100vh; }
 
@@ -985,18 +971,17 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <div class="nav-item" id="navLab" data-page="lab" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Лаборатория</div>
     <div class="nav-item" data-page="profile"><span class="nav-dot" aria-hidden="true"></span>Профиль</div>
   </div>
-  <div class="sidebar-bottom">
-    <div class="period-label">Период</div>
-    <div class="period-row">
-      <select class="period-select" id="selYear" onchange="onPeriodChange()"></select>
-      <select class="period-select" id="selMonth" onchange="onPeriodChange()">
-        <option value="0">Год</option>
-        <option value="1">Янв</option><option value="2">Фев</option><option value="3">Мар</option>
-        <option value="4">Апр</option><option value="5">Май</option><option value="6">Июн</option>
-        <option value="7">Июл</option><option value="8">Авг</option><option value="9">Сен</option>
-        <option value="10">Окт</option><option value="11">Ноя</option><option value="12">Дек</option>
-      </select>
-    </div>
+  <!-- Период выбирается единым пикером в шапке страниц (openPeriodPicker).
+       Состояние периода хранится в этих скрытых селекторах (их читает getPeriod). -->
+  <div style="display:none">
+    <select id="selYear" onchange="onPeriodChange()"></select>
+    <select id="selMonth" onchange="onPeriodChange()">
+      <option value="0">Год</option>
+      <option value="1">Янв</option><option value="2">Фев</option><option value="3">Мар</option>
+      <option value="4">Апр</option><option value="5">Май</option><option value="6">Июн</option>
+      <option value="7">Июл</option><option value="8">Авг</option><option value="9">Сен</option>
+      <option value="10">Окт</option><option value="11">Ноя</option><option value="12">Дек</option>
+    </select>
   </div>
 </nav>
 
@@ -1529,6 +1514,7 @@ async function loadDashboard() {
           <div class="page-sub">${periodLabel}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
+          ${periodBtnHtml()}
           ${window._isOwner ? '<button onclick="localStorage.setItem(\'hz_new_arch\',\'1\');window.NEW_ARCH=true;loadDashboardNew();" style="font-size:11px;color:var(--accent);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer">Новый вид →</button>' : ''}
           <button class="fab-add" onclick="openQuickModal('expense')" title="Добавить транзакцию" aria-label="Добавить транзакцию">+</button>
         </div>
@@ -5285,7 +5271,8 @@ async function loadBudget() {
       + '@media(max-width:560px){.bgt-cards{grid-template-columns:1fr}}'
       + '</style>'
       + '<div class="topbar"><div><div class="page-title">Бюджет</div>'
-        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div></div>'
+        + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div>'
+        + periodBtnHtml() + '</div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы', '+' + f(incomeTotal + incomeEventsTotal) + ' ₽', incomeRules.length + ' правил' + (incomeEvents.length ? ' · ' + incomeEvents.length + ' разовых' : ''))
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
@@ -5610,6 +5597,16 @@ function positionMenu(menu, btn) {
 // Пишет в глобальный селектор (selYear/selMonth, month=0 → весь год) и перезагружает
 // текущую страницу — поэтому готов к раскатке на все страницы, не только Операции.
 let _periodPickerOutside = null;
+// Кнопка-триггер пикера периода для шапок страниц (единый контрол вместо сайдбара).
+function periodBtnHtml() {
+  const p = getPeriod();
+  const label = p.month ? MONTHS[p.month] + ' ' + p.year : p.year + ' · весь год';
+  return '<button onclick="event.stopPropagation();openPeriodPicker(this)" '
+    + 'style="display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);'
+    + 'border-radius:var(--radius-sm);padding:7px 14px;box-shadow:var(--shadow);cursor:pointer;font:inherit;'
+    + 'font-size:13px;font-weight:500;color:var(--text);white-space:nowrap">'
+    + label + '<span style="color:var(--accent);font-size:11px">▾</span></button>';
+}
 function closePeriodPicker() {
   const p = document.getElementById('periodPicker');
   if (p) p.remove();
@@ -6794,6 +6791,7 @@ async function loadLab() {
       <div class="page-title">Лаборатория</div>
       <div class="page-sub">Экспериментальная аналитика · только для тебя</div>
     </div>
+    ${periodBtnHtml()}
   </div>
 
     ${(()=>{
