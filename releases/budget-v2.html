@@ -375,6 +375,12 @@ body {
 .bgt-menu-item { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--text); padding: 8px 10px; border-radius: 7px; }
 .bgt-menu-item:hover { background: var(--bg); }
 .bgt-menu-item.danger { color: #bf7419; }
+.pp-nav { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 18px; padding: 2px 9px; border-radius: 6px; line-height: 1; }
+.pp-nav:hover { background: var(--bg); color: var(--text); }
+.pp-month { padding: 9px 0; border-radius: 8px; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; background: transparent; color: var(--text); }
+.pp-month:hover { background: var(--bg); }
+.pp-month.active { background: var(--accent); color: #fff; }
+.pp-month.active:hover { background: var(--accent); }
 .add-row-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; font-size: 11.5px; color: var(--accent);
@@ -5599,6 +5605,83 @@ function positionMenu(menu, btn) {
   menu.style.left = Math.round(left) + 'px';
   menu.style.visibility = 'visible';
 }
+
+// ── Единый выбор периода (попап: листание годов · «весь год» · сетка месяцев) ──
+// Пишет в глобальный селектор (selYear/selMonth, month=0 → весь год) и перезагружает
+// текущую страницу — поэтому готов к раскатке на все страницы, не только Операции.
+let _periodPickerOutside = null;
+function closePeriodPicker() {
+  const p = document.getElementById('periodPicker');
+  if (p) p.remove();
+  if (_periodPickerOutside) { document.removeEventListener('click', _periodPickerOutside, true); _periodPickerOutside = null; }
+}
+function openPeriodPicker(btn) {
+  if (document.getElementById('periodPicker')) { closePeriodPicker(); return; }
+  const cur = getPeriod();          // {year, month}; month=0 → весь год
+  let viewYear = cur.year;
+  const pop = document.createElement('div');
+  pop.id = 'periodPicker';
+  pop.style.cssText = 'position:fixed;z-index:300;background:var(--bg2);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow2);padding:12px;width:264px;visibility:hidden';
+
+  const commit = (month) => {
+    const sy = document.getElementById('selYear'), sm = document.getElementById('selMonth');
+    if (sy && ![...sy.options].some(o => +o.value === viewYear)) {
+      const opt = document.createElement('option'); opt.value = viewYear; opt.textContent = viewYear; sy.appendChild(opt);
+    }
+    if (sy) sy.value = viewYear;
+    if (sm) sm.value = month;
+    closePeriodPicker();
+    onPeriodChange();
+  };
+
+  const render = () => {
+    pop.innerHTML = '';
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px';
+    const prevY = document.createElement('button');
+    prevY.textContent = '‹'; prevY.className = 'pp-nav';
+    prevY.onclick = e => { e.stopPropagation(); viewYear--; render(); };
+    const nextY = document.createElement('button');
+    nextY.textContent = '›'; nextY.className = 'pp-nav';
+    nextY.onclick = e => { e.stopPropagation(); viewYear++; render(); };
+    const yw = document.createElement('div');
+    yw.style.cssText = 'display:flex;flex-direction:column;align-items:center;line-height:1.2';
+    const yl = document.createElement('div');
+    yl.style.cssText = 'font-size:15px;font-weight:700;color:var(--text)';
+    yl.textContent = viewYear;
+    const ay = document.createElement('button');
+    ay.textContent = 'весь год';
+    const allActive = cur.month === 0 && cur.year === viewYear;
+    ay.style.cssText = 'background:none;border:none;cursor:pointer;font:inherit;font-size:11px;padding:1px 0 0;color:' + (allActive ? 'var(--accent)' : 'var(--text3)') + ';font-weight:' + (allActive ? '600' : '400');
+    ay.onclick = e => { e.stopPropagation(); commit(0); };
+    yw.appendChild(yl); yw.appendChild(ay);
+    head.appendChild(prevY); head.appendChild(yw); head.appendChild(nextY);
+    pop.appendChild(head);
+
+    const hr = document.createElement('div');
+    hr.style.cssText = 'height:1px;background:var(--border);margin:10px 0';
+    pop.appendChild(hr);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:6px';
+    for (let m = 1; m <= 12; m++) {
+      const b = document.createElement('button');
+      b.textContent = MONTHS_S[m];
+      b.className = 'pp-month' + (cur.month === m && cur.year === viewYear ? ' active' : '');
+      b.onclick = e => { e.stopPropagation(); commit(m); };
+      grid.appendChild(b);
+    }
+    pop.appendChild(grid);
+  };
+  render();
+  document.body.appendChild(pop);
+  positionMenu(pop, btn);
+  setTimeout(() => {
+    _periodPickerOutside = e => { if (!pop.contains(e.target) && e.target !== btn) closePeriodPicker(); };
+    document.addEventListener('click', _periodPickerOutside, true);
+  }, 0);
+}
+
 function ruleMenu(btn, id) {
   bgtMenu(btn, [
     { label: 'Редактировать', fn: () => openEditRule(id) },
@@ -6999,10 +7082,11 @@ let _opsData = null;
 const MONTHS_GEN = ['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const OPS_CHAR_LABEL = { fixed: 'Фиксированные', variable: 'Повседневные', episodic: 'Эпизодические' };
 
-async function loadOperations(yr, mo) {
+async function loadOperations() {
   const now = new Date();
-  if (yr == null) yr = _opsYear ?? now.getFullYear();
-  if (mo == null) mo = _opsMonth ?? (now.getMonth() + 1);
+  // Единый источник периода — глобальный селектор (getPeriod). month===0 → весь год.
+  const p = getPeriod();
+  const yr = p.year, mo = p.month;
   _opsYear = yr; _opsMonth = mo;
 
   const main = document.getElementById('mainContent');
@@ -7012,10 +7096,10 @@ async function loadOperations(yr, mo) {
     const todayStr = now.toISOString().split('T')[0];
     const f = n => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
 
-    const [factRes, planRes] = await Promise.all([
-      sb.from('transactions').select('*').eq('year', yr).eq('month', mo),
-      sb.from('plan').select('*').eq('year', yr).eq('month', mo),
-    ]);
+    let factQ = sb.from('transactions').select('*').eq('year', yr);
+    let planQ = sb.from('plan').select('*').eq('year', yr);
+    if (mo) { factQ = factQ.eq('month', mo); planQ = planQ.eq('month', mo); }  // mo=0 → весь год
+    const [factRes, planRes] = await Promise.all([factQ, planQ]);
 
     const facts = factRes.data || [];
     const plans = planRes.data || [];
@@ -7113,22 +7197,18 @@ async function loadOperations(yr, mo) {
 
     const selStyle = 'padding:7px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12.5px;background:var(--bg2);color:var(--text2);box-shadow:var(--shadow);cursor:pointer';
 
-    const prevY = mo===1?yr-1:yr, prevM = mo===1?12:mo-1;
-    const nextY = mo===12?yr+1:yr, nextM = mo===12?1:mo+1;
-
     main.innerHTML = `
       <div style="padding:0 0 48px" onclick="opsCloseMenu()">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
           <div>
             <div class="page-title">Операции</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:2px">лента фактических операций за месяц</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">лента фактических операций ${mo ? 'за месяц' : 'за год'}</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 12px;box-shadow:var(--shadow)">
-              <button onclick="loadOperations(${prevY},${prevM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:16px;padding:0;line-height:1">‹</button>
-              <span style="font-size:13px;font-weight:500;color:var(--text);min-width:90px;text-align:center">${MONTHS[mo]} ${yr}</span>
-              <button onclick="loadOperations(${nextY},${nextM})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:16px;padding:0;line-height:1">›</button>
-            </div>
+            <button onclick="event.stopPropagation();openPeriodPicker(this)" style="display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 14px;box-shadow:var(--shadow);cursor:pointer;font:inherit;font-size:13px;font-weight:500;color:var(--text)">
+              ${mo ? MONTHS[mo] + ' ' + yr : yr + ' · весь год'}
+              <span style="color:var(--accent);font-size:11px">▾</span>
+            </button>
             <button class="btn-primary" onclick="openOpsModal()">+ Добавить</button>
           </div>
         </div>
