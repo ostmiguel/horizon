@@ -116,6 +116,48 @@ async def update_plan_rule(rule_id: int, data: PlanRuleUpdate, request: Request,
     return dict(row)
 
 
+class RuleMonthOverride(BaseModel):
+    year: int
+    month: int
+    amount: float
+    account_from: str
+    account_to: str
+    category_id: Optional[int] = None
+    note: Optional[str] = None
+    day_of_month: Optional[int] = None
+
+
+@router.post("/{rule_id}/set-month")
+async def set_rule_month(rule_id: int, data: RuleMonthOverride, request: Request):
+    """«Изменить только этот месяц»: создаёт/заменяет закреплённую (pinned) плановую
+    строку правила на (год, месяц). Работает и для будущих месяцев, где правило ещё
+    не материализовано. pinned → перештамповка эту строку не трогает."""
+    from calendar import monthrange
+    user_id = request.state.user_id
+    db = request.state.db
+    rule = await db.fetchrow("SELECT id FROM plan_rules WHERE id=$1 AND user_id=$2", rule_id, user_id)
+    if not rule:
+        raise HTTPException(404, "Rule not found")
+    dim = monthrange(data.year, data.month)[1]
+    day = max(1, min(int(data.day_of_month) if data.day_of_month else 1, dim))
+    d = date(data.year, data.month, day)
+    async with db.transaction():
+        await db.execute("""
+            DELETE FROM plan WHERE user_id=$1 AND source_rule_id=$2
+              AND EXTRACT(YEAR FROM date)=$3 AND EXTRACT(MONTH FROM date)=$4
+        """, user_id, rule_id, data.year, data.month)
+        await db.execute("""
+            DELETE FROM plan_rule_skips WHERE user_id=$1 AND rule_id=$2 AND year=$3 AND month=$4
+        """, user_id, rule_id, data.year, data.month)
+        row = await db.fetchrow("""
+            INSERT INTO plan
+              (user_id, date, amount, account_from, account_to, category_id, note, source, source_rule_id, pinned)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,'plan_rule',$8,true) RETURNING *
+        """, user_id, d, data.amount, data.account_from, data.account_to,
+            data.category_id, data.note, rule_id)
+    return dict(row)
+
+
 @router.post("/{rule_id}/skip-month")
 async def skip_rule_month(rule_id: int, request: Request,
                           year: int = Query(...), month: int = Query(...)):

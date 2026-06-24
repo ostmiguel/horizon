@@ -5499,31 +5499,19 @@ async function updateRule(id, btn) {
     return;
   }
 
-  // Только текущий месяц: правим материализованную строку и помечаем её pinned —
-  // тогда перештамповка правил её не затрёт.
-  const entries = (window._bgtPlanByRule || {})[id] || [];
-  if (!entries.length) {
-    toast('В этом месяце нет плановой строки. Включи «Изменить все будущие».', false);
-    btn.disabled = false; return;
-  }
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const day = Math.max(1, Math.min(domV ? +domV : new Date(entries[0].date).getDate() || 1, daysInMonth));
-  const dateStr = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-  let ok = true;
-  for (const e of entries) {
-    const res = await fetch(`${API_BASE}/api/transactions/${e.id}?plan=true`, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: dateStr, amount: amt,
-        account_from: from, account_to: to,
-        category_id: catV ? +catV : null,
-        note: name, pinned: true,
-      }),
-    });
-    if (!res.ok) ok = false;
-  }
-  if (!ok) { toast('Ошибка сохранения строки месяца', false); btn.disabled = false; return; }
+  // Только этот месяц: создаём/заменяем закреплённую (pinned) строку правила.
+  // Работает и для будущих месяцев, где правило ещё не материализовано.
+  const res = await fetch(`${API_BASE}/api/plan-rules/${id}/set-month`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      year, month, amount: amt,
+      account_from: from, account_to: to,
+      category_id: catV ? +catV : null,
+      note: name, day_of_month: domV ? +domV : null,
+    }),
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
   btn.closest('.modal-overlay').remove();
   toast('✓ Изменено только в этом месяце');
   loadBudget();
