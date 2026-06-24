@@ -5297,30 +5297,46 @@ async function loadBudget() {
 }
 
 function ruleFormHtml(r, kind) {
-  const accs     = (accounts_cache || []);
-  const allNames = ['Доход', 'Расход', 'Обязательства', ...accs.map(a => a.name)];
-  const firstAsset = (accs.find(a => a.account_type === 'Актив') || {}).name || '';
-  const defFrom = r ? r.account_from : (kind === 'income' ? 'Доход' : firstAsset);
-  const defTo   = r ? r.account_to   : (kind === 'income' ? firstAsset : 'Расход');
-  function accOpts(sel) {
-    return allNames.map(n =>
-      '<option value="' + esc(n) + '"' + (n === sel ? ' selected' : '') + '>' + esc(n) + '</option>'
-    ).join('');
-  }
+  const accs       = (accounts_cache || []);
+  const assetNames = accs.filter(a => a.account_type === 'Актив').map(a => a.name);
+  const firstAsset = assetNames[0] || '';
+  const assetOpts  = sel => assetNames.map(n =>
+    '<option value="' + esc(n) + '"' + (n === sel ? ' selected' : '') + '>' + esc(n) + '</option>'
+  ).join('');
+
+  // Категории строго по направлению: доход → доходные, расход → расходные.
   const catOpts = (cats || [])
+    .filter(c => kind === 'income' ? c.group_name === 'Доходы' : c.group_name !== 'Доходы')
     .map(c => '<option value="' + c.id + '"' + (r && r.category_id === c.id ? ' selected' : '') + '>'
       + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>')
     .join('');
+
+  // Откуда/Куда зависят от направления — лишние варианты не показываем:
+  //  доход:  Откуда = «Доход» (фикс.), Куда = счёт-актив (зачисление)
+  //  расход: Откуда = счёт-актив (списание), Куда = «Расход»/«Обязательства»
+  const defFrom = r ? r.account_from : (kind === 'income' ? 'Доход' : firstAsset);
+  const defTo   = r ? r.account_to   : (kind === 'income' ? firstAsset : 'Расход');
+  let fromToHtml;
+  if (kind === 'income') {
+    fromToHtml = '<input type="hidden" id="ruleFrom" value="Доход"/>'
+      + '<div class="field"><div class="field-label">Счёт зачисления</div>'
+        + '<select class="field-select" id="ruleTo">' + assetOpts(defTo) + '</select></div>';
+  } else {
+    const toOpts = ['Расход', 'Обязательства'].map(n =>
+      '<option value="' + n + '"' + (n === defTo ? ' selected' : '') + '>' + n + '</option>').join('');
+    fromToHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      + '<div class="field"><div class="field-label">Счёт списания</div>'
+        + '<select class="field-select" id="ruleFrom">' + assetOpts(defFrom) + '</select></div>'
+      + '<div class="field"><div class="field-label">Куда</div>'
+        + '<select class="field-select" id="ruleTo">' + toOpts + '</select></div>'
+    + '</div>';
+  }
+
   return '<div class="field"><div class="field-label">Название</div>'
       + '<input class="field-input" id="ruleN" placeholder="Аренда квартиры" value="' + (r ? esc(r.name) : '') + '"/></div>'
     + '<div class="field"><div class="field-label">Сумма, ₽</div>'
       + '<input class="field-input" type="number" id="ruleAmt" min="0" value="' + (r ? +r.amount : '') + '" placeholder="30000"/></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-      + '<div class="field"><div class="field-label">Откуда</div>'
-        + '<select class="field-select" id="ruleFrom">' + accOpts(defFrom) + '</select></div>'
-      + '<div class="field"><div class="field-label">Куда</div>'
-        + '<select class="field-select" id="ruleTo">' + accOpts(defTo) + '</select></div>'
-    + '</div>'
+    + fromToHtml
     + '<div class="field"><div class="field-label">День месяца (1–31, необязательно)</div>'
       + '<input class="field-input" type="number" id="ruleDom" min="1" max="31" placeholder="—"'
       + ' value="' + (r?.day_of_month || '') + '"/></div>'
@@ -5735,7 +5751,10 @@ async function saveReserveGoal(btn) {
 
 // Поля модалки события — общие для создания и редактирования (p = существующая строка или null).
 function _eventModalFields(p) {
-  const subs = (cats || []).filter(c => c.character === 'Эпизодический').sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
+  // Блок «Эпизодические» — только разовые РАСХОДЫ (доход вносится в «Доходах»):
+  // эпизодические категории, кроме доходных.
+  const subs = (cats || []).filter(c => c.character === 'Эпизодический' && c.group_name !== 'Доходы')
+    .sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
   const catOpts = '<option value="">— выбери —</option>'
     + subs.map(c => '<option value="' + c.id + '"' + (p && +p.category_id === c.id ? ' selected' : '') + '>'
         + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>').join('');
