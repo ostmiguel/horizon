@@ -7097,10 +7097,17 @@ async function loadOperations() {
     let factQ = sb.from('transactions').select('*').eq('year', yr);
     let planQ = sb.from('plan').select('*').eq('year', yr);
     if (mo) { factQ = factQ.eq('month', mo); planQ = planQ.eq('month', mo); }  // mo=0 → весь год
-    const [factRes, planRes] = await Promise.all([factQ, planQ]);
+    // Бюджеты конвертов (повседневные) — их нет в таблице plan, тянем отдельно,
+    // чтобы план расходов отражал и грядущую повседневную часть.
+    const budUrl = `${API_BASE}/api/category-budgets?year=${yr}` + (mo ? `&month=${mo}` : '');
+    const [factRes, planRes, budRes] = await Promise.all([
+      factQ, planQ,
+      fetch(budUrl, { credentials: 'include' }).then(r => r.json()).catch(() => []),
+    ]);
 
     const facts = factRes.data || [];
     const plans = planRes.data || [];
+    const envBudget = (Array.isArray(budRes) ? budRes : []).reduce((s, b) => s + (+b.budget || 0), 0);
 
     // category lookup (transactions are fetched without join)
     const catById = {};
@@ -7129,7 +7136,7 @@ async function loadOperations() {
       income:  { fact: sumBy(facts, t => opFlow(t)==='income'),
                  plan: sumBy(plans, t => opFlow(t)==='income'), good: 'up' },
       expense: { fact: sumBy(facts, t => opFlow(t)==='expense'),
-                 plan: sumBy(plans, t => opFlow(t)==='expense'), good: 'down' },
+                 plan: sumBy(plans, t => opFlow(t)==='expense') + envBudget, good: 'down' },
       savings: { fact: sumBy(facts, isSavings),
                  plan: sumBy(plans, isSavings), good: 'up' },
       debt:    { fact: sumBy(facts, t => opFlow(t)==='obligation'),
