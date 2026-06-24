@@ -5124,9 +5124,17 @@ async function loadBudget() {
     // В прошлых месяцах оставляем прежнее поведение (только ещё не наступившие — т.е. пусто).
     const episShowAll = (year > now.getFullYear()) || (year === now.getFullYear() && month >= now.getMonth() + 1);
     const episEvents = planRows
-      .filter(p => p.categories && p.categories.character === 'Эпизодический' && (episShowAll || (p.date || '') >= todayStr))
+      .filter(p => p.categories && p.categories.character === 'Эпизодический'
+        && p.account_from !== 'Доход'   // эпизодический доход — в блоке «Доходы», не здесь
+        && (episShowAll || (p.date || '') >= todayStr))
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
+
+    // Разовый (эпизодический) доход — плановые строки дохода НЕ из правила.
+    const incomeEvents = planRows
+      .filter(p => p.account_from === 'Доход' && !p.source_rule_id)
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const incomeEventsTotal = incomeEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
@@ -5205,6 +5213,17 @@ async function loadBudget() {
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();eventMenu(this,' + p.id + ')">⋮</button>'
         + '</div></div>';
     }
+    function incomeEventRow(p) {
+      const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
+      const nm = (p.note && p.note.trim()) || (p.categories && (p.categories.subcategory || p.categories.category)) || 'Разовый доход';
+      return '<div class="bgt-frow">'
+        + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">разовый · ' + d + '</div></div>'
+        + '<span class="bgt-rule">разовый</span>'
+        + '<span class="bgt-amt" style="color:#5E9B1E">+' + f(p.amount) + ' ₽</span>'
+        + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();incomeEventMenu(this,' + p.id + ')">⋮</button>'
+        + '</div></div>';
+    }
     function bgtCard(color, title, big, sub) {
       return '<div class="card" style="padding:16px 18px">'
         + '<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block"></span>' + title + '</div>'
@@ -5221,7 +5240,9 @@ async function loadBudget() {
         + '</div>' + rows + '</div>';
     }
 
-    const incomeRowsHtml  = incomeRules.length ? incomeRules.map(r => ruleRow(r, '+')).join('') : emptyMsg('Нет правил дохода — «+ Доход».');
+    const incomeRowsHtml  = (incomeRules.length || incomeEvents.length)
+      ? (incomeRules.map(r => ruleRow(r, '+')).join('') + incomeEvents.map(incomeEventRow).join(''))
+      : emptyMsg('Нет дохода — «+ Доход».');
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
     const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет правил — «+ Правило».'))) + loanRowsHtml;
     const suggBlock = suggestions.length
@@ -5281,12 +5302,12 @@ async function loadBudget() {
       + '<div class="topbar"><div><div class="page-title">Бюджет</div>'
         + '<div class="page-sub">Доходы, расходы, конверты и события · ' + periodLabel + '</div></div></div>'
       + '<div class="bgt-cards">'
-        + bgtCard('#5E9B1E', 'Доходы · правила', '+' + f(incomeTotal) + ' ₽/мес', incomeRules.length + ' правил')
+        + bgtCard('#5E9B1E', 'Доходы', '+' + f(incomeTotal + incomeEventsTotal) + ' ₽', incomeRules.length + ' правил' + (incomeEvents.length ? ' · ' + incomeEvents.length + ' разовых' : ''))
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
         + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', 'прогноз ' + f(envForecastTotal) + ' ₽ · ' + envelopes.length + ' конвертов')
         + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' предстоящих')
       + '</div>'
-      + bgtBlock('bgt-inc', 'доход', 'Доходы · правила', 'регулярные поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
+      + bgtBlock('bgt-inc', 'доход', 'Доходы', 'регулярные правила и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
       + bgtBlock('bgt-fix', 'фикс', 'Фиксированные', 'правила и платежи по кредитам', '+ Правило', "openAddRule('fixed')", fixedBodyHtml)
       + bgtBlock('bgt-flow', 'поток', 'Повседневные · конверты', 'месячный бюджет против трат', '+ Конверт', 'openAddEnvelope()', envRowsHtml)
       + bgtBlock('bgt-epis', 'эпизод', 'Эпизодические · события', 'предстоящие разовые траты', '+ Событие', 'openEpisodicEvent()', eventRowsHtml);
@@ -5296,7 +5317,7 @@ async function loadBudget() {
   }
 }
 
-function ruleFormHtml(r, kind) {
+function ruleFormHtml(r, kind, opts) {
   const accs       = (accounts_cache || []);
   const assetNames = accs.filter(a => a.account_type === 'Актив').map(a => a.name);
   const firstAsset = assetNames[0] || '';
@@ -5342,7 +5363,7 @@ function ruleFormHtml(r, kind) {
       + ' value="' + (r?.day_of_month || '') + '"/></div>'
     + '<div class="field"><div class="field-label">Категория (необязательно)</div>'
       + '<select class="field-select" id="ruleCat"><option value="">— не выбрана —</option>' + catOpts + '</select></div>'
-    + (r
+    + ((r && !(opts && opts.noToggle))
         ? '<div class="field" style="display:flex;align-items:flex-start;gap:10px">'
           + '<label class="toggle" style="margin-top:2px"><input type="checkbox" id="ruleAllFuture"/><span class="toggle-slider"></span></label>'
           + '<span><span style="font-weight:600">Изменить все будущие</span>'
@@ -5394,6 +5415,18 @@ async function saveRule(btn) {
   const catV  = document.getElementById('ruleCat')?.value;
   if (!name || amt <= 0 || !from || !to) { toast('Заполни название, сумму и счета', false); return; }
   btn.disabled = true;
+
+  // Эпизодический доход → разовая запись текущего месяца (не правило):
+  // характер кодирует периодичность (Фиксированный доход = правило, остальные = разовые).
+  const selCat = (cats || []).find(c => c.id === +catV);
+  if (from === 'Доход' && selCat && selCat.character === 'Эпизодический') {
+    if (!await _saveOneOffIncome(null, { name, amt, to, catId: +catV, domV })) { btn.disabled = false; return; }
+    btn.closest('.modal-overlay').remove();
+    toast('✓ Разовый доход добавлен');
+    loadBudget();
+    return;
+  }
+
   const res = await fetch(`${API_BASE}/api/plan-rules`, {
     method: 'POST', credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -5409,6 +5442,27 @@ async function saveRule(btn) {
   btn.closest('.modal-overlay').remove();
   toast('✓ Правило добавлено');
   loadBudget();
+}
+
+// Создать/обновить разовый доход (плановая транзакция дохода текущего месяца).
+// id=null → POST (создание), иначе PATCH. Возвращает true при успехе.
+async function _saveOneOffIncome(id, { name, amt, to, catId, domV }) {
+  const { year, month } = window._bgtPeriod || {};
+  const now = new Date();
+  const isCur = year === now.getFullYear() && month === (now.getMonth() + 1);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const day = domV ? Math.max(1, Math.min(+domV, daysInMonth)) : (isCur ? now.getDate() : 1);
+  const date = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  const body = { date, amount: amt, account_from: 'Доход', account_to: to, category_id: catId, note: name };
+  if (!id) body.source = 'manual';
+  const url = id ? `${API_BASE}/api/transactions/${id}?plan=true` : `${API_BASE}/api/transactions?plan=true`;
+  const res = await fetch(url, {
+    method: id ? 'PATCH' : 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return false; }
+  return true;
 }
 
 async function updateRule(id, btn) {
@@ -5583,6 +5637,46 @@ function eventMenu(btn, id) {
     { label: 'Редактировать', fn: () => openEditEvent(id) },
     { label: 'Удалить', danger: true, fn: () => deletePlanEntry(id) },
   ]);
+}
+function incomeEventMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => openEditIncomeEvent(id) },
+    { label: 'Удалить', danger: true, fn: () => deletePlanEntry(id) },
+  ]);
+}
+// Редактирование разового дохода — модалка дохода (без тоггла «все будущие»).
+async function openEditIncomeEvent(id) {
+  const res = await fetch(`${API_BASE}/api/transactions/${id}?plan=true`, { credentials: 'include' });
+  if (!res.ok) { toast('Ошибка загрузки', false); return; }
+  const p = await res.json();
+  const day = p.date ? new Date(p.date).getDate() : '';
+  const rView = {
+    name: p.note || '', amount: +p.amount || 0,
+    account_from: 'Доход', account_to: p.account_to,
+    category_id: p.category_id, day_of_month: day,
+  };
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.innerHTML = '<div class="modal"><div class="modal-title">Редактировать разовый доход</div>'
+    + ruleFormHtml(rView, 'income', { noToggle: true })
+    + '<div class="modal-btns">'
+      + '<button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
+      + '<button class="btn-primary" onclick="updateIncomeEvent(' + id + ',this)">Сохранить</button>'
+    + '</div></div>';
+  document.body.appendChild(mo);
+}
+async function updateIncomeEvent(id, btn) {
+  const name = document.getElementById('ruleN')?.value.trim();
+  const amt  = parseFloat(document.getElementById('ruleAmt')?.value) || 0;
+  const to   = document.getElementById('ruleTo')?.value;
+  const domV = document.getElementById('ruleDom')?.value;
+  const catV = document.getElementById('ruleCat')?.value;
+  if (!name || amt <= 0 || !to) { toast('Заполни название, сумму и счёт', false); return; }
+  btn.disabled = true;
+  if (!await _saveOneOffIncome(id, { name, amt, to, catId: catV ? +catV : null, domV })) { btn.disabled = false; return; }
+  btn.closest('.modal-overlay').remove();
+  toast('✓ Разовый доход сохранён');
+  loadBudget();
 }
 function envMenu(btn, i) {
   bgtMenu(btn, [
