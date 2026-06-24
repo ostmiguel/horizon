@@ -5476,9 +5476,12 @@ async function updateRule(id, btn) {
   if (!name || amt <= 0 || !from || !to) { toast('Заполни название, сумму и счета', false); return; }
   btn.disabled = true;
 
+  const { year, month } = window._bgtPeriod || {};
+
   if (allFuture) {
-    // Правка самого правила — затрагивает текущий и будущие месяцы (бэк ре-материализует).
-    const res = await fetch(`${API_BASE}/api/plan-rules/${id}`, {
+    // Правка самого правила. clear_from снимает ручные правки/пропуски этого правила
+    // с текущего месяца и далее — чтобы новое значение применилось «на всё вперёд».
+    const res = await fetch(`${API_BASE}/api/plan-rules/${id}?clear_from_year=${year}&clear_from_month=${month}`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -5496,14 +5499,13 @@ async function updateRule(id, btn) {
     return;
   }
 
-  // Только текущий месяц: правим материализованные плановые строки этого месяца,
-  // само правило не трогаем (будущие месяцы сохраняют прежние значения).
+  // Только текущий месяц: правим материализованную строку и помечаем её pinned —
+  // тогда перештамповка правил её не затрёт.
   const entries = (window._bgtPlanByRule || {})[id] || [];
   if (!entries.length) {
     toast('В этом месяце нет плановой строки. Включи «Изменить все будущие».', false);
     btn.disabled = false; return;
   }
-  const { year, month } = window._bgtPeriod || {};
   const daysInMonth = new Date(year, month, 0).getDate();
   const day = Math.max(1, Math.min(domV ? +domV : new Date(entries[0].date).getDate() || 1, daysInMonth));
   const dateStr = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
@@ -5516,7 +5518,7 @@ async function updateRule(id, btn) {
         date: dateStr, amount: amt,
         account_from: from, account_to: to,
         category_id: catV ? +catV : null,
-        note: name,
+        note: name, pinned: true,
       }),
     });
     if (!res.ok) ok = false;
@@ -5528,10 +5530,22 @@ async function updateRule(id, btn) {
 }
 
 async function deleteRule(id) {
-  if (!confirm('Удалить правило?')) return;
+  if (!confirm('Удалить правило целиком (текущий и все будущие месяцы)?')) return;
   const res = await fetch(`${API_BASE}/api/plan-rules/${id}`, { method: 'DELETE', credentials: 'include' });
   if (!res.ok) { toast('Ошибка удаления', false); return; }
   toast('Правило удалено');
+  loadBudget();
+}
+
+// «Удалить только этот месяц» — пропуск (rule×месяц): правило и другие месяцы целы.
+async function deleteRuleThisMonth(id) {
+  const { year, month } = window._bgtPeriod || {};
+  if (!confirm('Убрать это правило только в текущем месяце?')) return;
+  const res = await fetch(`${API_BASE}/api/plan-rules/${id}/skip-month?year=${year}&month=${month}`, {
+    method: 'POST', credentials: 'include',
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
+  toast('✓ Убрано в этом месяце');
   loadBudget();
 }
 
@@ -5623,7 +5637,8 @@ function positionMenu(menu, btn) {
 function ruleMenu(btn, id) {
   bgtMenu(btn, [
     { label: 'Редактировать', fn: () => openEditRule(id) },
-    { label: 'Удалить', danger: true, fn: () => deleteRule(id) },
+    { label: 'Удалить в этом месяце', fn: () => deleteRuleThisMonth(id) },
+    { label: 'Удалить все будущие', danger: true, fn: () => deleteRule(id) },
   ]);
 }
 function planMenu(btn, id) {

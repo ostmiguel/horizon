@@ -68,6 +68,7 @@ class TxUpdate(BaseModel):
     account_to: Optional[str] = None
     category_id: Optional[int] = None
     note: Optional[str] = None
+    pinned: Optional[bool] = None
 
 @router.get("/{tx_id}")
 async def get_transaction(tx_id: int, request: Request, plan: bool = False):

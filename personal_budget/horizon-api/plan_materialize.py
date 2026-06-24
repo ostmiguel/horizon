@@ -27,16 +27,33 @@ async def materialize_rules(db, user_id, year: int, month: int) -> int:
     """, user_id)
 
     async with db.transaction():
-        # снести прежнюю материализацию правил за этот месяц (incl. инактив/удалённые)
+        # снести прежнюю материализацию правил за месяц, КРОМЕ pinned (ручные правки
+        # «только этот месяц» сохраняем — иначе они слетали бы при перештамповке).
         await db.execute("""
             DELETE FROM plan
             WHERE user_id=$1 AND source_rule_id IS NOT NULL
               AND EXTRACT(YEAR  FROM date)=$2
               AND EXTRACT(MONTH FROM date)=$3
+              AND pinned = false
         """, user_id, year, month)
+
+        # правила, которые НЕ материализуем в этом месяце:
+        #  • есть pinned-строка (ручная правка) — оставляем её, новую не создаём;
+        #  • есть запись в plan_rule_skips — «удалено только в этом месяце».
+        pinned_ids = {row["source_rule_id"] for row in await db.fetch("""
+            SELECT DISTINCT source_rule_id FROM plan
+            WHERE user_id=$1 AND source_rule_id IS NOT NULL
+              AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+              AND pinned = true
+        """, user_id, year, month)}
+        skip_ids = {row["rule_id"] for row in await db.fetch("""
+            SELECT rule_id FROM plan_rule_skips WHERE user_id=$1 AND year=$2 AND month=$3
+        """, user_id, year, month)}
 
         created = 0
         for r in rules:
+            if r["id"] in pinned_ids or r["id"] in skip_ids:
+                continue
             dom = int(r["day_of_month"]) if r["day_of_month"] else 1
             day = max(1, min(dom, days_in_month))   # клампим (напр. 31 в феврале → 28/29)
             d = date(year, month, day)

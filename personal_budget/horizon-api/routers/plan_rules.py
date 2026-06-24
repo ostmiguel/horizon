@@ -1,3 +1,4 @@
+from datetime import date
 from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -78,7 +79,12 @@ async def create_plan_rule(data: PlanRuleCreate, request: Request):
 
 
 @router.patch("/{rule_id}")
-async def update_plan_rule(rule_id: int, data: PlanRuleUpdate, request: Request):
+async def update_plan_rule(rule_id: int, data: PlanRuleUpdate, request: Request,
+                           clear_from_year: int = Query(None),
+                           clear_from_month: int = Query(None)):
+    """Правка правила. Если переданы clear_from_year/month (правка «все будущие»),
+    снимаем ручные правки/пропуски этого правила начиная с указанного месяца —
+    чтобы новое значение применилось к текущему и будущим месяцам."""
     user_id = request.state.user_id
     db = request.state.db
     updates = data.dict(exclude_none=True)
@@ -91,8 +97,46 @@ async def update_plan_rule(rule_id: int, data: PlanRuleUpdate, request: Request)
     )
     if not row:
         raise HTTPException(404, "Rule not found")
+
+    if clear_from_year and clear_from_month:
+        start = date(clear_from_year, clear_from_month, 1)
+        # снять ручные правки (pinned) этого правила с указанного месяца и далее
+        await db.execute("""
+            DELETE FROM plan
+            WHERE user_id=$1 AND source_rule_id=$2 AND pinned=true AND date >= $3
+        """, user_id, rule_id, start)
+        # снять «удалено в этом месяце» с указанного месяца и далее
+        await db.execute("""
+            DELETE FROM plan_rule_skips
+            WHERE user_id=$1 AND rule_id=$2
+              AND (year > $3 OR (year = $3 AND month >= $4))
+        """, user_id, rule_id, clear_from_year, clear_from_month)
+
     await _materialize_current_next(db, user_id)
     return dict(row)
+
+
+@router.post("/{rule_id}/skip-month")
+async def skip_rule_month(rule_id: int, request: Request,
+                          year: int = Query(...), month: int = Query(...)):
+    """«Удалить только этот месяц»: помечаем (правило, год, месяц) как пропуск и
+    убираем материализованную строку этого месяца. Правило и другие месяцы целы;
+    перештамповка эту строку больше не воссоздаёт."""
+    user_id = request.state.user_id
+    db = request.state.db
+    rule = await db.fetchrow("SELECT id FROM plan_rules WHERE id=$1 AND user_id=$2", rule_id, user_id)
+    if not rule:
+        raise HTTPException(404, "Rule not found")
+    await db.execute("""
+        INSERT INTO plan_rule_skips (user_id, rule_id, year, month)
+        VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING
+    """, user_id, rule_id, year, month)
+    await db.execute("""
+        DELETE FROM plan
+        WHERE user_id=$1 AND source_rule_id=$2
+          AND EXTRACT(YEAR FROM date)=$3 AND EXTRACT(MONTH FROM date)=$4
+    """, user_id, rule_id, year, month)
+    return {"ok": True}
 
 
 @router.delete("/{rule_id}")
