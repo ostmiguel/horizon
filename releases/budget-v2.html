@@ -372,6 +372,9 @@ body {
 .edit-btn:hover { background: rgba(42,167,204,.10); border-color: var(--accent); }
 .bgt-dots { font-size: 18px; line-height: 1; border: none; background: none; color: var(--text3); cursor: pointer; padding: 2px 8px; border-radius: 6px; }
 .bgt-dots:hover { background: var(--bg); color: var(--text2); }
+.bgt-menu-item { display: block; width: 100%; text-align: left; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--text); padding: 8px 10px; border-radius: 7px; }
+.bgt-menu-item:hover { background: var(--bg); }
+.bgt-menu-item.danger { color: #bf7419; }
 .add-row-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; font-size: 11.5px; color: var(--accent);
@@ -5598,9 +5601,7 @@ function bgtMenu(btn, items) {
   items.forEach(it => {
     const b = document.createElement('button');
     b.textContent = it.label;
-    b.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:' + (it.danger ? '#bf7419' : 'var(--text)') + ';padding:8px 10px;border-radius:7px';
-    b.onmouseenter = () => b.style.background = 'var(--bg)';
-    b.onmouseleave = () => b.style.background = '';
+    b.className = 'bgt-menu-item' + (it.danger ? ' danger' : '');
     b.onclick = () => { closeBgtMenu(); it.fn(); };
     menu.appendChild(b);
   });
