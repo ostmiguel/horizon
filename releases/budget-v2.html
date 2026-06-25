@@ -4963,7 +4963,7 @@ async function loadGoals() {
       const pct = target > 0 ? Math.min(100, Math.round(balance / target * 100)) : 0;
       const remaining = Math.max(0, target - balance);
       const done = balance >= target;
-      const barColor = done ? 'var(--income)' : pct >= 50 ? 'var(--income)' : '#E65100';
+      const barBg = done ? '#5E9B1E' : 'linear-gradient(90deg,#2AA7CC,#1FA497,#B4DE3C)';
       const dueLabel = g.due_date ? new Date(g.due_date).toLocaleDateString('ru-RU',{day:'2-digit',month:'short',year:'numeric'}) : null;
 
       let monthlyRec = '';
@@ -4977,24 +4977,21 @@ async function loadGoals() {
 
       return '<div class="card" style="padding:16px 18px">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
-          + '<div>'
-            + '<div style="font-size:15px;font-weight:600;color:var(--text)">' + g.name + '</div>'
-            + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + (acc ? acc.name : 'Счёт не привязан') + (dueLabel ? ' · до ' + dueLabel : '') + '</div>'
+          + '<div style="min-width:0">'
+            + '<div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--text)"><span style="width:8px;height:8px;border-radius:2px;background:#1FA497;flex-shrink:0"></span>' + esc(g.name) + '</div>'
+            + '<div style="font-size:11px;color:var(--text3);margin-top:3px;padding-left:16px">' + (acc ? esc(acc.name) : 'Счёт не привязан') + (dueLabel ? ' · до ' + dueLabel : '') + '</div>'
           + '</div>'
-          + '<div style="display:flex;gap:4px">'
-            + '<button class="edit-btn" onclick="openEditGoal(' + g.id + ')">ред.</button>'
-            + '<button class="del-btn" onclick="deleteGoal(' + g.id + ')">×</button>'
-          + '</div>'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();goalMenu(this,' + g.id + ')">⋮</button>'
         + '</div>'
-        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">'
-          + '<span style="font-size:20px;font-weight:600;color:var(--text)">' + f(balance) + ' ₽</span>'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'
+          + '<span style="font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">' + f(balance) + ' ₽</span>'
           + '<span style="font-size:13px;color:var(--text3)">из ' + f(target) + ' ₽</span>'
         + '</div>'
-        + '<div style="height:8px;background:var(--bg2);border-radius:4px;overflow:hidden;margin-bottom:6px">'
-          + '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';border-radius:4px"></div>'
+        + '<div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:7px">'
+          + '<div style="height:100%;width:' + pct + '%;background:' + barBg + ';border-radius:99px"></div>'
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;font-size:11px">'
-          + '<span style="color:' + (done ? 'var(--income)' : 'var(--text3)') + ';font-weight:' + (done ? '600' : '400') + '">' + (done ? '✓ Цель достигнута' : pct + '% накоплено') + '</span>'
+          + '<span style="color:' + (done ? '#5E9B1E' : 'var(--text3)') + ';font-weight:' + (done ? '600' : '400') + '">' + (done ? '✓ Цель достигнута' : pct + '% накоплено') + '</span>'
           + (!done ? '<span style="color:var(--text3)">осталось ' + f(remaining) + ' ₽</span>' : '')
         + '</div>'
         + monthlyRec
@@ -5003,7 +5000,7 @@ async function loadGoals() {
 
     main.innerHTML = '<div class="topbar">'
       + '<div><div class="page-title">Цели</div><div class="page-sub">Накопления под крупные покупки</div></div>'
-      + '<div class="quick-btns"><button class="qbtn qbtn-transfer" onclick="openAddGoal()">+ Цель</button></div>'
+      + '<button class="btn-primary" onclick="openAddGoal()">+ Цель</button>'
       + '</div>'
       + ((goals||[]).length === 0
         ? '<div class="card" style="padding:40px;text-align:center"><div style="font-size:14px;color:var(--text3);margin-bottom:16px">Пока нет целей. Создай первую — например «Новый ноутбук» или «Отпуск».</div><button class="btn-primary" onclick="openAddGoal()" style="display:inline-block;width:auto;padding:10px 20px">Создать цель</button></div>'
@@ -6616,7 +6613,7 @@ function openAddGoal() {
   mo.className = 'modal-overlay open';
   mo.innerHTML = '<div class="modal"><div class="modal-title">Новая цель</div>'
     + goalFormHtml(null)
-    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(".modal-overlay").remove()">Отмена</button><button class="btn-primary" onclick="saveGoal(this)">Создать</button></div></div>';
+    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button><button class="btn-primary" onclick="saveGoal(this)">Создать</button></div></div>';
   document.body.appendChild(mo);
 }
 
@@ -6627,7 +6624,7 @@ function openEditGoal(id) {
   mo.className = 'modal-overlay open';
   mo.innerHTML = '<div class="modal"><div class="modal-title">Редактировать цель</div>'
     + goalFormHtml(g)
-    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(".modal-overlay").remove()">Отмена</button><button class="btn-primary" onclick="updateGoal(' + id + ',this)">Сохранить</button></div></div>';
+    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button><button class="btn-primary" onclick="updateGoal(' + id + ',this)">Сохранить</button></div></div>';
   document.body.appendChild(mo);
 }
 
@@ -6659,6 +6656,13 @@ async function updateGoal(id, btn) {
   btn.closest('.modal-overlay').remove();
   toast('✓ Сохранено');
   loadGoals();
+}
+
+function goalMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => openEditGoal(id) },
+    { label: 'Удалить', danger: true, fn: () => deleteGoal(id) },
+  ]);
 }
 
 async function deleteGoal(id) {
