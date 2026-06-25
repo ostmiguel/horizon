@@ -4579,8 +4579,8 @@ async function loadSummary() {
 
   // Get available years from actual data
   const [{ data: txAll2 }, { data: plAll3 }] = await Promise.all([
-    sb.from('transactions').select('date'),
-    sb.from('plan').select('date'),
+    sb.from('transactions').select('date').limit(100000),
+    sb.from('plan').select('date').limit(100000),
   ]);
   const years = [...new Set([
     ...(txAll2||[]).map(r => +r.date.substring(0,4)),
@@ -4588,8 +4588,8 @@ async function loadSummary() {
   ])].filter(y => y > 2000).sort();
 
   // Load data
-  let txQ = sb.from('transactions').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)');
-  let plQ = sb.from('plan').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)');
+  let txQ = sb.from('transactions').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)').limit(100000);
+  let plQ = sb.from('plan').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)').limit(100000);
 
   if (_summaryMode === 'year') {
     txQ = txQ.eq('year', _summaryYear);
@@ -4742,6 +4742,12 @@ async function loadSummary() {
     </div>`;
   }
 
+  // Фирменная KPI-карточка (как bgtCard на Бюджете): цветная точка + подпись + число.
+  const sumKpi = (dot, label, value, vColor) =>
+    `<div class="card" style="padding:14px 16px">`
+    + `<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:7px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:${dot};display:inline-block;flex-shrink:0"></span>${label}</div>`
+    + `<div style="font-size:22px;font-weight:700;color:${vColor};font-variant-numeric:tabular-nums">${value}</div></div>`;
+
   mc.innerHTML = `
 <div class="summary-wrap">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -4770,41 +4776,12 @@ async function loadSummary() {
   </div>
 
   <div class="summary-kpi">
-    <div class="kpi" style="--kpi-accent:var(--income)">
-      <div class="kpi-label">Доходы</div>
-      <div class="kpi-val" style="color:var(--income)">${fmt(totalIncome)}</div>
-    </div>
-    <div class="kpi" style="--kpi-accent:#bf7419">
-      <div class="kpi-label">Расходы${_summaryChar!=='all'?' ('+({'Повседневный':'повсед.','Фиксированный':'фикс.','Эпизодический':'эпизод.'}[_summaryChar]||'')+')':''}</div>
-      <div class="kpi-val" style="color:#bf7419">${fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0))}</div>
-      <div class="kpi-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-        ${(()=>{
-          const expByChar = ch => (txAll||[]).filter(r => r.account_to==='Расход' && r.categories?.character===ch).reduce((s,r)=>s+ +r.amount,0);
-          const regExp = expByChar('Повседневный'), fixExp = expByChar('Фиксированный'), episExp = expByChar('Эпизодический');
-          const parts = [];
-          if (regExp>0)  parts.push('<span style="color:#167F73" title="Повседневные">повсед. ' + fmtK(regExp) + '</span>');
-          if (fixExp>0)  parts.push('<span style="color:#1D7E97" title="Фиксированные">фикс. ' + fmtK(fixExp) + '</span>');
-          if (episExp>0) parts.push('<span style="color:#5E7A12" title="Эпизодические">эпизод. ' + fmtK(episExp) + '</span>');
-          return parts.join('<span style="color:var(--border2)"> · </span>');
-        })()}
-      </div>
-    </div>
-    <div class="kpi" style="--kpi-accent:#C0741A">
-      <div class="kpi-label">Обязательства</div>
-      <div class="kpi-val" style="color:#C0741A">${fmt(totalObligation)}</div>
-    </div>
-    <div class="kpi" style="--kpi-accent:${profit>=0?'var(--income)':'#bf7419'}">
-      <div class="kpi-label">Профит</div>
-      <div class="kpi-val" style="color:${profit>=0?'var(--income)':'#bf7419'}">${fmt(profit)}</div>
-    </div>
-    <div class="kpi" style="--kpi-accent:#2AA7CC">
-      <div class="kpi-label">Сбережения</div>
-      <div class="kpi-val" style="color:${totalSavings>=0?'var(--income)':'#bf7419'}">${fmt(totalSavings)}</div>
-    </div>
-    <div class="kpi" style="--kpi-accent:var(--accent)">
-      <div class="kpi-label">Норма сбережений</div>
-      <div class="kpi-val" style="color:var(--accent);font-size:${savingsRate>=10?'22px':'18px'}">${savingsRate.toFixed(2)}%</div>
-    </div>
+    ${sumKpi('#5E9B1E', 'Доходы', fmt(totalIncome), '#5E9B1E')}
+    ${sumKpi('#bf7419', 'Расходы' + (_summaryChar!=='all' ? ' ('+({'Повседневный':'повсед.','Фиксированный':'фикс.','Эпизодический':'эпизод.'}[_summaryChar]||'')+')' : ''), fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0)), '#bf7419')}
+    ${sumKpi('#C0741A', 'Обязательства', fmt(totalObligation), '#C0741A')}
+    ${sumKpi(profit>=0?'#5E9B1E':'#bf7419', 'Профит', fmt(profit), profit>=0?'#5E9B1E':'#bf7419')}
+    ${sumKpi('#1FA497', 'Сбережения', fmt(totalSavings), totalSavings>=0?'#5E9B1E':'#bf7419')}
+    ${sumKpi('#2AA7CC', 'Норма сбережений', savingsRate.toFixed(1)+'%', '#2AA7CC')}
   </div>
 
 
@@ -7105,8 +7082,8 @@ async function loadOperations() {
     const todayStr = now.toISOString().split('T')[0];
     const f = n => new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
 
-    let factQ = sb.from('transactions').select('*').eq('year', yr);
-    let planQ = sb.from('plan').select('*').eq('year', yr);
+    let factQ = sb.from('transactions').select('*').eq('year', yr).limit(100000);
+    let planQ = sb.from('plan').select('*').eq('year', yr).limit(100000);
     if (mo) { factQ = factQ.eq('month', mo); planQ = planQ.eq('month', mo); }  // mo=0 → весь год
     // Бюджеты конвертов (повседневные) — их нет в таблице plan, тянем отдельно,
     // чтобы план расходов отражал и грядущую повседневную часть.
