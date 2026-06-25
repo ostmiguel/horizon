@@ -4269,21 +4269,23 @@ function loadHelp() {
   <div class="help-toc">
     <div class="help-toc-title">Содержание</div>
     <ul class="help-toc-list">
-      <li><a href="#h-start">→ С чего начать</a></li>
-      <li><a href="#h-concept">2. Концепция учёта</a></li>
-      <li><a href="#h-accounts">3. Счета — типы и назначение</a></li>
-      <li><a href="#h-balance">4. Операционный и общий баланс</a></li>
-      <li><a href="#h-tx">5. Транзакции — типы и как вносить</a></li>
+      <li><a href="#h-start">1. С чего начать</a></li>
+      <li><a href="#h-concept">2. Как устроен учёт</a></li>
+      <li><a href="#h-accounts">3. Счета и баланс</a></li>
+      <li><a href="#h-character">4. Характер категорий</a></li>
+      <li><a href="#h-ops">5. Операции — как вносить</a></li>
       <li><a href="#h-scenarios">6. Жизненные сценарии</a></li>
-      <li><a href="#h-plan">7. Планирование</a></li>
-      <li><a href="#h-loans">8. Кредиты</a></li>
+      <li><a href="#h-budget">7. Бюджет — правила, конверты, события</a></li>
+      <li><a href="#h-pages">8. Обзор и Сводка</a></li>
+      <li><a href="#h-goals">9. Цели</a></li>
+      <li><a href="#h-loans">10. Кредиты</a></li>
     </ul>
   </div>
 
   <!-- 1. С ЧЕГО НАЧАТЬ -->
   <div class="help-section" id="h-start">
     <div class="help-section-title"><span class="help-section-icon">◈</span>1. С чего начать</div>
-    <p class="help-p">Следуй этим четырём шагам — и через 20 минут дашборд начнёт показывать реальную картину твоих финансов.</p>
+    <p class="help-p">Следуй этим четырём шагам — и через 20 минут Обзор начнёт показывать реальную картину твоих финансов.</p>
 
     <div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:28px;flex-wrap:wrap">
       <div style="flex:1;min-width:260px">
@@ -4293,7 +4295,7 @@ function loadHelp() {
           <span style="font-size:11px;color:var(--text3);margin-left:4px">~2 мин</span>
         </div>
         <p class="help-p" style="margin-bottom:10px">Счёт — это любое место где хранятся деньги: карта, наличные, вклад. Зайди в <b>Справочники → Счета</b> и добавь все свои карты с текущими остатками.</p>
-        <div class="help-note">Счета с переключателем «В балансе» влияют на оперативный баланс на дашборде. Сбережения и брокерский счёт лучше исключить.</div>
+        <div class="help-note">Счета с переключателем «В балансе» влияют на операционный баланс на Обзоре. Сбережения и брокерский счёт лучше исключить.</div>
       </div>
       <div style="width:200px;flex-shrink:0;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden">
         <div style="background:var(--bg3);padding:7px 12px;font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border)">Справочники → Счета</div>
@@ -4317,14 +4319,14 @@ function loadHelp() {
       <div style="flex:1;min-width:260px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:white;flex-shrink:0">2</div>
-          <span style="font-size:16px;font-weight:500;color:var(--text)">Внеси транзакции</span>
+          <span style="font-size:16px;font-weight:500;color:var(--text)">Внеси операции</span>
           <span style="font-size:11px;color:var(--text3);margin-left:4px">~5 мин</span>
         </div>
-        <p class="help-p" style="margin-bottom:10px">Начни с текущего месяца — нажми <b>+</b> на дашборде или открой страницу <b>Операции</b>. Каждая операция это движение денег между двумя счетами.</p>
-        <div class="help-note">Не нужно вносить всю историю с начала года. Достаточно текущего месяца чтобы дашборд заработал.</div>
+        <p class="help-p" style="margin-bottom:10px">Открой страницу <b>Операции → + Добавить</b>. Каждая операция — это движение денег между двумя счетами. Начни с текущего месяца — этого достаточно, чтобы Обзор заработал.</p>
+        <div class="help-note">Не нужно вносить всю историю с начала года. Период (месяц или весь год) выбирается пикером в правом верхнем углу.</div>
       </div>
       <div style="width:200px;flex-shrink:0;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden">
-        <div style="background:var(--bg3);padding:7px 12px;font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border)">Новая транзакция</div>
+        <div style="background:var(--bg3);padding:7px 12px;font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border)">Новая операция</div>
         <div style="padding:10px;display:flex;flex-direction:column;gap:6px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
             <div style="padding:5px 8px;border-radius:5px;background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.3);font-size:10px;font-weight:500;color:#DC2626;text-align:center">Расход</div>
@@ -4343,11 +4345,11 @@ function loadHelp() {
       <div style="flex:1;min-width:260px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:white;flex-shrink:0">3</div>
-          <span style="font-size:16px;font-weight:500;color:var(--text)">Заполни план</span>
+          <span style="font-size:16px;font-weight:500;color:var(--text)">Настрой Бюджет</span>
           <span style="font-size:11px;color:var(--text3);margin-left:4px">~10 мин</span>
         </div>
-        <p class="help-p" style="margin-bottom:10px">Перейди на страницу <b>План</b> и внеси ожидаемые доходы и расходы на месяц. После этого на дашборде появится синяя линия прогноза и блок план vs факт.</p>
-        <div class="help-note">Начни с фиксированных платежей — аренда, кредиты, подписки. Заведи их как правила в «Бюджет → + Правило» — они сами материализуются в план каждый месяц.</div>
+        <p class="help-p" style="margin-bottom:10px">Открой <b>Бюджет</b> и заведи ожидаемые доходы и платежи: регулярные — <b>правилами</b>, повседневные категории — <b>конвертами</b>, разовые — <b>событиями</b>. После этого Обзор покажет «Свободно» и прогноз баланса до конца месяца.</p>
+        <div class="help-note">Начни с фиксированных платежей — аренда, кредиты, подписки: <b>Бюджет → + Правило</b>. Они сами разворачиваются в план каждый месяц вперёд.</div>
       </div>
       <div style="width:200px;flex-shrink:0;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden">
         <div style="background:var(--bg3);padding:7px 12px;font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border)">Баланс по дням</div>
@@ -4392,12 +4394,12 @@ function loadHelp() {
       </div>
     </div>
 
-    <div class="help-tip">Не старайся сделать всё идеально с первого раза. Начни с малого — несколько транзакций в день — и постепенно система начнёт давать полезные данные.</div>
+    <div class="help-tip">Не старайся сделать всё идеально с первого раза. Начни с малого — несколько операций в день — и постепенно система начнёт давать полезные данные.</div>
   </div>
 
   <!-- 2. КОНЦЕПЦИЯ -->
   <div class="help-section" id="h-concept">
-    <div class="help-section-title"><span class="help-section-icon">◈</span>2. Концепция учёта</div>
+    <div class="help-section-title"><span class="help-section-icon">◈</span>2. Как устроен учёт</div>
     <p class="help-p">Приложение использует <b>кассовый метод учёта</b> — деньги фиксируются в момент реального движения, а не в момент возникновения обязательства. Это самый простой и интуитивный способ вести личный бюджет: заплатил за продукты — записал расход, получил зарплату — записал доход.</p>
     <p class="help-p">Главная идея — <b>каждая операция это движение денег между двумя счетами</b>. Деньги всегда откуда-то приходят и куда-то уходят. Не бывает операции «просто расход» — деньги ушли с конкретной карты на конкретную статью расходов.</p>
     <div class="help-note"><b>Пример:</b> Ты заплатил картой 500 ₽ за кофе. Это движение: <b>Карта → Расход</b>. Карта уменьшилась на 500 ₽, расходы увеличились на 500 ₽.</div>
@@ -4406,7 +4408,7 @@ function loadHelp() {
 
   <!-- 3. СЧЕТА -->
   <div class="help-section" id="h-accounts">
-    <div class="help-section-title"><span class="help-section-icon">◉</span>3. Счета — типы и назначение</div>
+    <div class="help-section-title"><span class="help-section-icon">◉</span>3. Счета и баланс</div>
     <p class="help-p">Все счета делятся на три типа:</p>
     <table class="help-table">
       <thead><tr><th>Тип</th><th>Что это</th><th>Примеры</th><th>Влияет на баланс</th></tr></thead>
@@ -4433,27 +4435,44 @@ function loadHelp() {
     </table>
     <div class="help-note"><b>Почему «Доход» и «Расход» это счета, а не категории?</b> Потому что каждая операция — это движение между двумя счетами. Зарплата это движение: <b>Доход → твоя карта</b>. Счёт «Доход» — технический, он не хранит реальные деньги, он просто обозначает источник.</div>
     <div class="help-h3">Включать ли счёт в баланс?</div>
-    <p class="help-p">У каждого счёта-актива есть переключатель <b>«В балансе»</b>. Если включён — остаток по этому счёту учитывается в операционном балансе на дашборде. Если выключен — счёт существует, транзакции по нему записываются, но в общий баланс он не входит.</p>
+    <p class="help-p">У каждого счёта-актива есть переключатель <b>«В балансе»</b>. Если включён — остаток по этому счёту учитывается в операционном балансе на Обзоре. Если выключен — счёт существует, операции по нему записываются, но в общий баланс он не входит.</p>
     <div class="help-tip">Например, брокерский счёт или резервный фонд можно исключить из операционного баланса — так ты видишь только «живые» деньги которыми реально распоряжаешься в текущем месяце.</div>
   </div>
 
   <!-- 4. БАЛАНС -->
   <div class="help-section" id="h-balance">
-    <div class="help-section-title"><span class="help-section-icon">◈</span>4. Операционный и общий баланс</div>
+    <div class="help-section-title"><span class="help-section-icon">◈</span>Операционный и общий баланс</div>
     <div class="help-h3">Операционный баланс (Баланс опер.)</div>
     <p class="help-p">Сумма остатков по всем активам у которых включён переключатель <b>«В балансе»</b>. Это деньги которыми ты реально управляешь прямо сейчас — карты, наличные, текущие счета.</p>
     <div class="help-h3">Баланс (общ.)</div>
     <p class="help-p">Все активы (включая сбережения, брокерский счёт) <b>минус</b> все пассивы (кредиты, долги). Это твоя реальная финансовая стоимость — сколько у тебя осталось бы если закрыть все долги прямо сейчас.</p>
     <div class="help-note"><b>Пример:</b> Карта: 5 000 ₽ + Брокерский счёт: 145 000 ₽ − Кредит: 263 000 ₽ = Баланс (общ.) −113 000 ₽. Это означает что долги пока превышают активы — нормальная ситуация при наличии кредитов.</div>
     <div class="help-h3">График баланса по дням</div>
-    <p class="help-p"><b>Зелёная линия (Факт)</b> — реальный баланс по внесённым транзакциям от начала месяца до сегодня.</p>
-    <p class="help-p"><b>Синяя линия (План)</b> — баланс если бы все плановые транзакции выполнялись точно в срок. Показывает где ты должен был быть. Расстояние между линиями — отклонение от плана. Показывает где будет баланс если всё пойдёт по плану.</p>
+    <p class="help-p"><b>Сплошная линия (Факт)</b> — реальный баланс по внесённым операциям от начала месяца до сегодня.</p>
+    <p class="help-p"><b>Пунктир (Прогноз)</b> — баланс до конца месяца, если плановые платежи и траты пойдут как заложено. Если прогноз уходит в минус — это сигнал кассового разрыва.</p>
     <div class="help-warn">Если прогнозная линия уходит в минус — жди предупреждения под графиком. Это сигнал что нужно пересмотреть расходы или перенести крупный платёж.</div>
   </div>
 
-  <!-- 5. ТРАНЗАКЦИИ -->
-  <div class="help-section" id="h-tx">
-    <div class="help-section-title"><span class="help-section-icon">↕</span>5. Транзакции — типы и как вносить</div>
+  <!-- 4. ХАРАКТЕР -->
+  <div class="help-section" id="h-character">
+    <div class="help-section-title"><span class="help-section-icon">◑</span>4. Характер категорий</div>
+    <p class="help-p">Каждая подкатегория имеет <b>характер</b> — он определяет, как она планируется и в каком блоке Бюджета появляется.</p>
+    <table class="help-table">
+      <thead><tr><th>Характер</th><th>Что это</th><th>Примеры</th><th>В Бюджете</th></tr></thead>
+      <tbody>
+        <tr><td><b>Повседневный</b></td><td>Регулярные переменные траты — сумма гуляет от месяца к месяцу</td><td>Продукты, транспорт, кафе</td><td>Конверты</td></tr>
+        <tr><td><b>Фиксированный</b></td><td>Регулярные обязательные — стабильная сумма каждый месяц</td><td>Аренда, подписки, зарплата</td><td>Правила</td></tr>
+        <tr><td><b>Эпизодический</b></td><td>Разовые, нерегулярные</td><td>Ремонт, подарки, ТО авто, премия</td><td>События</td></tr>
+      </tbody>
+    </table>
+    <div class="help-note">Характер задаётся на уровне <b>подкатегории</b>: у одной категории могут быть подкатегории разного характера. Пример: «Автомобиль» — бензин повседневный, ТО эпизодический.</div>
+    <div class="help-tip">Доходы тоже имеют характер: зарплата (основная работа) — фиксированный, остальное (подарки, разовая подработка) — эпизодический. От фиксированного дохода считается кредитная нагрузка.</div>
+  </div>
+
+  <!-- 5. ОПЕРАЦИИ -->
+  <div class="help-section" id="h-ops">
+    <div class="help-section-title"><span class="help-section-icon">▤</span>5. Операции — как вносить</div>
+    <p class="help-p">Все фактические операции вносятся на листе <b>Операции</b> кнопкой <b>+ Добавить</b>. Период (месяц или весь год) выбирается пикером в правом верхнем углу. Операции сгруппированы по дням; сверху — KPI факт против плана по четырём направлениям (Доходы, Расходы, Сбережения, Долги), ниже — фильтры (сегмент, категория, подкатегория, характер, поиск) и строка-итог по выбранному срезу.</p>
     <table class="help-table">
       <thead><tr><th>Тип</th><th>Когда использовать</th><th>Откуда → Куда</th></tr></thead>
       <tbody>
@@ -4490,7 +4509,7 @@ function loadHelp() {
 
     <div class="help-scenario">
       <div class="help-scenario-title">🛒 Купил продукты за наличные</div>
-      <div class="help-step"><div class="help-step-num">1</div><div>Нажми <b>+ Расход</b> на дашборде</div></div>
+      <div class="help-step"><div class="help-step-num">1</div><div><b>Операции → + Добавить</b>, тип <b>Расход</b></div></div>
       <div class="help-step"><div class="help-step-num">2</div><div>Откуда: <b>Карта / Наличные</b> · Куда: <b>Расход</b></div></div>
       <div class="help-step"><div class="help-step-num">3</div><div>Подкатегория: <b>Продукты</b> · Сумма · Дата</div></div>
     </div>
@@ -4533,20 +4552,38 @@ function loadHelp() {
     </div>
   </div>
 
-  <!-- 7. ПЛАН -->
-  <div class="help-section" id="h-plan">
-    <div class="help-section-title"><span class="help-section-icon">◷</span>7. Планирование</div>
-    <p class="help-p">Страница <b>«План»</b> — это бюджет на месяц. Сюда вносишь все ожидаемые доходы и расходы до того как они произошли. На дашборде синяя пунктирная линия прогноза строится именно по этим данным.</p>
-    <div class="help-h3">Что стоит планировать</div>
-    <p class="help-p">В первую очередь — <b>фиксированные платежи</b>: аренда, кредиты, подписки, коммуналка. Они повторяются каждый месяц и их легко внести заранее. Потом — <b>переменные расходы</b> по категориям: продукты, транспорт, развлечения — средние суммы исходя из прошлых месяцев.</p>
-    <div class="help-tip">Чем подробнее план — тем точнее прогноз на графике и тем раньше ты увидишь потенциальный кассовый разрыв.</div>
-    <div class="help-h3">План vs Факт</div>
-    <p class="help-p">Блок <b>«План vs Факт»</b> на дашборде показывает по каждой категории сколько планировал потратить и сколько потратил реально. Зелёная полоска — в рамках плана. Оранжевая — близко к лимиту. Красная — лимит превышен.</p>
+  <!-- 7. БЮДЖЕТ -->
+  <div class="help-section" id="h-budget">
+    <div class="help-section-title"><span class="help-section-icon">◑</span>7. Бюджет — правила, конверты, события</div>
+    <p class="help-p">Лист <b>Бюджет</b> — это план на месяц, разбитый по характеру категорий. Он питает «Свободно» и прогноз на Обзоре.</p>
+    <div class="help-h3">Правила — доходы и фиксированные</div>
+    <p class="help-p"><b>+ Доход</b> и <b>+ Правило.</b> Регулярная сумма, повторяющаяся каждый месяц (зарплата, аренда, подписки). Правило само разворачивается в план будущих месяцев. При правке или удалении выбираешь область: <b>«этот месяц»</b> — разовая правка только текущего месяца; <b>«все будущие»</b> — меняешь само правило.</p>
+    <div class="help-h3">Конверты — повседневные</div>
+    <p class="help-p"><b>+ Конверт.</b> Месячный бюджет на повседневную категорию (продукты, транспорт). Видишь факт против бюджета и прогноз до конца месяца. Приложение предлагает суммы конвертов по истории трат — можно принять или поправить.</p>
+    <div class="help-h3">События — эпизодические</div>
+    <p class="help-p"><b>+ Событие.</b> Разовая трата на конкретный месяц (ремонт, подарок, ТО авто). Не повторяется. Эпизодический <b>доход</b> (например премия) вносится в блоке «Доходы».</p>
+    <div class="help-tip">Чем полнее Бюджет — тем точнее «Свободно» и прогноз на Обзоре, и тем раньше виден потенциальный кассовый разрыв.</div>
+  </div>
+
+  <!-- 8. ОБЗОР И СВОДКА -->
+  <div class="help-section" id="h-pages">
+    <div class="help-section-title"><span class="help-section-icon">◈</span>8. Обзор и Сводка</div>
+    <div class="help-h3">Обзор</div>
+    <p class="help-p">Главная страница. <b>«Свободно»</b> — сколько можно тратить до конца месяца с учётом плановых платежей и пополнения резервов. KPI: <b>Чистый капитал</b> (активы − обязательства), <b>Кредитная нагрузка</b> (доля фиксированного дохода, уходящая на платежи по долгам), <b>Запас прочности</b> (на сколько месяцев хватит денег), <b>Финансовая устойчивость</b>. Ниже — расходы по категориям (факт → план) и прогноз баланса до конца месяца.</p>
+    <div class="help-h3">Сводка</div>
+    <p class="help-p">Доходы, расходы, сбережения и обязательства по категориям (или подкатегориям) в разрезе по месяцам — за год или за все годы. Сверху — KPI и <b>Профит</b> (доходы − расходы − обязательства). Переключатели гранулярности (Категории / Подкатегории) и характера помогают увидеть структуру.</p>
+  </div>
+
+  <!-- 9. ЦЕЛИ -->
+  <div class="help-section" id="h-goals">
+    <div class="help-section-title"><span class="help-section-icon">◆</span>9. Цели</div>
+    <p class="help-p">Накопления под крупные покупки. Привяжи цель к <b>резервному счёту</b> — прогресс считается по его остатку. Укажи срок — приложение подскажет рекомендуемый ежемесячный взнос.</p>
+    <div class="help-tip">Резервный счёт помечается в Справочниках. Пополнение резерва учитывается как сбережения, а не как расход.</div>
   </div>
 
   <!-- 8. КРЕДИТЫ -->
   <div class="help-section" id="h-loans">
-    <div class="help-section-title"><span class="help-section-icon">◎</span>8. Кредиты</div>
+    <div class="help-section-title"><span class="help-section-icon">◎</span>10. Кредиты</div>
     <p class="help-p">Страница <b>«Кредиты»</b> — это трекер займов. Здесь ты видишь остаток по каждому кредиту, переплату и прогноз закрытия.</p>
     <div class="help-h3">Как заполнить график платежей</div>
     <div class="help-step"><div class="help-step-num">1</div><div>Добавь кредит — укажи начальную сумму, ставку, размер платежа и дату следующего платежа</div></div>
