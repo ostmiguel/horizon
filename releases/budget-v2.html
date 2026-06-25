@@ -7352,12 +7352,11 @@ function renderOpsRows() {
   if (sumEl) {
     const tInc = filtered.filter(r => r.type === 'income' || (r.type === 'debt' && r.debtDir === 'received')).reduce((a,r) => a + r.amount, 0);
     const tExp = filtered.filter(r => r.type === 'expense' || (r.type === 'debt' && r.debtDir === 'paid')).reduce((a,r) => a + r.amount, 0);
-    const parts = [];
-    if (tInc > 0) parts.push(`<span style="color:#5E9B1E">доход +${f(tInc)} ₽</span>`);
-    if (tExp > 0) parts.push(`<span style="color:#bf7419">расход −${f(tExp)} ₽</span>`);
+    const segs = [`<b style="color:var(--text2)">${filtered.length}</b>&nbsp;${opsPlural(filtered.length)}`];
+    if (tInc > 0) segs.push(`<span style="color:#5E9B1E">доход +${f(tInc)} ₽</span>`);
+    if (tExp > 0) segs.push(`<span style="color:#bf7419">расход −${f(tExp)} ₽</span>`);
     sumEl.innerHTML = filtered.length
-      ? `<b style="color:var(--text2)">${filtered.length}</b>&nbsp;${opsPlural(filtered.length)}`
-        + (parts.length ? ` <span style="color:var(--text3)">·</span> ` + parts.join(` <span style="color:var(--text3)">·</span> `) : '')
+      ? segs.join('<span style="color:var(--border2);margin:0 12px">·</span>')
       : '';
   }
 
