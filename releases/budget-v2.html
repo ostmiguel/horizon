@@ -7251,6 +7251,8 @@ async function loadOperations() {
             style="flex:1;min-width:160px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:12.5px;background:var(--bg2);color:var(--text);box-shadow:var(--shadow)">
         </div>
 
+        <div id="opsSummary" style="display:flex;justify-content:flex-end;gap:0;margin:0 2px 10px;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums"></div>
+
         <div class="card" style="padding:0;overflow:hidden">
           <table style="width:100%;border-collapse:collapse">
             <thead>
@@ -7320,6 +7322,13 @@ function opsCharBadge(charKey) {
   return '<span style="color:var(--text3)">—</span>';
 }
 
+function opsPlural(n) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return 'операций';
+  if (b > 1 && b < 5) return 'операции';
+  if (b === 1) return 'операция';
+  return 'операций';
+}
 function renderOpsRows() {
   const tbody = document.getElementById('opsTbody');
   if (!tbody || !_opsData) return;
@@ -7337,6 +7346,20 @@ function renderOpsRows() {
     if (s && !r.searchKey.includes(s)) return false;
     return true;
   }).sort((a,b) => b.date.localeCompare(a.date));
+
+  // Итог по отфильтрованным операциям (тот же формат «доход/расход», что у дней).
+  const sumEl = document.getElementById('opsSummary');
+  if (sumEl) {
+    const tInc = filtered.filter(r => r.type === 'income' || (r.type === 'debt' && r.debtDir === 'received')).reduce((a,r) => a + r.amount, 0);
+    const tExp = filtered.filter(r => r.type === 'expense' || (r.type === 'debt' && r.debtDir === 'paid')).reduce((a,r) => a + r.amount, 0);
+    const parts = [];
+    if (tInc > 0) parts.push(`<span style="color:#5E9B1E">доход +${f(tInc)} ₽</span>`);
+    if (tExp > 0) parts.push(`<span style="color:#bf7419">расход −${f(tExp)} ₽</span>`);
+    sumEl.innerHTML = filtered.length
+      ? `<b style="color:var(--text2)">${filtered.length}</b>&nbsp;${opsPlural(filtered.length)}`
+        + (parts.length ? ` <span style="color:var(--text3)">·</span> ` + parts.join(` <span style="color:var(--text3)">·</span> `) : '')
+      : '';
+  }
 
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Нет операций по фильтрам</td></tr>`;
