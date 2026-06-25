@@ -4672,19 +4672,19 @@ async function loadSummary() {
       const pct = totalFact > 0 ? (Math.abs(factAmt) / Math.abs(totalFact) * 100).toFixed(1) : '0.0';
       const over = planAmt > 0 && factAmt > planAmt;
       return `<tr>
-        <td style="color:#111827">${name}</td>
-        <td class="num" style="color:#6b7280">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
-        <td class="num" style="color:${over ? 'var(--expense)' : '#111827'}">${fmt(factAmt)}</td>
-        <td class="pct" style="color:#9ca3af">${pct}%</td>
+        <td style="color:var(--text)">${name}</td>
+        <td class="num" style="color:var(--text2)">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
+        <td class="num" style="color:${over ? '#bf7419' : 'var(--text)'}">${fmt(factAmt)}</td>
+        <td class="pct" style="color:var(--text3)">${pct}%</td>
       </tr>`;
     }).join('');
     const totalPlan = rows.reduce((s,[name]) => s + (planRows[name]||0), 0);
     const totalFactSum = rows.reduce((s,[,v]) => s + v, 0);
     const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">
-      <td style="color:#111827;font-weight:600">Итого</td>
-      <td class="num" style="color:#6b7280;font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
-      <td class="num" style="color:#111827;font-weight:600">${fmt(totalFactSum)}</td>
-      <td class="pct" style="color:#9ca3af;font-weight:600">100%</td>
+      <td style="color:var(--text);font-weight:600">Итого</td>
+      <td class="num" style="color:var(--text2);font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
+      <td class="num" style="color:var(--text);font-weight:600">${fmt(totalFactSum)}</td>
+      <td class="pct" style="color:var(--text3);font-weight:600">100%</td>
     </tr>`;
     return body + totalRow;
   }
@@ -4695,13 +4695,13 @@ async function loadSummary() {
     const rows = cats.map(cat => {
       const cells = colKeys.map(k => {
         const v = (catFactMap[cat]||{})[k] || 0;
-        return `<td class="num" style="color:${v !== 0 ? '#111827' : 'var(--text3)'}">${v !== 0 ? fmt(v) : '—'}</td>`;
+        return `<td class="num" style="color:${v !== 0 ? 'var(--text)' : 'var(--text3)'}">${v !== 0 ? fmt(v) : '—'}</td>`;
       }).join('');
       return `<tr>${cells}</tr>`;
     }).join('');
     const totalCells = colKeys.map(k => {
       const total = cats.reduce((s, cat) => s + ((catFactMap[cat]||{})[k]||0), 0);
-      const c = total !== 0 ? '#111827' : 'var(--text3)';
+      const c = total !== 0 ? 'var(--text)' : 'var(--text3)';
       return `<td class="num" style="color:${c};font-weight:600">${total !== 0 ? fmt(total) : '—'}</td>`;
     }).join('');
     const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">${totalCells}</tr>`;
@@ -4774,9 +4774,9 @@ async function loadSummary() {
       <div class="kpi-label">Доходы</div>
       <div class="kpi-val" style="color:var(--income)">${fmt(totalIncome)}</div>
     </div>
-    <div class="kpi" style="--kpi-accent:var(--expense)">
-      <div class="kpi-label">Расходы${_summaryChar!=='all'?' ('+(_summaryChar==='Повседневный'?'повсед.':'эпизод.')+')'  :''}</div>
-      <div class="kpi-val" style="color:var(--expense)">${fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0))}</div>
+    <div class="kpi" style="--kpi-accent:#bf7419">
+      <div class="kpi-label">Расходы${_summaryChar!=='all'?' ('+({'Повседневный':'повсед.','Фиксированный':'фикс.','Эпизодический':'эпизод.'}[_summaryChar]||'')+')':''}</div>
+      <div class="kpi-val" style="color:#bf7419">${fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0))}</div>
       <div class="kpi-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
         ${(()=>{
           const expByChar = ch => (txAll||[]).filter(r => r.account_to==='Расход' && r.categories?.character===ch).reduce((s,r)=>s+ +r.amount,0);
@@ -4789,17 +4789,17 @@ async function loadSummary() {
         })()}
       </div>
     </div>
-    <div class="kpi" style="--kpi-accent:#E65100">
+    <div class="kpi" style="--kpi-accent:#C0741A">
       <div class="kpi-label">Обязательства</div>
-      <div class="kpi-val" style="color:#E65100">${fmt(totalObligation)}</div>
+      <div class="kpi-val" style="color:#C0741A">${fmt(totalObligation)}</div>
     </div>
-    <div class="kpi" style="--kpi-accent:${profit>=0?'var(--income)':'var(--expense)'}">
+    <div class="kpi" style="--kpi-accent:${profit>=0?'var(--income)':'#bf7419'}">
       <div class="kpi-label">Профит</div>
-      <div class="kpi-val" style="color:${profit>=0?'var(--income)':'var(--expense)'}">${fmt(profit)}</div>
+      <div class="kpi-val" style="color:${profit>=0?'var(--income)':'#bf7419'}">${fmt(profit)}</div>
     </div>
-    <div class="kpi" style="--kpi-accent:var(--accent)">
+    <div class="kpi" style="--kpi-accent:#2AA7CC">
       <div class="kpi-label">Сбережения</div>
-      <div class="kpi-val" style="color:${totalSavings>=0?'var(--income)':'var(--expense)'}">${fmt(totalSavings)}</div>
+      <div class="kpi-val" style="color:${totalSavings>=0?'var(--income)':'#bf7419'}">${fmt(totalSavings)}</div>
     </div>
     <div class="kpi" style="--kpi-accent:var(--accent)">
       <div class="kpi-label">Норма сбережений</div>
@@ -4808,10 +4808,10 @@ async function loadSummary() {
   </div>
 
 
-  ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)', 'rgba(5,150,105,0.1)', 'var(--income)')}
-  ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? 'var(--expense)' : 'var(--text3)', 'rgba(220,38,38,0.1)', 'var(--expense)')}
-  ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? 'var(--expense)' : 'var(--text3)', 'rgba(37,99,235,0.1)', '#111827')}
-  ${section('Обязательства', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null, 'rgba(230,81,0,0.1)', '#111827')}
+  ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)', 'rgba(94,155,30,0.10)', 'var(--income)')}
+  ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? '#bf7419' : 'var(--text3)', 'rgba(191,116,25,0.10)', '#bf7419')}
+  ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? '#bf7419' : 'var(--text3)', 'rgba(31,164,151,0.10)', 'var(--text)')}
+  ${section('Обязательства', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null, 'rgba(192,116,26,0.10)', 'var(--text)')}
 </div>`;
   setTimeout(bindSummaryHover, 0);
 
