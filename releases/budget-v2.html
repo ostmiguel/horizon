@@ -4568,7 +4568,8 @@ function loadHelp() {
 // ── SUMMARY PAGE ──
 let _summaryYear = new Date().getFullYear();
 let _summaryMode = 'year'; // 'year' | 'all'
-let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Эпизодический'
+let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Фиксированный' | 'Эпизодический'
+let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (категории)
 
 async function loadSummary() {
   const sidebarYear = +document.getElementById('selYear')?.value;
@@ -4626,17 +4627,17 @@ async function loadSummary() {
       }
 
       const char = r.categories?.character || null; // character is on subcategory level
-      const charOk = _summaryChar === 'all' || char === _summaryChar || !char;
+      const gkey = _summaryGran === 'cat' ? cat : sub;  // гранулярность: категория или подкатегория
       if (from === 'Доход') {
-        addCat(income, incomeCM, sub, amt);
+        addCat(income, incomeCM, gkey, amt);
       } else if (to === 'Расход') {
-        if (_summaryChar === 'all' || char === _summaryChar) addCat(expense, expenseCM, sub, amt);
+        if (_summaryChar === 'all' || char === _summaryChar) addCat(expense, expenseCM, gkey, amt);
       } else if (savingsAccNames.has(to) && operAccNames.has(from)) {
         addCat(savings, savingsCM, to, amt);
       } else if (savingsAccNames.has(from) && operAccNames.has(to)) {
         addCat(savings, savingsCM, from, -amt);
       } else if (to === 'Обязательства') {
-        addCat(obligation, obligationCM, sub, amt);
+        addCat(obligation, obligationCM, gkey, amt);
       }
     });
     return { income, expense, savings, obligation, incomeCM, expenseCM, savingsCM, obligationCM };
@@ -4644,11 +4645,6 @@ async function loadSummary() {
 
   const fact    = groupTx(txAll||[]);
   const plan    = groupTx(plAll||[]);
-  // Unfiltered expense breakdown for KPI (always shows full picture)
-  const _savedChar = _summaryChar;
-  _summaryChar = 'all';
-  const factAll = groupTx(txAll||[]);
-  _summaryChar = _savedChar;
 
   const totalIncome     = Object.values(fact.income).reduce((s,v)=>s+v,0);
   const totalExpense    = Object.values(fact.expense).reduce((s,v)=>s+v,0);
@@ -4727,7 +4723,7 @@ async function loadSummary() {
           <div class="sum-card-title" style="${hStyle}">${title}</div>
           <table class="sum-table">
             <thead><tr>
-              <th>Категория</th>
+              <th>${_summaryGran==='cat'?'Категория':'Подкатегория'}</th>
               <th class="num">План</th>
               <th class="num">Факт</th>
               <th class="num">%</th>
@@ -4760,8 +4756,14 @@ async function loadSummary() {
       </div>
       <div style="width:1px;height:20px;background:var(--border)"></div>
       <div class="summary-year-bar" style="margin-bottom:0">
+        <button class="sy-btn${_summaryGran==='sub'?' active':''}" onclick="setSummaryGran('sub')">Подкатегории</button>
+        <button class="sy-btn${_summaryGran==='cat'?' active':''}" onclick="setSummaryGran('cat')">Категории</button>
+      </div>
+      <div style="width:1px;height:20px;background:var(--border)"></div>
+      <div class="summary-year-bar" style="margin-bottom:0">
         <button class="sy-btn${_summaryChar==='all'?' active':''}" onclick="setSummaryChar('all')">Все расходы</button>
         <button class="sy-btn${_summaryChar==='Повседневный'?' active':''}" onclick="setSummaryChar('Повседневный')">Повседневные</button>
+        <button class="sy-btn${_summaryChar==='Фиксированный'?' active':''}" onclick="setSummaryChar('Фиксированный')">Фиксированные</button>
         <button class="sy-btn${_summaryChar==='Эпизодический'?' active':''}" onclick="setSummaryChar('Эпизодический')">Эпизодические</button>
       </div>
     </div>
@@ -4777,12 +4779,12 @@ async function loadSummary() {
       <div class="kpi-val" style="color:var(--expense)">${fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0))}</div>
       <div class="kpi-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
         ${(()=>{
-          const allExp  = Object.entries(factAll.expense);
-          const regExp  = allExp.filter(([sub])=>{ const c=(cats||[]).find(x=>x.subcategory===sub); return c&&c.character==='Повседневный'; }).reduce((s,[,v])=>s+v,0);
-          const episExp = allExp.filter(([sub])=>{ const c=(cats||[]).find(x=>x.subcategory===sub); return c&&c.character==='Эпизодический'; }).reduce((s,[,v])=>s+v,0);
+          const expByChar = ch => (txAll||[]).filter(r => r.account_to==='Расход' && r.categories?.character===ch).reduce((s,r)=>s+ +r.amount,0);
+          const regExp = expByChar('Повседневный'), fixExp = expByChar('Фиксированный'), episExp = expByChar('Эпизодический');
           const parts = [];
-          if (regExp>0)  parts.push('<span title="Повседневные">↗ ' + fmtK(regExp) + '</span>');
-          if (episExp>0) parts.push('<span style="color:var(--neutral)" title="Эпизодические">✦ ' + fmtK(episExp) + '</span>');
+          if (regExp>0)  parts.push('<span style="color:#167F73" title="Повседневные">повсед. ' + fmtK(regExp) + '</span>');
+          if (fixExp>0)  parts.push('<span style="color:#1D7E97" title="Фиксированные">фикс. ' + fmtK(fixExp) + '</span>');
+          if (episExp>0) parts.push('<span style="color:#5E7A12" title="Эпизодические">эпизод. ' + fmtK(episExp) + '</span>');
           return parts.join('<span style="color:var(--border2)"> · </span>');
         })()}
       </div>
@@ -4850,6 +4852,11 @@ function setSummaryYear(y) {
 
 function setSummaryMode(mode) {
   _summaryMode = mode;
+  loadSummary();
+}
+
+function setSummaryGran(g) {
+  _summaryGran = g;
   loadSummary();
 }
 
