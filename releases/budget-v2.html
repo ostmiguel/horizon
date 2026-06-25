@@ -967,7 +967,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
     <div class="nav-item" data-page="references"><span class="nav-dot" aria-hidden="true"></span>Справочники</div>
-    <div class="nav-item" data-page="help"><span class="nav-dot" aria-hidden="true"></span>Справка</div>
+    <div class="nav-item" data-page="help"><span class="nav-dot" aria-hidden="true"></span>Информация</div>
     <div class="nav-item" id="navLab" data-page="lab" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Лаборатория</div>
     <div class="nav-item" data-page="profile"><span class="nav-dot" aria-hidden="true"></span>Профиль</div>
   </div>
@@ -1323,7 +1323,7 @@ function loadPage(page) {
     if (icon)  icon.classList.toggle('act',  p === page);
     if (label) label.classList.toggle('act', p === page);
   });
-  if (page === 'dashboard')     (window.NEW_ARCH ? loadDashboardNew() : loadDashboard());
+  if (page === 'dashboard')     loadDashboardNew();
   else if (page === 'forecast')     loadForecastStub();
   else if (page === 'references')   loadReferences();
   else if (page === 'loans')        loadLoans();
@@ -3195,7 +3195,7 @@ async function saveQuickTx() {
 
     closeQuickModal();
     toast('✓ Сохранено');
-    loadDashboard();
+    loadDashboardNew();
   } catch(err) {
     toast('Ошибка: ' + err.message, false);
     if (btn) btn.disabled = false;
@@ -4263,7 +4263,7 @@ function loadHelp() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = `
 <div class="help-wrap">
-  <div class="page-title" style="margin-bottom:4px">Справка</div>
+  <div class="page-title" style="margin-bottom:4px">Информация</div>
   <div style="font-size:12px;color:var(--text3);margin-bottom:20px">Как работать с приложением</div>
 
   <div class="help-toc">
@@ -6425,10 +6425,6 @@ async function loadDashboardNew() {
           <div class="page-title">Обзор</div>
           <div class="page-sub">${new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})}</div>
         </div>
-        <button onclick="localStorage.setItem('hz_new_arch','0');window.NEW_ARCH=false;loadDashboard();"
-          style="font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer">
-          ← Старый вид
-        </button>
       </div>
 
       <div class="hero">
@@ -6952,20 +6948,19 @@ window.onload = async () => {
   const OWNER_ID = '60703af0-df79-484a-b965-45d5662083c6';
   const isOwner = sessionCheck.data.session?.user?.id === OWNER_ID;
   window._isOwner = isOwner;
-  window.NEW_ARCH = isOwner && localStorage.getItem('hz_new_arch') === '1';
+  window.NEW_ARCH = true;  // новый вид — основной для всех пользователей
 
-  // Show all owner nav items regardless of NEW_ARCH toggle
+  // Основные страницы нового вида открыты всем.
+  ['navGoals', 'navOps', 'navBudget'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = '';
+  });
+  // Прогноз и Лаборатория ещё в разработке — только владельцу.
   if (isOwner) {
-    ['navLab', 'navGoals', 'navOps', 'navBudget'].forEach(id => {
+    ['navForecast', 'navLab'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = '';
     });
-  }
-
-  // New-arch nav: показать «Прогноз» (в обычном режиме — стаб, скрыт)
-  if (window.NEW_ARCH) {
-    const fEl = document.getElementById('navForecast');
-    if (fEl) fEl.style.display = '';
   }
 
   await loadMeta();
