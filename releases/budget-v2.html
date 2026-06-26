@@ -7002,11 +7002,84 @@ window.onload = async () => {
   }
 
   await loadMeta();
+  // Новый пользователь без счетов — гайд первого запуска (категории уже посеяны).
+  if (!(accounts_cache && accounts_cache.length)) { showOnboarding(); return; }
   let savedPage = localStorage.getItem('hz_page') || 'dashboard';
   if (savedPage === 'plan') savedPage = 'budget';            // лист «План» снят
   if (savedPage === 'transactions') savedPage = 'operations'; // лист «Транзакции» снят → «Операции»
   loadPage(savedPage);
 };
+
+// ── Онбординг первого запуска: добавить счета → старт ─────────────────────────
+function showOnboarding() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = `
+    <div style="max-width:560px;margin:40px auto 0;padding:0 16px">
+      <div style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Добро пожаловать</div>
+      <div class="page-title" style="margin-bottom:6px">Настроим Horizon за минуту</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.55;margin-bottom:22px">Категории мы уже подготовили (поправишь в Справочниках). Осталось добавить твои счета — карты, наличные, вклады. С них будут списываться расходы и на них приходить доходы.</div>
+
+      <div class="card" style="padding:18px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:14px">Шаг 1 · Добавь счета</div>
+        <div style="display:grid;grid-template-columns:1fr 130px 130px;gap:10px;align-items:end">
+          <div class="field" style="margin:0"><div class="field-label">Название</div><input class="field-input" id="onbName" placeholder="Карта / Наличные" onkeydown="if(event.key==='Enter')addOnboardingAccount()"></div>
+          <div class="field" style="margin:0"><div class="field-label">Остаток, ₽</div><input class="field-input" id="onbBal" type="number" placeholder="0"></div>
+          <div class="field" style="margin:0"><div class="field-label">Тип</div><select class="field-select" id="onbType"><option value="Актив">Актив (деньги)</option><option value="Пассив">Пассив (долг)</option></select></div>
+        </div>
+        <button class="btn-ghost" style="margin-top:12px" onclick="addOnboardingAccount()">+ Добавить счёт</button>
+        <div id="onbList" style="margin-top:14px"></div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px;gap:12px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--text3)">Дальше: вноси операции на листе «Операции», настраивай «Бюджет».</div>
+        <button class="btn-primary" id="onbStart" onclick="finishOnboarding()" disabled style="opacity:.5;cursor:not-allowed">Начать</button>
+      </div>
+    </div>`;
+  renderOnboardingList();
+  setTimeout(() => document.getElementById('onbName')?.focus(), 100);
+}
+
+async function addOnboardingAccount() {
+  const name = document.getElementById('onbName')?.value.trim();
+  const bal  = parseFloat(document.getElementById('onbBal')?.value) || 0;
+  const type = document.getElementById('onbType')?.value || 'Актив';
+  if (!name) { toast('Введи название счёта', false); return; }
+  const { error } = await sb.from('accounts').insert({
+    name, account_type: type, initial_balance: bal, color: '#2AA7CC',
+    include_in_balance: type === 'Актив',
+  });
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  await loadMeta();
+  document.getElementById('onbName').value = '';
+  document.getElementById('onbBal').value = '';
+  renderOnboardingList();
+  document.getElementById('onbName')?.focus();
+}
+
+function renderOnboardingList() {
+  const list = document.getElementById('onbList');
+  const accs = (accounts_cache || []).filter(a => a.account_type !== 'Поток');
+  if (list) {
+    list.innerHTML = accs.length
+      ? accs.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border)">
+          <span style="font-size:13px;color:var(--text)"><span style="width:8px;height:8px;border-radius:2px;background:${a.account_type==='Актив'?'#5E9B1E':'#C0741A'};display:inline-block;margin-right:8px"></span>${esc(a.name)} <span style="font-size:11px;color:var(--text3)">· ${a.account_type}</span></span>
+          <span style="font-size:13px;font-family:Sora,sans-serif;color:var(--text2)">${new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(+a.initial_balance||0)} ₽</span>
+        </div>`).join('')
+      : '<div style="font-size:12px;color:var(--text3);padding-top:6px">Пока пусто — добавь хотя бы один счёт.</div>';
+  }
+  const start = document.getElementById('onbStart');
+  if (start) {
+    const ready = accs.length > 0;
+    start.disabled = !ready;
+    start.style.opacity = ready ? '1' : '.5';
+    start.style.cursor = ready ? 'pointer' : 'not-allowed';
+  }
+}
+
+function finishOnboarding() {
+  if (!(accounts_cache && accounts_cache.filter(a => a.account_type !== 'Поток').length)) return;
+  loadPage('dashboard');
+}
 // ── LAB FORECAST MODAL ──────────────────────────────────────────────────────
 function closeLabModal() {
   document.getElementById('labForecastModal').classList.remove('open');
