@@ -65,7 +65,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # ── Rate limit + CSRF — только для API, до открытия соединения с БД ──
         if path.startswith("/api/"):
             ip = _client_ip(request)
-            if path.startswith("/api/auth/"):
+            # Строгий лимит — только на инициацию входа/коллбэки OAuth.
+            # /api/auth/me и /logout зовутся часто (каждая загрузка) → общий лимит.
+            auth_strict = (path.startswith("/api/auth/")
+                           and not path.endswith("/me")
+                           and not path.endswith("/logout"))
+            if auth_strict:
                 ok, retry = _rate_ok(f"auth:{ip}", AUTH_LIMIT, AUTH_WINDOW)
             else:
                 ok, retry = _rate_ok(f"api:{ip}", API_LIMIT, API_WINDOW)
