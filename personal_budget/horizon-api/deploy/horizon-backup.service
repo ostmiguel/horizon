@@ -1,0 +1,8 @@
+[Unit]
+Description=Horizon — daily local PostgreSQL backup (pg_dump + checksum + verify)
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/horizon/personal_budget/horizon-api/deploy/horizon-backup.sh
+# при сбое бэкапа — пометить юнит как failed (видно в systemctl/мониторинге)
