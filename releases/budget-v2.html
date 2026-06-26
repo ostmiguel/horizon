@@ -394,6 +394,8 @@ body {
 @keyframes modalIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 .modal-title { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 18px; }
 .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.onb-grid { display: grid; grid-template-columns: 1fr 130px 130px; gap: 10px; align-items: end; }
+@media (max-width: 560px) { .onb-grid { grid-template-columns: 1fr; } }
 .btn-primary { background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sm); padding: 8px 18px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: Inter, sans-serif; transition: background 0.15s; }
 .btn-primary:hover { background: var(--accent2); }
 .btn-ghost  { background: transparent; color: var(--text2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 18px; font-size: 12px; cursor: pointer; font-family: Inter, sans-serif; }
@@ -7021,7 +7023,7 @@ function showOnboarding() {
 
       <div class="card" style="padding:18px">
         <div style="font-size:13px;font-weight:600;margin-bottom:14px">Шаг 1 · Добавь счета</div>
-        <div style="display:grid;grid-template-columns:1fr 130px 130px;gap:10px;align-items:end">
+        <div class="onb-grid">
           <div class="field" style="margin:0"><div class="field-label">Название</div><input class="field-input" id="onbName" placeholder="Карта / Наличные" onkeydown="if(event.key==='Enter')addOnboardingAccount()"></div>
           <div class="field" style="margin:0"><div class="field-label">Остаток, ₽</div><input class="field-input" id="onbBal" type="number" placeholder="0"></div>
           <div class="field" style="margin:0"><div class="field-label">Тип</div><select class="field-select" id="onbType"><option value="Актив">Актив (деньги)</option><option value="Пассив">Пассив (долг)</option></select></div>
@@ -7451,7 +7453,10 @@ function renderOpsRows() {
   }
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Нет операций по фильтрам</td></tr>`;
+    const noneAtAll = !(_opsData.rows && _opsData.rows.length);
+    tbody.innerHTML = noneAtAll
+      ? `<tr><td colspan="5" style="text-align:center;padding:44px 20px;color:var(--text3);font-size:13px">Пока нет операций за этот период.<br><button class="btn-primary" style="margin-top:14px" onclick="openOpsModal()">+ Добавить первую</button></td></tr>`
+      : `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Нет операций по фильтрам</td></tr>`;
     return;
   }
 
