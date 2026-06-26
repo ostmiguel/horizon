@@ -14,7 +14,7 @@ cp -f "$T/chart.js" "$APP/static/"
 
 # ── backend ──
 cp -f "$SRC/forecast_cron.py" "$SRC/metrics_core.py" "$SRC/plan_materialize.py" \
-      "$SRC/main.py" "$SRC/middleware.py" "$APP/"
+      "$SRC/seed_user.py" "$SRC/main.py" "$SRC/middleware.py" "$APP/"
 cp -f "$SRC/routers/"*.py "$APP/routers/"
 mkdir -p "$APP/migrations" "$APP/deploy"
 cp -f "$SRC/migrations/"*.sql "$APP/migrations/"

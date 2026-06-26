@@ -6,6 +6,8 @@ import secrets
 import asyncpg
 from urllib.parse import urlencode
 
+from seed_user import seed_user_categories
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
@@ -99,6 +101,8 @@ async def _get_or_create_user(db, provider: str, provider_id: str, email: str, n
               last_login=NOW()
         RETURNING *
     """, email, name, provider, provider_id)
+    # Посев дефолтных категорий новому пользователю (идемпотентно — только если их нет).
+    await seed_user_categories(db, row["id"])
     return dict(row)
 
 async def _create_session(db, user_id) -> str:

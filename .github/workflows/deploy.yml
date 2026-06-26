@@ -30,6 +30,7 @@ jobs:
             personal_budget/horizon-api/forecast_cron.py \
             personal_budget/horizon-api/metrics_core.py \
             personal_budget/horizon-api/plan_materialize.py \
+            personal_budget/horizon-api/seed_user.py \
             personal_budget/horizon-api/main.py \
             personal_budget/horizon-api/middleware.py \
             personal_budget/horizon-api/routers \

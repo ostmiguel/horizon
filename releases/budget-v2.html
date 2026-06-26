@@ -2543,7 +2543,7 @@ function renderCatRows(rows) {
   if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Нет категорий</td></tr>';
   return rows.map(c => `<tr data-cat-id="${c.id}">
     <td>${c.category}</td>
-    <td style="color:var(--text2)">${c.subcategory}</td>
+    <td style="color:var(--text2)">${c.subcategory}${c.role?' <span class="tag" style="font-size:9px;color:var(--text3)" title="Системная категория — используется приложением, удаление запрещено">сист.</span>':''}</td>
     <td><span class="tag">${c.group_name}</span></td>
     <td>${c.character?`<span class="tag">${c.character}</span>`:'—'}</td>
     <td style="text-align:right">
@@ -2871,10 +2871,11 @@ async function deleteCat(id) {
 
 // ── «⋮»-меню в Справочниках (категории и счета) ──────────────────────────────
 function catMenu(btn, id) {
-  bgtMenu(btn, [
-    { label: 'Редактировать', fn: () => editCat(id) },
-    { label: 'Удалить', danger: true, fn: () => deleteCat(id) },
-  ]);
+  const c = (window._allCats || cats || []).find(x => x.id === id);
+  const items = [{ label: 'Редактировать', fn: () => editCat(id) }];
+  // Системные категории (role) удалять нельзя — на них опирается код.
+  if (!(c && c.role)) items.push({ label: 'Удалить', danger: true, fn: () => deleteCat(id) });
+  bgtMenu(btn, items);
 }
 function accMenu(btn, id) {
   const a = (window._allAccs || []).find(x => x.id === id);

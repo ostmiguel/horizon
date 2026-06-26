@@ -67,6 +67,11 @@ async def update_category(cat_id: int, data: CategoryUpdate, request: Request):
 async def delete_category(cat_id: int, request: Request):
     user_id = request.state.user_id
     db = request.state.db
+    # Системные категории (role задан) — на них ссылается код, удалять нельзя.
+    role = await db.fetchval(
+        "SELECT role FROM categories WHERE id=$1 AND user_id=$2", cat_id, user_id)
+    if role:
+        raise HTTPException(400, "Системная категория — удаление запрещено")
     await db.execute(
         "DELETE FROM categories WHERE id=$1 AND user_id=$2",
         cat_id, user_id

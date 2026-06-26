@@ -24,12 +24,6 @@ from plan_materialize import materialize_rules  # noqa: E402
 load_dotenv()
 DB_URL = os.getenv("DATABASE_URL")
 
-# category_ids для авто-генерации плана из графика кредита
-# TODO: счёт 'Карта Тбанк' и id 179/144 захардкожены — вынести в настройки/loan-конфиг
-CAT_PRINCIPAL = 179  # Кредиты - тело  (→ Обязательства)
-CAT_INTEREST  = 144  # Кредиты - процент (→ Расход)
-
-
 async def active_user_ids(conn) -> list:
     """Все пользователи, у которых есть хоть одна транзакция."""
     rows = await conn.fetch("SELECT DISTINCT user_id FROM transactions")
@@ -37,9 +31,21 @@ async def active_user_ids(conn) -> list:
 
 
 async def generate_loan_plan(conn, user_id, year, month) -> int:
-    """В первый день месяца разворачивает loan_schedule в строки plan (per-user)."""
+    """В первый день месяца разворачивает loan_schedule в строки plan (per-user).
+    Категории — по системной метке role, счёт списания — из самого кредита
+    (account_from), без захардкоженных id и имён."""
+    cat_principal = await conn.fetchval(
+        "SELECT id FROM categories WHERE user_id=$1 AND role='loan_principal'", user_id)
+    cat_interest = await conn.fetchval(
+        "SELECT id FROM categories WHERE user_id=$1 AND role='loan_interest'", user_id)
+    fallback_acc = await conn.fetchval("""
+        SELECT name FROM accounts
+        WHERE user_id=$1 AND account_type='Актив' AND is_active=true
+        ORDER BY id LIMIT 1
+    """, user_id)
+
     loan_rows = await conn.fetch("""
-        SELECT ls.loan_id, ls.date, ls.principal, ls.interest
+        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.account_from
         FROM loan_schedule ls
         JOIN loans l ON ls.loan_id = l.id
         WHERE l.user_id = $1
@@ -60,17 +66,18 @@ async def generate_loan_plan(conn, user_id, year, month) -> int:
 
     created = 0
     for lr in loan_rows:
-        if lr["principal"] and float(lr["principal"]) > 0:
+        acc = lr["account_from"] or fallback_acc
+        if cat_principal and lr["principal"] and float(lr["principal"]) > 0:
             await conn.execute("""
                 INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                VALUES ($1,$2,$3,'Карта Тбанк','Обязательства',$4,'loan_schedule')
-            """, user_id, lr["date"], float(lr["principal"]), CAT_PRINCIPAL)
+                VALUES ($1,$2,$3,$4,'Обязательства',$5,'loan_schedule')
+            """, user_id, lr["date"], float(lr["principal"]), acc, cat_principal)
             created += 1
-        if lr["interest"] and float(lr["interest"]) > 0:
+        if cat_interest and lr["interest"] and float(lr["interest"]) > 0:
             await conn.execute("""
                 INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                VALUES ($1,$2,$3,'Карта Тбанк','Расход',$4,'loan_schedule')
-            """, user_id, lr["date"], float(lr["interest"]), CAT_INTEREST)
+                VALUES ($1,$2,$3,$4,'Расход',$5,'loan_schedule')
+            """, user_id, lr["date"], float(lr["interest"]), acc, cat_interest)
             created += 1
     return created
 

@@ -6,9 +6,26 @@ from calendar import monthrange
 
 router = APIRouter(prefix="/api/loans", tags=["loans"])
 
-# category_ids для плановых записей кредита
-CAT_PRINCIPAL = 179  # Кредиты - тело  (→ Обязательства)
-CAT_INTEREST  = 144  # Кредиты - процент (→ Расход)
+
+async def _first_asset(db, user_id):
+    """Имя первого активного счёта-актива пользователя (дефолтный счёт списания)."""
+    return await db.fetchval("""
+        SELECT name FROM accounts
+        WHERE user_id=$1 AND account_type='Актив' AND is_active=true
+        ORDER BY id LIMIT 1
+    """, user_id)
+
+
+async def _loan_cat_ids(db, user_id):
+    """category_id кредитных категорий пользователя по системной метке role.
+    Возвращает (principal_id, interest_id) — без захардкоженных id."""
+    rows = await db.fetch("""
+        SELECT role, id FROM categories
+        WHERE user_id=$1 AND role IN ('loan_principal','loan_interest')
+    """, user_id)
+    m = {r["role"]: r["id"] for r in rows}
+    return m.get("loan_principal"), m.get("loan_interest")
+
 
 class LoanCreate(BaseModel):
     name: str
@@ -19,6 +36,7 @@ class LoanCreate(BaseModel):
     total_payments: int
     next_payment_date: Optional[date] = None
     color: Optional[str] = "#e24b4a"
+    account_from: Optional[str] = None  # счёт списания платежа; по умолч. — первый актив
 
 class ScheduleRow(BaseModel):
     month_num: int
@@ -44,13 +62,14 @@ async def get_loans(request: Request):
 async def create_loan(data: LoanCreate, request: Request):
     user_id = request.state.user_id
     db = request.state.db
+    account_from = data.account_from or await _first_asset(db, user_id)
     row = await db.fetchrow("""
         INSERT INTO loans
-          (user_id, name, initial_amount, current_balance, rate, monthly_payment, total_payments, next_payment_date, color)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+          (user_id, name, initial_amount, current_balance, rate, monthly_payment, total_payments, next_payment_date, color, account_from)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
     """, user_id, data.name, data.initial_amount, data.current_balance,
         data.rate, data.monthly_payment, data.total_payments,
-        data.next_payment_date, data.color)
+        data.next_payment_date, data.color, account_from)
     return dict(row)
 
 @router.get("/{loan_id}/schedule")
@@ -118,8 +137,11 @@ async def generate_plan_from_loans(
     user_id = request.state.user_id
     db = request.state.db
 
+    cat_principal, cat_interest = await _loan_cat_ids(db, user_id)
+    fallback_acc = await _first_asset(db, user_id)
+
     rows = await db.fetch("""
-        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.name
+        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.name, l.account_from
         FROM loan_schedule ls
         JOIN loans l ON ls.loan_id = l.id
         WHERE l.user_id = $1
@@ -141,17 +163,18 @@ async def generate_plan_from_loans(
         created = 0
         for r in rows:
             pay_date = r["date"]
-            if r["principal"] and float(r["principal"]) > 0:
+            acc = r["account_from"] or fallback_acc
+            if cat_principal and r["principal"] and float(r["principal"]) > 0:
                 await db.execute("""
                     INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                    VALUES ($1,$2,$3,'Карта Тбанк','Обязательства',$4,'loan_schedule')
-                """, user_id, pay_date, float(r["principal"]), CAT_PRINCIPAL)
+                    VALUES ($1,$2,$3,$4,'Обязательства',$5,'loan_schedule')
+                """, user_id, pay_date, float(r["principal"]), acc, cat_principal)
                 created += 1
-            if r["interest"] and float(r["interest"]) > 0:
+            if cat_interest and r["interest"] and float(r["interest"]) > 0:
                 await db.execute("""
                     INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                    VALUES ($1,$2,$3,'Карта Тбанк','Расход',$4,'loan_schedule')
-                """, user_id, pay_date, float(r["interest"]), CAT_INTEREST)
+                    VALUES ($1,$2,$3,$4,'Расход',$5,'loan_schedule')
+                """, user_id, pay_date, float(r["interest"]), acc, cat_interest)
                 created += 1
 
     return {"ok": True, "created": created, "year": year, "month": month}
