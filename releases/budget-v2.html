@@ -602,6 +602,23 @@ body {
 .mob-nav-icon.act { color: var(--accent); }
 .mob-nav-label { font-size: 11px; color: var(--text3); font-family: Inter, sans-serif; }
 .mob-nav-label.act { color: var(--accent); font-weight: 500; }
+.mob-nav-item.act .mob-nav-icon, .mob-nav-item.act .mob-nav-label { color: var(--accent); }
+.mob-nav-add { flex: 0 0 auto; width: 54px; height: 54px; margin-top: -18px; border: none; cursor: pointer;
+  border-radius: 17px; background: linear-gradient(135deg, #2AA7CC, #1FA497); color: #fff;
+  font-size: 26px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 18px rgba(31,164,151,.38); }
+.mob-nav-add:active { transform: scale(.95); }
+/* ── Мобильная лента операций ── */
+.mfeed { max-width: 640px; margin: 0 auto; }
+.mfeed-day { font-size: 12px; font-weight: 600; color: var(--text2); padding: 16px 4px 6px; display: flex; justify-content: space-between; align-items: baseline; }
+.mfeed-day .s { font-size: 11px; font-weight: 500; color: var(--text3); font-variant-numeric: tabular-nums; }
+.mop { display: flex; align-items: center; gap: 12px; background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 13px 14px; margin-bottom: 8px; box-shadow: var(--shadow); }
+.mop-main { flex: 1; min-width: 0; }
+.mop-name { font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mop-sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mop-amt { font-size: 15px; font-weight: 600; font-family: Sora, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mop-del { background: none; border: none; color: var(--text3); font-size: 18px; cursor: pointer; padding: 6px; line-height: 1; }
+.mop-del:active { color: #B0492A; }
 
 
 .desktop-val { display: inline; }
@@ -990,17 +1007,14 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 <!-- MAIN -->
 <!-- MOBILE BOTTOM NAV -->
 <nav class="mobile-nav" id="mobileNav">
-  <div class="mob-nav-item" onclick="loadPage('dashboard')">
-    <i class="ti ti-layout-dashboard mob-nav-icon" id="mnav-dashboard" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-dashboard">Дашборд</span>
+  <div class="mob-nav-item" id="mnav-ops" onclick="mobileGo('ops')">
+    <i class="ti ti-list mob-nav-icon" aria-hidden="true"></i>
+    <span class="mob-nav-label">Операции</span>
   </div>
-  <div class="mob-nav-item" onclick="loadPage('summary')">
-    <i class="ti ti-chart-bar mob-nav-icon" id="mnav-summary" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-summary">Сводка</span>
-  </div>
-  <div class="mob-nav-item" onclick="loadPage('loans')">
-    <i class="ti ti-credit-card mob-nav-icon" id="mnav-loans" aria-hidden="true"></i>
-    <span class="mob-nav-label" id="mnavl-loans">Кредиты</span>
+  <button class="mob-nav-add" onclick="openQuickModal('expense')" aria-label="Добавить операцию"><i class="ti ti-plus" aria-hidden="true"></i></button>
+  <div class="mob-nav-item" id="mnav-more" onclick="mobileGo('more')">
+    <i class="ti ti-dots mob-nav-icon" aria-hidden="true"></i>
+    <span class="mob-nav-label">Ещё</span>
   </div>
 </nav>
 
@@ -3198,7 +3212,7 @@ async function saveQuickTx() {
 
     closeQuickModal();
     toast('✓ Сохранено');
-    loadDashboardNew();
+    if (window.MOBILE) mobileFeed(); else loadDashboardNew();
   } catch(err) {
     toast('Ошибка: ' + err.message, false);
     if (btn) btn.disabled = false;
@@ -7006,6 +7020,8 @@ window.onload = async () => {
   await loadMeta();
   // Новый пользователь без счетов — гайд первого запуска (категории уже посеяны).
   if (!(accounts_cache && accounts_cache.length)) { showOnboarding(); return; }
+  // Мобильный режим (узкий экран) — capture-first лента, без десктоп-страниц.
+  if (window.innerWidth < 768) { initMobile(); return; }
   let savedPage = localStorage.getItem('hz_page') || 'dashboard';
   if (savedPage === 'plan') savedPage = 'budget';            // лист «План» снят
   if (savedPage === 'transactions') savedPage = 'operations'; // лист «Транзакции» снят → «Операции»
@@ -7080,7 +7096,129 @@ function renderOnboardingList() {
 
 function finishOnboarding() {
   if (!(accounts_cache && accounts_cache.filter(a => a.account_type !== 'Поток').length)) return;
+  if (window.innerWidth < 768) { initMobile(); return; }
   loadPage('dashboard');
+}
+
+// ── МОБАЙЛ v1: лента операций + capture (через quickModal) ────────────────────
+let _mobYear, _mobMonth, _mobScreen = 'ops';
+const _MOB_MS = ['', 'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+
+function initMobile() {
+  window.MOBILE = true;
+  const now = new Date();
+  _mobYear = now.getFullYear();
+  _mobMonth = now.getMonth() + 1;
+  mobileGo('ops');
+}
+
+function mobileGo(screen) {
+  _mobScreen = screen;
+  document.getElementById('mnav-ops')?.classList.toggle('act', screen === 'ops');
+  document.getElementById('mnav-more')?.classList.toggle('act', screen === 'more');
+  if (screen === 'more') mobileMore(); else mobileFeed();
+}
+
+function _mobFlow(t) {
+  if (t.account_from === 'Доход') return { sign: '+', color: '#5E9B1E' };
+  const c = t.categories;
+  const loan = c && (/Кредит/i.test(c.category || '') || /Кредит/i.test(c.subcategory || ''));
+  if (t.account_to === 'Расход') return { sign: '−', color: loan ? '#C0741A' : '#bf7419' };
+  if (t.account_to === 'Обязательства' || t.account_from === 'Дебиторка') return { sign: '−', color: '#C0741A' };
+  if (t.account_from === 'Обязательства') return { sign: '+', color: '#5E9B1E' };
+  return { sign: '', color: 'var(--text2)' };
+}
+
+async function mobileFeed() {
+  const main = document.getElementById('mainContent');
+  main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const now = new Date();
+  const f = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(n)));
+  const { data } = await sb.from('transactions').select('*, categories(category,subcategory)')
+    .eq('year', _mobYear).eq('month', _mobMonth).limit(100000);
+  const ops = (data || []).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  let html = `<div class="mfeed">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 2px">
+      <div class="page-title" style="font-size:19px">Операции</div>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:4px 6px;box-shadow:var(--shadow)">
+        <button onclick="mobMonth(-1)" style="background:none;border:none;font-size:18px;color:var(--text2);padding:2px 8px">‹</button>
+        <b style="font-size:13px;font-family:Sora,sans-serif;min-width:74px;text-align:center">${_MOB_MS[_mobMonth]} ${_mobYear}</b>
+        <button onclick="mobMonth(1)" style="background:none;border:none;font-size:18px;color:var(--text2);padding:2px 8px">›</button>
+      </div>
+    </div>`;
+
+  if (!ops.length) {
+    html += `<div style="text-align:center;padding:52px 20px;color:var(--text3);font-size:13px">Пока нет операций за этот месяц.<br><button class="btn-primary" style="margin-top:14px" onclick="openQuickModal('expense')">+ Записать первую</button></div>`;
+  } else {
+    const groups = [];
+    let cur = null;
+    ops.forEach(t => {
+      const d = (t.date || '').slice(0, 10);
+      if (!cur || cur.d !== d) { cur = { d, rows: [] }; groups.push(cur); }
+      cur.rows.push(t);
+    });
+    const todayStr = now.toISOString().slice(0, 10);
+    const yest = new Date(now); yest.setDate(now.getDate() - 1);
+    const yestStr = yest.toISOString().slice(0, 10);
+    const dayLabel = d => d === todayStr ? 'Сегодня' : d === yestStr ? 'Вчера'
+      : new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+    groups.forEach(g => {
+      const inc = g.rows.filter(t => _mobFlow(t).sign === '+').reduce((s, t) => s + +t.amount, 0);
+      const exp = g.rows.filter(t => _mobFlow(t).sign === '−').reduce((s, t) => s + +t.amount, 0);
+      const parts = [];
+      if (inc > 0) parts.push(`<span style="color:#5E9B1E">+${f(inc)}</span>`);
+      if (exp > 0) parts.push(`<span style="color:#bf7419">−${f(exp)}</span>`);
+      html += `<div class="mfeed-day"><span>${dayLabel(g.d)}</span><span class="s">${parts.join(' · ')}</span></div>`;
+      g.rows.forEach(t => {
+        const fl = _mobFlow(t);
+        const c = t.categories;
+        const name = (c && (c.subcategory || c.category)) || (t.account_from === 'Доход' ? 'Доход' : t.account_to);
+        const sub = t.note ? esc(t.note)
+          : (c && c.category && c.category !== name ? esc(c.category) : `${esc(t.account_from)} → ${esc(t.account_to)}`);
+        html += `<div class="mop">
+          <div class="mop-main"><div class="mop-name">${esc(name)}</div><div class="mop-sub">${sub}</div></div>
+          <div class="mop-amt" style="color:${fl.color}">${fl.sign}${f(t.amount)} ₽</div>
+          <button class="mop-del" onclick="mobDeleteOp(${t.id})" aria-label="Удалить">✕</button>
+        </div>`;
+      });
+    });
+  }
+  html += '</div>';
+  main.innerHTML = html;
+}
+
+function mobMonth(dir) {
+  _mobMonth += dir;
+  if (_mobMonth < 1) { _mobMonth = 12; _mobYear--; }
+  if (_mobMonth > 12) { _mobMonth = 1; _mobYear++; }
+  mobileFeed();
+}
+
+async function mobDeleteOp(id) {
+  if (!confirm('Удалить операцию?')) return;
+  const { error } = await sb.from('transactions').delete().eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  toast('✓ Удалено');
+  mobileFeed();
+}
+
+async function mobileMore() {
+  const main = document.getElementById('mainContent');
+  let user = {};
+  try { user = await (await fetch('/api/auth/me', { credentials: 'include' })).json(); } catch (e) {}
+  main.innerHTML = `<div class="mfeed">
+    <div class="page-title" style="font-size:19px;margin-bottom:14px">Ещё</div>
+    <div class="card" style="padding:16px 18px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:600">${esc(user.name || user.email || 'Профиль')}</div>
+      ${user.email ? `<div style="font-size:12px;color:var(--text3);margin-top:2px">${esc(user.email)}</div>` : ''}
+    </div>
+    <div class="card" style="padding:16px 18px;margin-bottom:12px;font-size:13px;color:var(--text2);line-height:1.55">
+      Аналитика, Бюджет, Сводка и настройки — удобнее на компьютере.<br>Открой <b>horizonapp.ru</b> на десктопе.
+    </div>
+    <button class="btn-ghost" style="width:100%" onclick="fetch(API_BASE+'/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>location.reload())">Выйти</button>
+  </div>`;
 }
 // ── LAB FORECAST MODAL ──────────────────────────────────────────────────────
 function closeLabModal() {
