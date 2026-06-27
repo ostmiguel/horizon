@@ -3070,7 +3070,15 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
 // ── QUICK ADD MODAL ──
 let _qmType = 'expense';
 
-async function openQuickModal(type) {
+async function openQuickModal(type, tx) {
+  window._qmEditId = tx ? tx.id : null;
+  // В режиме правки тип выводим из самой операции.
+  if (tx) {
+    type = tx.account_from === 'Доход' ? 'income'
+      : (tx.account_to === 'Обязательства' || tx.account_from === 'Обязательства'
+         || tx.account_to === 'Дебиторка' || tx.account_from === 'Дебиторка') ? 'obligation'
+      : tx.account_to === 'Расход' ? 'expense' : 'transfer';
+  }
   _qmType = type || 'expense';
   // Preload history for smart sorting
   try {
@@ -3081,18 +3089,28 @@ async function openQuickModal(type) {
     window._txCache = recent || [];
   } catch(e) { window._txCache = window._txCache || []; }
   const today = new Date().toISOString().split('T')[0];
-  document.getElementById('qmDate').value = today;
-  document.getElementById('qmAmount').value = '';
-  document.getElementById('qmNote').value = '';
+  const titleEl = document.getElementById('qmTitle');
+  if (titleEl) titleEl.textContent = tx ? 'Изменить операцию' : 'Новая транзакция';
+  document.getElementById('qmDate').value = tx ? (tx.date || '').slice(0, 10) : today;
+  document.getElementById('qmAmount').value = tx ? (+tx.amount) : '';
+  document.getElementById('qmNote').value = tx && tx.note ? tx.note : '';
   // Reset save button
   const btn = document.getElementById('qmSave');
   if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
   setQmType(_qmType);
+  // Префилл счетов/категории при правке (после setQmType, т.к. он пересобирает селекты).
+  if (tx) {
+    const fromSel = document.getElementById('qmFrom'); if (fromSel) fromSel.value = tx.account_from;
+    const toSel = document.getElementById('qmTo'); if (toSel) toSel.value = tx.account_to;
+    const subSel = document.getElementById('qmSubcat');
+    if (subSel && tx.category_id) { subSel.value = String(tx.category_id); onQmSubcatChange(); }
+  }
   document.getElementById('quickModal').classList.add('open');
   setTimeout(() => document.getElementById('qmAmount')?.focus(), 100);
 }
 
 function closeQuickModal() {
+  window._qmEditId = null;
   document.getElementById('quickModal').classList.remove('open');
 }
 
@@ -3204,11 +3222,17 @@ async function saveQuickTx() {
       return;
     }
 
-    const row = { date, amount, account_from: from, account_to: to, note, use_in_forecast: true, source: 'manual' };
+    const row = { date, amount, account_from: from, account_to: to, note, source: 'manual' };
     if (catId) row.category_id = catId;
 
-    const { error } = await sb.from('transactions').insert(row);
-    if (error) throw error;
+    if (window._qmEditId) {
+      const { error } = await sb.from('transactions').update(row).eq('id', window._qmEditId);
+      if (error) throw error;
+    } else {
+      row.use_in_forecast = true;
+      const { error } = await sb.from('transactions').insert(row);
+      if (error) throw error;
+    }
 
     closeQuickModal();
     toast('✓ Сохранено');
@@ -7137,6 +7161,7 @@ async function mobileFeed() {
   const { data } = await sb.from('transactions').select('*, categories(category,subcategory)')
     .eq('year', _mobYear).eq('month', _mobMonth).limit(100000);
   const ops = (data || []).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  window._mobOps = ops;  // для меню карточки (правка/удаление)
 
   let html = `<div class="mfeed">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding:0 2px">
@@ -7180,7 +7205,7 @@ async function mobileFeed() {
         html += `<div class="mop">
           <div class="mop-main"><div class="mop-name">${esc(name)}</div><div class="mop-sub">${sub}</div></div>
           <div class="mop-amt" style="color:${fl.color}">${fl.sign}${f(t.amount)} ₽</div>
-          <button class="mop-del" onclick="mobDeleteOp(${t.id})" aria-label="Удалить">✕</button>
+          <button class="mop-del" onclick="event.stopPropagation();mobOpMenu(this,${t.id})" aria-label="Действия">⋮</button>
         </div>`;
       });
     });
@@ -7194,6 +7219,14 @@ function mobMonth(dir) {
   if (_mobMonth < 1) { _mobMonth = 12; _mobYear--; }
   if (_mobMonth > 12) { _mobMonth = 1; _mobYear++; }
   mobileFeed();
+}
+
+function mobOpMenu(btn, id) {
+  const tx = (window._mobOps || []).find(t => t.id === id);
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => openQuickModal(null, tx) },
+    { label: 'Удалить', danger: true, fn: () => mobDeleteOp(id) },
+  ]);
 }
 
 async function mobDeleteOp(id) {
@@ -7724,12 +7757,12 @@ function _buildOpsForm(type) {
 
   return `<div class="type-grid" style="margin-bottom:14px">${typeBtns}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
-        <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
       <div class="field" style="margin-bottom:8px"><div class="field-label">Сумма, ₽</div>
         <input class="field-input" type="text" inputmode="decimal" id="opsFAmount" placeholder="напр. 250 или 100+50" autocomplete="off"
           data-hint="opsFAmountCalc" oninput="amtCalcPreview(this)" onblur="amtCalcCommit(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();amtCalcCommit(this)}">
         <div class="field-note" id="opsFAmountCalc" style="display:none;color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums"></div></div>
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
+        <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
     </div>
     ${type !== 'transfer' ? `<div class="field"><div class="field-label">Категория</div>
       <select class="field-select" id="opsFCat">${catOpts}</select></div>` : ''}
