@@ -1216,6 +1216,19 @@ const horizonAPI = {
         const origExec = qb._exec.bind(qb);
         qb._exec = async function() {
           try {
+            // loan_schedule апсерт → POST /api/loans/{loan_id}/schedule с голым массивом строк
+            // (бэкенд: upsert_schedule(rows: list[ScheduleRow]); loan_id берётся из строк).
+            if (qb._table === 'loan_schedule') {
+              const loanId = qb._body[0] && qb._body[0].loan_id;
+              if (!loanId) return { data: null, error: { message: 'loan_id missing in upsert rows' } };
+              const res = await fetch(`${API_BASE}/api/loans/${loanId}/schedule`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(qb._body),
+              });
+              if (!res.ok) { const e = await res.text(); return { data: null, error: { message: e } }; }
+              return { data: await res.json(), error: null };
+            }
             const url = `${API_BASE}/api/${qb._table}/upsert`;
             const res = await fetch(url, {
               method: 'POST',
@@ -7275,20 +7288,19 @@ function mobileTopHeader() {
   const init = window._mobUserInit || 'М';
   return `<div style="display:flex;align-items:center;justify-content:space-between;height:44px;margin-bottom:8px">
     <svg viewBox="0 0 56 56" width="30" height="30" aria-hidden="true"><defs><linearGradient id="mlc" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#49D0EA"/><stop offset="1" stop-color="#2393BE"/></linearGradient><linearGradient id="mlt" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#42DCC6"/><stop offset="1" stop-color="#1FA497"/></linearGradient><linearGradient id="mll" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#D2F468"/><stop offset="1" stop-color="#A6DA3A"/></linearGradient></defs><rect width="56" height="56" rx="15" fill="#0C1828"/><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="url(#mlc)" opacity="0.9"/><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="url(#mlt)" opacity="0.9"/><rect x="34" y="15" width="15" height="29" rx="3.8" fill="url(#mll)"/></g></svg>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--text);box-shadow:var(--shadow);font-family:Sora,sans-serif">${_MOB_MS[new Date().getMonth() + 1]} ${new Date().getFullYear()}</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--text);box-shadow:var(--shadow);font-family:Sora,sans-serif">${MONTHS[new Date().getMonth() + 1]} ${new Date().getFullYear()}</div>
     <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#2AA7CC,#1FA497);display:grid;place-items:center;font-family:Sora;font-weight:600;color:#fff;font-size:15px">${esc(init)}</div>
   </div>`;
 }
 
 async function _mobBudgetData(y, mo) {
-  const [bR, pR, tR, gR, aR] = await Promise.all([
+  const [bR, pR, tR, plR] = await Promise.all([
     fetch(`${API_BASE}/api/category-budgets?year=${y}&month=${mo}`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
     fetch(`${API_BASE}/api/plan-rules`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
     sb.from('transactions').select('amount,account_to,categories(category,character)').eq('year', y).eq('month', mo).limit(100000),
-    sb.from('goals').select('*'),
-    sb.from('accounts').select('*'),
+    sb.from('plan').select('date,amount,account_from,account_to,note,categories(character,category,subcategory)').eq('year', y).eq('month', mo).limit(100000),
   ]);
-  return { budgets: Array.isArray(bR) ? bR : [], rules: Array.isArray(pR) ? pR : [], txs: (tR.data || []), goals: (gR.data || []), accs: (aR.data || []) };
+  return { budgets: Array.isArray(bR) ? bR : [], rules: Array.isArray(pR) ? pR : [], txs: (tR.data || []), plan: (plR.data || []) };
 }
 
 function mobileBudgetSections(d) {
@@ -7303,7 +7315,7 @@ function mobileBudgetSections(d) {
   const ruleRow = (r, sign, color) => `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
     <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</div><div style="font-size:11.5px;color:var(--text2)">${r.day_of_month ? r.day_of_month + '-го числа' : 'ежемесячно'}</div></div>
     <div style="font-family:Sora;font-weight:600;font-size:14px;color:${color};font-variant-numeric:tabular-nums">${sign}${f(r.amount)}</div></div>`;
-  const rulesInner = income.map(r => ruleRow(r, '+', '#477213')).join('') + fixed.map(r => ruleRow(r, '−', 'var(--text)')).join('');
+  const rulesInner = income.map(r => ruleRow(r, '+', '#5E9B1E')).join('') + fixed.map(r => ruleRow(r, '−', '#bf7419')).join('');
   const rulesHtml = (income.length || fixed.length) ? card(noFirstBorder(rulesInner)) : '';
 
   // Повседневные: потрачено / бюджет (конверты)
@@ -7324,29 +7336,23 @@ function mobileBudgetSections(d) {
   const envInner = d.budgets.map(b => envRow(b.category, factByCat[b.category] || 0, +b.budget || 0)).join('');
   const envHtml = d.budgets.length ? card(noFirstBorder(envInner)) : '';
 
-  // Эпизодические: резервы + цели
-  const reserves = d.accs.filter(a => a.is_reserve || a.is_cushion);
-  const resRow = a => `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
-    <div style="width:32px;height:32px;border-radius:9px;background:rgba(42,167,204,.1);display:grid;place-items:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2AA7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7Z"/></svg></div>
-    <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text)">${esc(a.name)}</div><div style="font-size:11.5px;color:var(--text2)">резерв · не трогаем</div></div>
-    <div style="font-family:Sora;font-weight:600;font-size:14px;color:var(--text);font-variant-numeric:tabular-nums">${f(a.current_balance || 0)}</div></div>`;
-  const goalRow = g => {
-    const tgt = +g.target_amount || 0;
-    const acc = d.accs.find(a => a.id === g.account_id);
-    const bal = acc ? (+acc.current_balance || 0) : (+g.current_balance || 0);
-    const pct = tgt > 0 ? Math.min(100, Math.round(bal / tgt * 100)) : 0;
-    return `<div style="padding:11px 0;border-top:1px solid var(--border)">
-      <div style="display:flex;align-items:center;gap:12px"><div style="width:32px;height:32px;border-radius:9px;background:rgba(180,222,60,.18);display:grid;place-items:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E9B1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><path d="M12 3v3"/><path d="M12 12l4-2"/></svg></div>
-        <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text)">${esc(g.name)}</div><div style="font-size:11.5px;color:var(--text2)">цель</div></div>
-        <div style="font-family:Sora;font-weight:600;font-size:13.5px;color:var(--text);font-variant-numeric:tabular-nums">${f(bal)} <span style="color:var(--text3);font-weight:500">/ ${f(tgt)}</span></div></div>
-      <div style="height:6px;border-radius:99px;background:rgba(15,36,60,.07);margin-top:9px;overflow:hidden;margin-left:44px"><div style="height:100%;width:${pct}%;border-radius:99px;background:linear-gradient(90deg,#1FA497,#9FC22A)"></div></div></div>`;
+  // Эпизодические: предстоящие разовые события (как в Бюджете), не резервы/цели
+  const events = (d.plan || [])
+    .filter(p => p.categories && p.categories.character === 'Эпизодический' && p.account_from !== 'Доход')
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const evRow = p => {
+    const dt = (p.date || ''), dd = dt.slice(8, 10) + '.' + dt.slice(5, 7);
+    const nm = (p.note && p.note.trim()) || (p.categories && (p.categories.subcategory || p.categories.category)) || 'Событие';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
+      <div style="width:32px;height:32px;border-radius:9px;background:rgba(143,190,30,.18);display:grid;place-items:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E7A12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 2.5v4"/><path d="M16 2.5v4"/></svg></div>
+      <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div><div style="font-size:11.5px;color:var(--text2)">${dd}</div></div>
+      <div style="font-family:Sora;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums">−${f(p.amount)}</div></div>`;
   };
-  const episInner = reserves.map(resRow).join('') + (d.goals || []).map(goalRow).join('');
-  const episHtml = (reserves.length || (d.goals || []).length) ? card(noFirstBorder(episInner)) : '';
+  const episHtml = events.length ? card(noFirstBorder(events.map(evRow).join(''))) : '';
 
   return (rulesHtml ? sub('Правила · доход и фиксированные') + rulesHtml : '')
     + (envHtml ? sub('Повседневные · потрачено / бюджет') + envHtml : '')
-    + (episHtml ? sub('Эпизодические · резервы и цели') + episHtml : '')
+    + (episHtml ? sub('Эпизодические · события') + episHtml : '')
     || '<div style="text-align:center;padding:30px 20px;color:var(--text3);font-size:13px">Бюджет ещё не настроен — это удобнее на компьютере.</div>';
 }
 
@@ -7374,8 +7380,8 @@ async function mobileHome() {
     : 'Хватит на запланированные траты и пополнение резерва.';
 
   const nc = m.net_capital || {}, dsr = m.dsr || {}, res = m.resilience || {};
-  const ncVal = +nc.value || 0;
-  const ncDisp = Math.abs(ncVal) >= 1e6 ? (ncVal / 1e6).toFixed(2).replace('.', ',') + ' млн' : f(ncVal) + ' ₽';
+  const ncVal = +nc.value || 0, ncNeg = ncVal < 0;
+  const ncDisp = (ncNeg ? '−' : '') + (Math.abs(ncVal) >= 1e6 ? (Math.abs(ncVal) / 1e6).toFixed(2).replace('.', ',') + ' млн' : f(ncVal) + ' ₽');
   const dsrV = +dsr.value || 0, resV = +res.value || 0;
   const barMetric = (label, val, pct, bar, valColor) => `<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 10px"><div style="font-size:10.5px;font-weight:600;color:var(--text2);line-height:1.25">${label}</div><div style="font-family:Sora;font-weight:600;font-size:18px;color:${valColor || 'var(--text)'};letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums">${val}</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:9px;overflow:hidden"><div style="height:100%;width:${pct}%;border-radius:99px;background:${bar}"></div></div></div>`;
   const ringCard = `<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 10px"><div style="font-size:10.5px;font-weight:600;color:var(--text2);line-height:1.25">Устойчи-<br>вость</div><div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:7px"><div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:30px;height:30px;border-radius:50%;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(resV * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:22px;height:22px;border-radius:50%;background:var(--bg2)"></div></div></div></div>`;
@@ -7389,11 +7395,11 @@ async function mobileHome() {
       <div style="margin-top:12px;font-size:12.5px;color:var(--text2);line-height:1.45">${heroLine}</div>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
-      ${barMetric('Чистый<br>капитал', ncDisp, ncVal >= 0 ? 100 : 30, 'linear-gradient(90deg,#2AA7CC,#1FA497)', 'var(--text)')}
+      ${barMetric('Чистый<br>капитал', ncDisp, ncNeg ? 30 : 100, ncNeg ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#2AA7CC,#1FA497)', ncNeg ? '#A8472F' : 'var(--text)')}
       ${barMetric('Кредитная<br>нагрузка', dsrV + ' %', Math.min(dsrV, 100), dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)', dsrV > 30 ? '#A8472F' : 'var(--text)')}
       ${ringCard}
     </div>
-    <div style="display:flex;align-items:center;gap:10px;margin:22px 2px 2px"><div style="font-family:Sora;font-weight:600;font-size:16px;color:var(--text)">Бюджет на ${_MOB_MS[mo]}</div><div style="flex:1;height:1px;background:var(--border)"></div></div>
+    <div style="display:flex;align-items:center;gap:10px;margin:22px 2px 2px"><div style="font-family:Sora;font-weight:600;font-size:16px;color:var(--text)">Бюджет на ${MONTHS[mo].toLowerCase()}</div><div style="flex:1;height:1px;background:var(--border)"></div></div>
     <div style="font-size:12px;color:var(--text3);margin:6px 2px 0;line-height:1.4">Сначала правила (что точно случится), затем повседневные (конверты).</div>
     ${mobileBudgetSections(bd)}
     <div style="text-align:center;font-size:11.5px;color:#B0BCC9;margin-top:18px">horizonapp.ru</div>
@@ -7409,7 +7415,7 @@ async function mobileBudget() {
   catch (e) { main.innerHTML = '<div class="error-box" style="margin:20px">Ошибка загрузки</div>'; return; }
   main.innerHTML = `<div class="mfeed">
     ${mobileTopHeader()}
-    <div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);margin:4px 2px 0">Бюджет на ${_MOB_MS[mo]}</div>
+    <div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);margin:4px 2px 0">Бюджет на ${MONTHS[mo].toLowerCase()}</div>
     <div style="font-size:12px;color:var(--text3);margin:6px 2px 0;line-height:1.4">Сначала правила (что точно случится), затем повседневные (конверты).</div>
     ${mobileBudgetSections(bd)}
     <div style="text-align:center;font-size:11.5px;color:#B0BCC9;margin-top:18px">horizonapp.ru</div>
