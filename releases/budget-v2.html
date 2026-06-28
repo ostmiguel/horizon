@@ -1020,9 +1020,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="13.5" r="1.1" fill="currentColor" stroke="none"/></svg>
     <span class="mob-nav-label">Бюджет</span>
   </div>
-  <div class="mob-nav-item" id="mnav-more" onclick="mobileGo('more')">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>
-    <span class="mob-nav-label">Ещё</span>
+  <div class="mob-nav-item" id="mnav-profile" onclick="mobileGo('profile')">
+    <span id="mnavAvatar" style="width:23px;height:23px;border-radius:50%;background:linear-gradient(135deg,#2AA7CC,#1FA497);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:600;color:#fff;font-size:11px;line-height:1">М</span>
+    <span class="mob-nav-label">Профиль</span>
   </div>
 </nav>
 
@@ -7158,16 +7158,34 @@ async function initMobile() {
     const u = await (await fetch('/api/auth/me', { credentials: 'include' })).json();
     window._mobUserInit = ((u.name || u.email || 'М').trim()[0] || 'М').toUpperCase();
   } catch (e) { window._mobUserInit = 'М'; }
+  const av = document.getElementById('mnavAvatar');
+  if (av) av.textContent = window._mobUserInit;
   mobileGo('home');
 }
 
+function _mobDetachScroll() {
+  if (window._mobScrollHandler) {
+    window.removeEventListener('scroll', window._mobScrollHandler);
+    document.querySelector('.main')?.removeEventListener('scroll', window._mobScrollHandler);
+    window._mobScrollHandler = null;
+  }
+}
+
+function _mobShiftMonth(delta) {
+  _mobMonth += delta;
+  if (_mobMonth < 1) { _mobMonth = 12; _mobYear--; }
+  if (_mobMonth > 12) { _mobMonth = 1; _mobYear++; }
+  mobileGo(_mobScreen === 'budget' ? 'budget' : 'home');
+}
+
 function mobileGo(screen) {
+  _mobDetachScroll();
   _mobScreen = screen;
-  ['home', 'ops', 'budget', 'more'].forEach(s =>
+  ['home', 'ops', 'budget', 'profile'].forEach(s =>
     document.getElementById('mnav-' + s)?.classList.toggle('act', s === screen));
   if (screen === 'home') mobileHome();
   else if (screen === 'budget') mobileBudget();
-  else if (screen === 'more') mobileMore();
+  else if (screen === 'profile') loadProfile();
   else mobileFeed();
 }
 
@@ -7285,11 +7303,13 @@ async function mobileMore() {
 function _mobFmt(n) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(+n || 0))); }
 
 function mobileTopHeader() {
-  const init = window._mobUserInit || 'М';
   return `<div style="display:flex;align-items:center;justify-content:space-between;height:44px;margin-bottom:8px">
-    <svg viewBox="0 0 56 56" width="30" height="30" aria-hidden="true"><defs><linearGradient id="mlc" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#49D0EA"/><stop offset="1" stop-color="#2393BE"/></linearGradient><linearGradient id="mlt" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#42DCC6"/><stop offset="1" stop-color="#1FA497"/></linearGradient><linearGradient id="mll" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#D2F468"/><stop offset="1" stop-color="#A6DA3A"/></linearGradient></defs><rect width="56" height="56" rx="15" fill="#0C1828"/><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="url(#mlc)" opacity="0.9"/><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="url(#mlt)" opacity="0.9"/><rect x="34" y="15" width="15" height="29" rx="3.8" fill="url(#mll)"/></g></svg>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:7px 12px;font-size:13px;font-weight:600;color:var(--text);box-shadow:var(--shadow);font-family:Sora,sans-serif">${MONTHS[new Date().getMonth() + 1]} ${new Date().getFullYear()}</div>
-    <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#2AA7CC,#1FA497);display:grid;place-items:center;font-family:Sora;font-weight:600;color:#fff;font-size:15px">${esc(init)}</div>
+    <img src="/horizon-lockup-horizontal-light.svg" alt="Horizon" style="height:22px;width:auto;display:block">
+    <div style="display:flex;align-items:center;gap:2px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:5px 6px;box-shadow:var(--shadow);font-family:Sora,sans-serif">
+      <button onclick="_mobShiftMonth(-1)" aria-label="Предыдущий месяц" style="border:none;background:none;cursor:pointer;color:#93A1B5;font-size:16px;line-height:1;padding:2px 6px;min-height:32px">‹</button>
+      <span style="font-size:13px;font-weight:600;color:var(--text);min-width:96px;text-align:center">${MONTHS[_mobMonth]} ${_mobYear}</span>
+      <button onclick="_mobShiftMonth(1)" aria-label="Следующий месяц" style="border:none;background:none;cursor:pointer;color:#93A1B5;font-size:16px;line-height:1;padding:2px 6px;min-height:32px">›</button>
+    </div>
   </div>`;
 }
 
@@ -7359,15 +7379,38 @@ function mobileBudgetSections(d) {
 async function mobileHome() {
   const main = document.getElementById('mainContent');
   main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  const now = new Date(), y = now.getFullYear(), mo = now.getMonth() + 1, f = _mobFmt;
-  let m = {}, bd = { budgets: [], rules: [], txs: [], goals: [], accs: [] };
+  const y = _mobYear, mo = _mobMonth, f = _mobFmt;
+  const today = new Date();
+  const isCurrent = (y === today.getFullYear() && mo === today.getMonth() + 1);
+
+  let m = {}, bd = { budgets: [], rules: [], txs: [], plan: [] };
   try {
-    const [mR, bData] = await Promise.all([
-      fetch('/api/metrics', { credentials: 'include' }).then(r => r.json()).catch(() => ({})),
-      _mobBudgetData(y, mo),
-    ]);
-    m = mR || {}; bd = bData;
+    if (isCurrent) {
+      const [mR, bData] = await Promise.all([
+        fetch('/api/metrics', { credentials: 'include' }).then(r => r.json()).catch(() => ({})),
+        _mobBudgetData(y, mo),
+      ]);
+      m = mR || {}; bd = bData;
+    } else {
+      bd = await _mobBudgetData(y, mo);
+    }
   } catch (e) { main.innerHTML = '<div class="error-box" style="margin:20px">Ошибка загрузки</div>'; return; }
+
+  const budgetBlock = `
+    <div style="display:flex;align-items:center;gap:10px;margin:20px 2px 2px"><div style="font-family:Sora;font-weight:600;font-size:16px;color:var(--text)">Бюджет на ${MONTHS[mo].toLowerCase()}</div><div style="flex:1;height:1px;background:var(--border)"></div></div>
+    <div style="font-size:12px;color:var(--text3);margin:6px 2px 0;line-height:1.4">Сначала правила (что точно случится), затем повседневные (конверты).</div>
+    ${mobileBudgetSections(bd)}
+    <div style="text-align:center;font-size:11.5px;color:#B0BCC9;margin-top:18px">horizonapp.ru</div>`;
+
+  // Не текущий месяц: метрики/«Свободно» считаются только за текущий — показываем бюджет месяца.
+  if (!isCurrent) {
+    main.innerHTML = `<div class="mfeed">
+      ${mobileTopHeader()}
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:12px 14px;font-size:12.5px;color:var(--text2);line-height:1.45;box-shadow:var(--shadow)">«Свободно» и метрики показываются за текущий месяц. Здесь — план бюджета на ${MONTHS[mo].toLowerCase()}.</div>
+      ${budgetBlock}
+    </div>`;
+    return;
+  }
 
   const sts = m.safe_to_spend || {}, wf = sts.waterfall || {};
   const v = +sts.value || 0, neg = v < 0;
@@ -7377,39 +7420,55 @@ async function mobileHome() {
   const outflows = (+wf.f_remain || 0) + (+wf.v_remain || 0), gap = outflows - (+wf.i_remain || 0);
   const heroLine = neg
     ? `Расходы до конца месяца (~${f(outflows)} ₽) больше поступлений (~${f(+wf.i_remain || 0)} ₽) примерно на ${f(gap)} ₽.`
-    : 'Хватит на запланированные траты и пополнение резерва.';
+    : 'Столько можно потратить сверх плана до конца месяца.';
 
   const nc = m.net_capital || {}, dsr = m.dsr || {}, res = m.resilience || {};
   const ncVal = +nc.value || 0, ncNeg = ncVal < 0;
   const ncDisp = (ncNeg ? '−' : '') + (Math.abs(ncVal) >= 1e6 ? (Math.abs(ncVal) / 1e6).toFixed(2).replace('.', ',') + ' млн' : f(ncVal) + ' ₽');
   const dsrV = +dsr.value || 0, resV = +res.value || 0;
-  const barMetric = (label, val, pct, bar, valColor) => `<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 10px"><div style="font-size:10.5px;font-weight:600;color:var(--text2);line-height:1.25">${label}</div><div style="font-family:Sora;font-weight:600;font-size:18px;color:${valColor || 'var(--text)'};letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums">${val}</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:9px;overflow:hidden"><div style="height:100%;width:${pct}%;border-radius:99px;background:${bar}"></div></div></div>`;
-  const ringCard = `<div style="flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 10px"><div style="font-size:10.5px;font-weight:600;color:var(--text2);line-height:1.25">Устойчи-<br>вость</div><div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:7px"><div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:30px;height:30px;border-radius:50%;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(resV * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:22px;height:22px;border-radius:50%;background:var(--bg2)"></div></div></div></div>`;
+  const ncD = (typeof nc.delta_pct === 'number') ? nc.delta_pct : null;
+
+  const CARD = 'flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 12px;min-height:90px;display:flex;flex-direction:column';
+  const LBL  = 'font-size:10.5px;font-weight:600;color:var(--text2);line-height:1.25;min-height:26px';
+  const VAL  = c => `font-family:Sora;font-weight:600;font-size:18px;color:${c};letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums;white-space:nowrap`;
+  // Чистый капитал — без прогресс-бара (непонятно «прогресс от чего»); вместо него — динамика за месяц.
+  const ncCard = `<div style="${CARD}"><div style="${LBL}">Чистый капитал</div><div style="${VAL(ncNeg ? '#A8472F' : 'var(--text)')}">${ncDisp}</div>${ncD === null ? '' : `<div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${ncD >= 0 ? '#5E9B1E' : '#A8472F'}">${ncD >= 0 ? '▲' : '▼'} ${Math.abs(ncD).toFixed(0)}% за месяц</div>`}</div>`;
+  const dsrCard = `<div style="${CARD}"><div style="${LBL}">Кредитная нагрузка</div><div style="${VAL(dsrV > 30 ? '#A8472F' : 'var(--text)')}">${dsrV} %</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:auto;overflow:hidden"><div style="height:100%;width:${Math.min(dsrV, 100)}%;border-radius:99px;background:${dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)'}"></div></div></div>`;
+  const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto"><div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:30px;height:30px;border-radius:50%;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:22px;height:22px;border-radius:50%;background:var(--bg2)"></div></div></div></div>`;
 
   main.innerHTML = `<div class="mfeed">
+    <div id="mobMiniHero" style="position:fixed;top:0;left:0;right:0;z-index:150;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;display:flex;align-items:center;justify-content:space-between;transform:translateY(-110%);opacity:0;transition:transform .22s ease,opacity .22s ease">
+      <div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:12px;color:var(--text2);font-weight:600">Свободно</span><span style="font-family:Sora;font-weight:700;font-size:15px;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${neg ? '−' : ''}${f(v)} ₽</span></div>
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:${pill.col};background:${pill.bg};border:1px solid ${pill.bd};padding:3px 9px;border-radius:999px"><span style="width:5px;height:5px;border-radius:50%;background:${pill.dot}"></span>${pill.txt}</span>
+    </div>
     ${mobileTopHeader()}
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow)">
       <div style="font-size:12px;color:var(--text2);font-weight:500"><span style="color:var(--text);font-weight:600">Свободно</span> · до конца месяца</div>
-      <div style="font-family:Sora;font-weight:700;font-size:46px;letter-spacing:-.03em;line-height:1;margin:8px 0 0;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${neg ? '−' : ''}${f(v)} <span style="font-size:22px;color:${neg ? '#A8472F' : 'var(--text2)'};font-weight:500${neg ? ';opacity:.65' : ''}">₽</span></div>
+      <div style="font-family:Sora;font-weight:700;font-size:46px;letter-spacing:-.03em;line-height:1;margin:8px 0 0;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums;white-space:nowrap">${neg ? '−' : ''}${f(v)} <span style="font-size:22px;color:${neg ? '#A8472F' : 'var(--text2)'};font-weight:500${neg ? ';opacity:.65' : ''}">₽</span></div>
       <div style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:${pill.col};background:${pill.bg};border:1px solid ${pill.bd};padding:6px 12px;border-radius:999px;margin-top:13px"><span style="width:6px;height:6px;border-radius:50%;background:${pill.dot}"></span>${pill.txt}</div>
       <div style="margin-top:12px;font-size:12.5px;color:var(--text2);line-height:1.45">${heroLine}</div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:14px">
-      ${barMetric('Чистый<br>капитал', ncDisp, ncNeg ? 30 : 100, ncNeg ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#2AA7CC,#1FA497)', ncNeg ? '#A8472F' : 'var(--text)')}
-      ${barMetric('Кредитная<br>нагрузка', dsrV + ' %', Math.min(dsrV, 100), dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)', dsrV > 30 ? '#A8472F' : 'var(--text)')}
-      ${ringCard}
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin:22px 2px 2px"><div style="font-family:Sora;font-weight:600;font-size:16px;color:var(--text)">Бюджет на ${MONTHS[mo].toLowerCase()}</div><div style="flex:1;height:1px;background:var(--border)"></div></div>
-    <div style="font-size:12px;color:var(--text3);margin:6px 2px 0;line-height:1.4">Сначала правила (что точно случится), затем повседневные (конверты).</div>
-    ${mobileBudgetSections(bd)}
-    <div style="text-align:center;font-size:11.5px;color:#B0BCC9;margin-top:18px">horizonapp.ru</div>
+    <div style="display:flex;gap:10px;margin-top:14px">${ncCard}${dsrCard}${resCard}</div>
+    ${budgetBlock}
   </div>`;
+
+  // Sticky мини-Герой при скролле вниз
+  const onScroll = () => {
+    const el = document.getElementById('mobMiniHero'); if (!el) return;
+    const sc = window.scrollY || document.querySelector('.main')?.scrollTop || 0;
+    const show = sc > 175;
+    el.style.transform = show ? 'translateY(0)' : 'translateY(-110%)';
+    el.style.opacity = show ? '1' : '0';
+  };
+  window._mobScrollHandler = onScroll;
+  window.addEventListener('scroll', onScroll, { passive: true });
+  document.querySelector('.main')?.addEventListener('scroll', onScroll, { passive: true });
 }
 
 async function mobileBudget() {
   const main = document.getElementById('mainContent');
   main.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-  const now = new Date(), y = now.getFullYear(), mo = now.getMonth() + 1;
+  const y = _mobYear, mo = _mobMonth;
   let bd;
   try { bd = await _mobBudgetData(y, mo); }
   catch (e) { main.innerHTML = '<div class="error-box" style="margin:20px">Ошибка загрузки</div>'; return; }
