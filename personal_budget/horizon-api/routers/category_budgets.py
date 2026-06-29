@@ -13,26 +13,38 @@ class BudgetUpsert(BaseModel):
     budget: float
 
 
-# ── Подсказки сумм: адаптивное окно + усечённое среднее ──────────────────────
-def _trimmed_mean(values: list[float]) -> float:
-    """1 мес → как есть; 2 → среднее; ≥3 → среднее без самого дорогого месяца."""
-    nz = [v for v in values if v > 0]
+# ── Подсказки сумм: окно от целевого месяца + среднее со свежестью ────────────
+def _recency_weighted_mean(values: list[float]) -> float:
+    """Среднее со свежестью: чем свежее месяц — тем больше вес.
+
+    `values` — суммы по месяцам от самого СВЕЖЕГО к старому; нулевые месяцы
+    (нет данных) пропускаем. Вес = ранг по свежести среди непустых месяцев
+    (самый свежий — наибольший). Не выбрасывает пики и не теряет свежий месяц.
+    """
+    nz = [v for v in values if v > 0]   # порядок сохранён: свежие первыми
     if not nz:
         return 0.0
-    if len(nz) <= 2:
-        return sum(nz) / len(nz)
-    s = sorted(nz)
-    trimmed = s[:-1]            # отбрасываем верхний выброс
-    return sum(trimmed) / len(trimmed)
+    n = len(nz)
+    weights = [n - k for k in range(n)]   # [n, n-1, …, 1]
+    return sum(v * w for v, w in zip(nz, weights)) / sum(weights)
 
 
-async def _category_monthly_totals(db, user_id, category: str, max_months: int = 6) -> list[float]:
-    """Суммы повседневных трат по категории за последние max_months ПОЛНЫХ месяцев."""
-    today = date.today()
+async def _category_monthly_totals(db, user_id, category: str, max_months: int = 6,
+                                   year: int | None = None, month: int | None = None) -> list[float]:
+    """Суммы повседневных трат по категории за max_months месяцев ДО целевого месяца.
+
+    Целевой месяц = (year, month), если заданы (месяц бюджета, который заводим);
+    иначе — текущий месяц по дате сервера. Возвращает список от самого свежего
+    месяца к старому (для взвешивания по свежести).
+    """
+    if year and month:
+        a_y, a_m = int(year), int(month)
+    else:
+        t = date.today(); a_y, a_m = t.year, t.month
     totals = []
     for i in range(1, max_months + 1):
-        m, y = today.month - i, today.year
-        if m <= 0:
+        m, y = a_m - i, a_y
+        while m <= 0:
             m += 12; y -= 1
         v = await db.fetchval("""
             SELECT COALESCE(SUM(t.amount), 0)
@@ -46,13 +58,14 @@ async def _category_monthly_totals(db, user_id, category: str, max_months: int =
 
 
 @router.get("/suggest")
-async def suggest_budget(request: Request, category: str = Query(...)):
-    """Подсказка суммы конверта по категории = усечённое среднее за доступные месяцы."""
+async def suggest_budget(request: Request, category: str = Query(...),
+                         year: int | None = None, month: int | None = None):
+    """Подсказка суммы конверта = среднее со свежестью за месяцы до целевого месяца."""
     user_id = request.state.user_id
     db = request.state.db
-    totals = await _category_monthly_totals(db, user_id, category)
+    totals = await _category_monthly_totals(db, user_id, category, year=year, month=month)
     nz = [t for t in totals if t > 0]
-    return {"category": category, "suggested": round(_trimmed_mean(totals)),
+    return {"category": category, "suggested": round(_recency_weighted_mean(totals)),
             "history": [round(t) for t in nz], "months": len(nz)}
 
 
@@ -71,11 +84,11 @@ async def suggestions(request: Request, year: int = Query(...), month: int = Que
     result = []
     for r in cats:
         cat = r["category"]
-        totals = await _category_monthly_totals(db, user_id, cat)
+        totals = await _category_monthly_totals(db, user_id, cat, year=year, month=month)
         nz = [t for t in totals if t > 0]
         if not nz:
             continue
-        suggested = round(_trimmed_mean(totals))
+        suggested = round(_recency_weighted_mean(totals))
         if suggested <= 0:
             continue
         result.append({"category": cat, "suggested": suggested,

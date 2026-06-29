@@ -5885,7 +5885,9 @@ async function onEnvelopeCatChange() {
   const cat = sel.value; if (!cat) { if (hint) hint.textContent = ''; return; }
   if (hint) hint.textContent = 'Считаю среднее…';
   try {
-    const r = await fetch(`${API_BASE}/api/category-budgets/suggest?category=${encodeURIComponent(cat)}`, {credentials:'include'}).then(x => x.json());
+    const p = getPeriod();
+    const mp = (p.month >= 1 && p.month <= 12) ? `&year=${p.year}&month=${p.month}` : '';
+    const r = await fetch(`${API_BASE}/api/category-budgets/suggest?category=${encodeURIComponent(cat)}${mp}`, {credentials:'include'}).then(x => x.json());
     if (r && r.suggested > 0) {
       if (amt && !amt.value) amt.value = r.suggested;
       if (hint) hint.textContent = 'Подсказка: ' + r.months + ' мес → ≈ ' + new Intl.NumberFormat('ru-RU').format(r.suggested) + ' ₽';
