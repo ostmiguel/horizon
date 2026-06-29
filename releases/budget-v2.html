@@ -7334,7 +7334,7 @@ async function _mobBudgetData(y, mo) {
     fetch(`${API_BASE}/api/category-budgets?year=${y}&month=${mo}`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
     fetch(`${API_BASE}/api/plan-rules`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
     sb.from('transactions').select('amount,account_to,categories(category,character)').eq('year', y).eq('month', mo).limit(100000),
-    sb.from('plan').select('date,amount,account_from,account_to,note,categories(character,category,subcategory)').eq('year', y).eq('month', mo).limit(100000),
+    sb.from('plan').select('date,amount,account_from,account_to,note,source_rule_id,categories(character,category,subcategory)').eq('year', y).eq('month', mo).limit(100000),
   ]);
   return { budgets: Array.isArray(bR) ? bR : [], rules: Array.isArray(pR) ? pR : [], txs: (tR.data || []), plan: (plR.data || []) };
 }
@@ -7345,12 +7345,18 @@ function mobileBudgetSections(d) {
   const sub = t => `<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin:20px 4px 8px">${t}</div>`;
   const noFirstBorder = s => s.replace('border-top:1px solid var(--border)', 'border-top:none');
 
+  // Эффективная сумма правила за месяц = сумма материализованных плановых строк
+  // (учитывает правку «только этот месяц»), иначе — дефолт правила. Как ruleEffAmt на десктопе.
+  const effByRule = {};
+  (d.plan || []).forEach(p => { if (p.source_rule_id) effByRule[p.source_rule_id] = (effByRule[p.source_rule_id] || 0) + (+p.amount || 0); });
+  const ruleEff = r => (effByRule[r.id] != null ? effByRule[r.id] : (+r.amount || 0));
+
   // Правила: доход + фиксированные
   const income = d.rules.filter(r => r.account_from === 'Доход');
   const fixed  = d.rules.filter(r => r.account_to === 'Расход' || r.account_to === 'Обязательства');
   const ruleRow = (r, sign, color) => `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
     <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</div><div style="font-size:11.5px;color:var(--text2)">${r.day_of_month ? r.day_of_month + '-го числа' : 'ежемесячно'}</div></div>
-    <div style="font-family:Sora;font-weight:600;font-size:14px;color:${color};font-variant-numeric:tabular-nums">${sign}${f(r.amount)}</div></div>`;
+    <div style="font-family:Sora;font-weight:600;font-size:14px;color:${color};font-variant-numeric:tabular-nums">${sign}${f(ruleEff(r))}</div></div>`;
   const rulesInner = income.map(r => ruleRow(r, '+', '#5E9B1E')).join('') + fixed.map(r => ruleRow(r, '−', '#bf7419')).join('');
   const rulesHtml = (income.length || fixed.length) ? card(noFirstBorder(rulesInner)) : '';
 
@@ -7450,7 +7456,7 @@ async function mobileHome() {
   // Чистый капитал — без прогресс-бара (непонятно «прогресс от чего»); вместо него — динамика за месяц.
   const ncCard = `<div style="${CARD}"><div style="${LBL}">Чистый капитал</div><div style="${VAL(ncNeg ? '#A8472F' : 'var(--text)')}">${ncDisp}</div>${ncD === null ? '' : `<div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${ncD >= 0 ? '#5E9B1E' : '#A8472F'}">${ncD >= 0 ? '▲' : '▼'} ${Math.abs(ncD).toFixed(0)}% за месяц</div>`}</div>`;
   const dsrCard = `<div style="${CARD}"><div style="${LBL}">Кредитная нагрузка</div><div style="${VAL(dsrV > 30 ? '#A8472F' : 'var(--text)')}">${dsrV} %</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:auto;overflow:hidden"><div style="height:100%;width:${Math.min(dsrV, 100)}%;border-radius:99px;background:${dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)'}"></div></div></div>`;
-  const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto"><div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:30px;height:30px;border-radius:50%;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:22px;height:22px;border-radius:50%;background:var(--bg2)"></div></div></div></div>`;
+  const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px"><div style="font-family:Sora;font-weight:600;font-size:24px;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:38px;height:38px;border-radius:50%;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:28px;height:28px;border-radius:50%;background:var(--bg2)"></div></div></div></div>`;
 
   main.innerHTML = `<div class="mfeed">
     <div id="mobMiniHero" style="position:fixed;top:0;left:0;right:0;z-index:150;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;display:flex;align-items:center;justify-content:space-between;transform:translateY(-110%);opacity:0;transition:transform .22s ease,opacity .22s ease">
