@@ -226,6 +226,14 @@ async def get_metrics(request: Request):
         ORDER BY total DESC
     """, user_id, year, month)
 
+    # Конверты (category_budgets) — план повседневных категорий (уровень КАТЕГОРИИ).
+    env_rows = await db.fetch("""
+        SELECT category, budget FROM category_budgets
+        WHERE user_id=$1 AND year=$2 AND month=$3
+    """, user_id, year, month)
+    env_by_cat = {r["category"]: float(r["budget"]) for r in env_rows}
+    env_seen: set[str] = set()  # категории, куда конверт уже учтён в amount_plan
+
     # Track which categories already have fact data
     seen_cat_chars: set[tuple] = set()
     categories = []
@@ -286,6 +294,12 @@ async def get_metrics(request: Request):
         else:
             forecast = fact                    # fixed/episodic без правил — факт
 
+        # План категории = плановые строки (правила/график) + конверт (для повседневной части).
+        env_amt = 0.0
+        if is_variable_everyday and r["category"] in env_by_cat and r["category"] not in env_seen:
+            env_amt = env_by_cat[r["category"]]
+            env_seen.add(r["category"])
+
         seen_cat_chars.add((r["category"], r["cat_char"]))
         categories.append({
             "category":        r["category"],
@@ -293,6 +307,7 @@ async def get_metrics(request: Request):
             "expense_type":    r["cat_expense_type"],
             "amount_fact":     round(fact),
             "amount_forecast": round(forecast),
+            "amount_plan":     round(plan_cat_total + env_amt),
             "flow_remaining":  round(cat_remaining),
         })
 
@@ -311,12 +326,32 @@ async def get_metrics(request: Request):
     """, user_id, year, month)
     for r in plan_extra_cats:
         if (r["category"], r["cat_char"]) not in seen_cat_chars:
+            is_var = r["cat_expense_type"] == "variable" and r["cat_char"] not in EPISODIC_CHARS
+            env_amt = 0.0
+            if is_var and r["category"] in env_by_cat and r["category"] not in env_seen:
+                env_amt = env_by_cat[r["category"]]
+                env_seen.add(r["category"])
             categories.append({
                 "category":        r["category"],
                 "character":       r["cat_char"],
                 "expense_type":    r["cat_expense_type"],
                 "amount_fact":     0,
                 "amount_forecast": round(float(r["plan_total"])),
+                "amount_plan":     round(float(r["plan_total"]) + env_amt),
+                "flow_remaining":  0,
+            })
+
+    # Конверты категорий, не попавших ни в факт, ни в план-строки (план без факта).
+    for cat, bud in env_by_cat.items():
+        if cat not in env_seen:
+            env_seen.add(cat)
+            categories.append({
+                "category":        cat,
+                "character":       "Повседневный",
+                "expense_type":    "variable",
+                "amount_fact":     0,
+                "amount_forecast": round(bud),
+                "amount_plan":     round(bud),
                 "flow_remaining":  0,
             })
 
