@@ -7458,6 +7458,20 @@ async function mobileHome() {
   const dsrCard = `<div style="${CARD}"><div style="${LBL}">Кредитная нагрузка</div><div style="${VAL(dsrV > 30 ? '#A8472F' : 'var(--text)')}">${dsrV} %</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:auto;overflow:hidden"><div style="height:100%;width:${Math.min(dsrV, 100)}%;border-radius:99px;background:${dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)'}"></div></div></div>`;
   const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-top:7px"><div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:38px;height:38px;border-radius:50%;margin-top:-6px;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:28px;height:28px;border-radius:50%;background:var(--bg2)"></div></div></div></div>`;
 
+  // Пилюли разложения «Свободно» (как на десктопе): Остаток + Доходы − Платежи −
+  // Повседневные − Резерв − Подушка. Горизонтальный скролл-ряд под героем.
+  const wfPill = (lbl, val, sign, color) => `<div style="flex:none;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:8px 12px;box-shadow:var(--shadow)"><div style="font-size:10px;color:var(--text2);font-weight:600">${lbl}</div><div style="font-family:Sora;font-weight:700;font-size:13px;color:${color};font-variant-numeric:tabular-nums;margin-top:3px;white-space:nowrap">${sign}${f(val)} ₽</div></div>`;
+  const _b0 = +wf.b0 || 0;
+  const wfPillsArr = [
+    wfPill('Остаток', _b0, _b0 < 0 ? '−' : '', 'var(--text)'),
+    wfPill('Доходы', +wf.i_remain || 0, '+', '#5E9B1E'),
+    wfPill('Платежи', +wf.f_remain || 0, '−', '#0F243C'),
+    wfPill('Повседневные', +wf.v_remain || 0, '−', '#0F243C'),
+  ];
+  if ((+wf.r_topup || 0) >= 1) wfPillsArr.push(wfPill('Резерв', +wf.r_topup, '−', '#2F8FD4'));
+  if ((+wf.c_cushion || 0) >= 1) wfPillsArr.push(wfPill('Подушка', +wf.c_cushion, '−', '#2F8FD4'));
+  const wfPills = `<div style="display:flex;gap:8px;overflow-x:auto;margin-top:12px;padding-bottom:2px;scrollbar-width:none;-ms-overflow-style:none">${wfPillsArr.join('')}</div>`;
+
   main.innerHTML = `<div class="mfeed">
     <div id="mobMiniHero" style="position:fixed;top:0;left:0;right:0;z-index:150;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;display:flex;align-items:center;justify-content:space-between;transform:translateY(-110%);opacity:0;transition:transform .22s ease,opacity .22s ease">
       <div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:12px;color:var(--text2);font-weight:600">Свободно</span><span style="font-family:Sora;font-weight:700;font-size:15px;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${neg ? '−' : ''}${f(v)} ₽</span></div>
@@ -7470,6 +7484,7 @@ async function mobileHome() {
       <div style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:${pill.col};background:${pill.bg};border:1px solid ${pill.bd};padding:6px 12px;border-radius:999px;margin-top:13px"><span style="width:6px;height:6px;border-radius:50%;background:${pill.dot}"></span>${pill.txt}</div>
       <div style="margin-top:12px;font-size:12.5px;color:var(--text2);line-height:1.45">${heroLine}</div>
     </div>
+    ${wfPills}
     <div style="display:flex;gap:10px;margin-top:14px">${ncCard}${dsrCard}${resCard}</div>
     ${budgetBlock}
   </div>`;
