@@ -7618,16 +7618,13 @@ async function loadOperations() {
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
 
     const isDebtAcc = a => a === 'Обязательства' || a === 'Дебиторка';
-    // Кредитная категория («Кредиты» — тело/процент). Только она уводит расход в «Долги»;
-    // привязки к счёту здесь нет, иначе обычный расход со счёта-обязательства («купил в
-    // долг», Обязательства→Расход) ошибочно становился бы долгом «получено» (+зелёный).
-    const isLoanCat = t => {
-      const c = catById[t.category_id];
-      return !!(c && ((c.category && c.category.includes('Кредит')) || (c.subcategory && c.subcategory.includes('Кредит'))));
-    };
     const opFlow = t => {
       if (t.account_from === 'Доход') return 'income';
-      if (t.account_to === 'Расход') return isLoanCat(t) ? 'obligation' : 'expense';   // расход; процент по кредиту → долг
+      // Любой «Расход» — это расход, ВКЛЮЧАЯ проценты по кредиту (процент = операционный
+      // расход; тело долга идёт в «Обязательства» и попадает в «Долги» ниже). Проверка
+      // «Расход» раньше счёта-долга: расход со счёта-обязательства («купил в долг»,
+      // Обязательства→Расход) — это расход, а не «получен долг».
+      if (t.account_to === 'Расход') return 'expense';
       if (isDebtAcc(t.account_from) || isDebtAcc(t.account_to)) return 'obligation';     // тело кредита, займы, дебиторка
       return 'transfer';
     };
