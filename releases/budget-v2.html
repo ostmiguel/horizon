@@ -981,7 +981,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-dot" aria-hidden="true"></span>Сводка</div>
     <div class="nav-item" id="navBudget" data-page="budget" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Бюджет</div>
     <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Операции</div>
-    <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Цели</div>
+    <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Фонды</div>
     <div class="nav-item" data-page="loans"><span class="nav-dot" aria-hidden="true"></span>Кредиты</div>
     <div class="nav-divider"></div>
     <div class="nav-section">Система</div>
@@ -4345,7 +4345,7 @@ function loadHelp() {
       <li><a href="#h-scenarios">6. Жизненные сценарии</a></li>
       <li><a href="#h-budget">7. Бюджет — правила, конверты, события</a></li>
       <li><a href="#h-pages">8. Обзор и Сводка</a></li>
-      <li><a href="#h-goals">9. Цели</a></li>
+      <li><a href="#h-goals">9. Фонды</a></li>
       <li><a href="#h-loans">10. Кредиты</a></li>
     </ul>
   </div>
@@ -4644,7 +4644,7 @@ function loadHelp() {
 
   <!-- 9. ЦЕЛИ -->
   <div class="help-section" id="h-goals">
-    <div class="help-section-title"><span class="help-section-icon">◆</span>9. Цели</div>
+    <div class="help-section-title"><span class="help-section-icon">◆</span>9. Фонды</div>
     <p class="help-p">Накопления под крупные покупки. Привяжи цель к <b>резервному счёту</b> — прогресс считается по его остатку. Укажи срок — приложение подскажет рекомендуемый ежемесячный взнос.</p>
     <div class="help-tip">Резервный счёт помечается в Справочниках. Пополнение резерва учитывается как сбережения, а не как расход.</div>
   </div>
@@ -5088,7 +5088,7 @@ async function loadGoals() {
     }).join('');
 
     main.innerHTML = '<div class="topbar">'
-      + '<div><div class="page-title">Цели</div><div class="page-sub">Накопления под крупные покупки</div></div>'
+      + '<div><div class="page-title">Фонды</div><div class="page-sub">Накопления под крупные покупки</div></div>'
       + '<button class="btn-primary" onclick="openAddGoal()">+ Цель</button>'
       + '</div>'
       + ((goals||[]).length === 0
@@ -7744,7 +7744,10 @@ async function loadOperations() {
       }
       const catName = c?.category || (type === 'income' ? 'Доход' : null);
       const subName = c?.subcategory || null;
-      const searchKey = [name, sub, t.note, c?.group_name, catName, subName].filter(Boolean).join(' ').toLowerCase();
+      // Поиск по сумме: и сырыми цифрами ("4200"), и с пробелами ("4 200").
+      const amtRaw = String(Math.round(Math.abs(+t.amount) || 0));
+      const amtSpaced = amtRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+      const searchKey = [name, sub, t.note, c?.group_name, catName, subName, amtRaw, amtSpaced].filter(Boolean).join(' ').toLowerCase();
       return { id: t.id, date: t.date, amount: +t.amount, type, reserve, debtDir, name, sub, note: t.note || '', charKey, catName, subName, searchKey };
     });
 
