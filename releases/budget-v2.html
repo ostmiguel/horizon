@@ -4669,6 +4669,7 @@ let _summaryYear = new Date().getFullYear();
 let _summaryMode = 'year'; // 'year' | 'all'
 let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Фиксированный' | 'Эпизодический'
 let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (категории)
+let _summaryMonth = 0;     // 0 — весь год; 1..12 — конкретный месяц (только в режиме 'year')
 
 async function loadSummary() {
   const sidebarYear = +document.getElementById('selYear')?.value;
@@ -4695,10 +4696,16 @@ async function loadSummary() {
     plQ = plQ.eq('year', _summaryYear);
   }
 
-  const [{ data: txAll }, { data: plAll }, { data: accs }] = await Promise.all([
+  // Конверты (category_budgets) — план повседневных категорий (уровень КАТЕГОРИИ).
+  const envUrl = `${API_BASE}/api/category-budgets` + (_summaryMode === 'year'
+    ? `?year=${_summaryYear}${_summaryMonth > 0 ? `&month=${_summaryMonth}` : ''}` : '');
+  const [{ data: txAll }, { data: plAll }, { data: accs }, envRows] = await Promise.all([
     txQ, plQ,
-    sb.from('accounts').select('name,account_type,include_in_balance,color')
+    sb.from('accounts').select('name,account_type,include_in_balance,color'),
+    fetch(envUrl, { credentials: 'include' }).then(r => r.json()).catch(() => []),
   ]);
+  const envByCat = {};
+  (Array.isArray(envRows) ? envRows : []).forEach(b => { envByCat[b.category] = (envByCat[b.category] || 0) + (+b.budget || 0); });
 
   const savingsAccNames = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
   const operAccNames   = new Set((accs||[]).filter(a => a.account_type === 'Актив' && a.include_in_balance).map(a => a.name));
@@ -4742,8 +4749,21 @@ async function loadSummary() {
     return { income, expense, savings, obligation, incomeCM, expenseCM, savingsCM, obligationCM };
   }
 
-  const fact    = groupTx(txAll||[]);
-  const plan    = groupTx(plAll||[]);
+  // Фильтр «за месяц» (только в режиме года): сужаем факт и план до одного месяца.
+  let txRows = txAll || [], plRows = plAll || [];
+  if (_summaryMode === 'year' && _summaryMonth > 0) {
+    const mm = String(_summaryMonth).padStart(2, '0');
+    txRows = txRows.filter(r => (r.date || '').substring(5, 7) === mm);
+    plRows = plRows.filter(r => (r.date || '').substring(5, 7) === mm);
+  }
+  const fact    = groupTx(txRows);
+  const plan    = groupTx(plRows);
+
+  // План повседневных = конверт (уровень категории) → виден в гранулярности «Категории».
+  // Эпизодические/фиксированные берут план из плановых строк (plan), уже учтено выше.
+  if (_summaryGran === 'cat' && (_summaryChar === 'all' || _summaryChar === 'Повседневный')) {
+    Object.entries(envByCat).forEach(([cat, b]) => { plan.expense[cat] = (plan.expense[cat] || 0) + b; });
+  }
 
   const totalIncome     = Object.values(fact.income).reduce((s,v)=>s+v,0);
   const totalExpense    = Object.values(fact.expense).reduce((s,v)=>s+v,0);
@@ -4758,6 +4778,10 @@ async function loadSummary() {
   if (_summaryMode === 'all') {
     colKeys   = years.map(y => String(y));
     colLabels = colKeys;
+  } else if (_summaryMonth > 0) {
+    const mm = String(_summaryMonth).padStart(2, '0');
+    colKeys   = [mm];
+    colLabels = [MONTH_NAMES[_summaryMonth - 1]];
   } else {
     colKeys   = ['01','02','03','04','05','06','07','08','09','10','11','12'];
     colLabels = MONTH_NAMES;
@@ -4766,15 +4790,24 @@ async function loadSummary() {
   // ── Render helpers ──
   function renderTable(rows, totalFact, planRows, totalColor) {
     if (!rows.length) return '<tr><td colspan="4" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>';
+    const utilCell = (factAmt, planAmt, bold) => {
+      const w = bold ? ';font-weight:600' : '';
+      if (planAmt > 0) {
+        const u = Math.round(Math.abs(factAmt) / planAmt * 100);
+        return `<td class="pct" style="color:${u > 100 ? '#bf7419' : 'var(--text3)'}${w}">${u}%</td>`;
+      }
+      return `<td class="pct" style="color:var(--text3)${w}">—</td>`;
+    };
     const body = rows.map(([name, factAmt]) => {
       const planAmt = planRows[name] || 0;
-      const pct = totalFact > 0 ? (Math.abs(factAmt) / Math.abs(totalFact) * 100).toFixed(1) : '0.0';
-      const over = planAmt > 0 && factAmt > planAmt;
+      const has = Math.abs(factAmt) > 0;
+      const over = planAmt > 0 && Math.abs(factAmt) > planAmt;
+      const noPlan = planAmt === 0 && has;
       return `<tr>
-        <td style="color:var(--text)">${name}</td>
+        <td style="color:var(--text)">${name}${noPlan ? ' <span style="font-size:10px;color:var(--text3)">· вне плана</span>' : ''}</td>
         <td class="num" style="color:var(--text2)">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
-        <td class="num" style="color:${over ? '#bf7419' : 'var(--text)'}">${fmt(factAmt)}</td>
-        <td class="pct" style="color:var(--text3)">${pct}%</td>
+        <td class="num" style="color:${over ? '#bf7419' : (has ? 'var(--text)' : 'var(--text3)')}">${has ? fmt(factAmt) : '—'}</td>
+        ${utilCell(factAmt, planAmt)}
       </tr>`;
     }).join('');
     const totalPlan = rows.reduce((s,[name]) => s + (planRows[name]||0), 0);
@@ -4783,7 +4816,7 @@ async function loadSummary() {
       <td style="color:var(--text);font-weight:600">Итого</td>
       <td class="num" style="color:var(--text2);font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
       <td class="num" style="color:var(--text);font-weight:600">${fmt(totalFactSum)}</td>
-      <td class="pct" style="color:var(--text3);font-weight:600">100%</td>
+      ${utilCell(totalFactSum, totalPlan, true)}
     </tr>`;
     return body + totalRow;
   }
@@ -4809,10 +4842,15 @@ async function loadSummary() {
 
   const monthHead = colKeys.map((k,i) => `<th class="num">${colLabels[i]}</th>`).join('');
 
+  const showMonths = !(_summaryMode === 'year' && _summaryMonth > 0);
   function section(title, leftRows, leftTotal, leftPlan, catMonthMap, color, headerColor, sectionTotalColor) {
-    const sortedRows = Object.entries(leftRows)
-      .filter(([,v]) => Math.abs(v) > 0)
-      .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
+    // Объединяем имена факта и плана — чтобы строки «план без факта» (заложено, но не
+    // потрачено) и «факт без плана» (потрачено вне плана) показывались наравне.
+    const names = new Set([...Object.keys(leftRows), ...Object.keys(leftPlan || {})]);
+    const sortedRows = [...names]
+      .map(name => [name, leftRows[name] || 0])
+      .filter(([name, v]) => Math.abs(v) > 0 || Math.abs((leftPlan || {})[name] || 0) > 0)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]) || Math.abs((leftPlan || {})[b[0]] || 0) - Math.abs((leftPlan || {})[a[0]] || 0));
     const filteredCM = {};
     sortedRows.forEach(([name]) => { filteredCM[name] = catMonthMap[name] || {}; });
     const hStyle = headerColor ? `background:${headerColor};border-bottom:2px solid var(--border2)` : '';
@@ -4830,13 +4868,13 @@ async function loadSummary() {
             <tbody>${renderTable(sortedRows, leftTotal, leftPlan, sectionTotalColor)}</tbody>
           </table>
         </div>
-        <div class="sum-pair-right sum-months">
+        ${showMonths ? `<div class="sum-pair-right sum-months">
           <div class="sum-card-title" style="${hStyle}">${title}</div>
           <table class="sum-table">
             <thead><tr>${monthHead}</tr></thead>
             <tbody>${renderMonthTable(filteredCM, color, sectionTotalColor)}</tbody>
           </table>
-        </div>
+        </div>` : ''}
       </div>
     </div>`;
   }
@@ -4852,13 +4890,18 @@ async function loadSummary() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
     <div>
       <div class="page-title">Сводка</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">${_summaryMode==='all'?'Все годы':_summaryYear + ' год'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${_summaryMode==='all'?'Все годы':(_summaryMonth>0 ? MONTH_NAMES[_summaryMonth-1]+' '+_summaryYear : _summaryYear + ' год')} · План / Факт по всем категориям</div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
       <div class="summary-year-bar" style="margin-bottom:0">
         <button class="sy-btn${_summaryMode==='all'?' active':''}" onclick="setSummaryMode('all')">Все годы</button>
         ${years.map(y=>`<button class="sy-btn${_summaryMode==='year'&&_summaryYear===y?' active':''}" onclick="setSummaryYear(${y})">${y}</button>`).join('')}
       </div>
+      ${_summaryMode==='year' ? `<div style="width:1px;height:20px;background:var(--border)"></div>
+      <div class="summary-year-bar" style="margin-bottom:0">
+        <button class="sy-btn${_summaryMonth===0?' active':''}" onclick="setSummaryMonth(0)">Год</button>
+        ${MONTH_NAMES.map((mn,i)=>`<button class="sy-btn${_summaryMonth===i+1?' active':''}" onclick="setSummaryMonth(${i+1})">${mn}</button>`).join('')}
+      </div>` : ''}
       <div style="width:1px;height:20px;background:var(--border)"></div>
       <div class="summary-year-bar" style="margin-bottom:0">
         <button class="sy-btn${_summaryGran==='sub'?' active':''}" onclick="setSummaryGran('sub')">Подкатегории</button>
@@ -4928,6 +4971,12 @@ function setSummaryYear(y) {
 
 function setSummaryMode(mode) {
   _summaryMode = mode;
+  if (mode === 'all') _summaryMonth = 0;
+  loadSummary();
+}
+
+function setSummaryMonth(m) {
+  _summaryMonth = m;
   loadSummary();
 }
 
