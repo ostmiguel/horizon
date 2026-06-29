@@ -6149,13 +6149,16 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
       const midY = (y1 + y2) / 2;
       const goUp = zy > midY; // zero is in lower half → label goes upper-right
       const lbW = 190, lbH = 20;
-      // lower half → upper-right; upper half → lower-left
-      let lbX = goUp ? cx + 16 : cx - 16 - lbW;
+      // Горизонталь: по умолчанию справа от точки; если не влезает в график (разрыв в
+      // конце месяца) — слева; затем жёстко клампим в границы, чтобы текст не обрезался.
+      let lbX = cx + 16;
+      if (lbX + lbW > x2) lbX = cx - 16 - lbW;
+      lbX = Math.max(x1 + 4, Math.min(x2 - lbW - 4, lbX));
       const lbYraw = goUp ? zy - 72 : zy + 30;
       const lbY = Math.max(y1 + 4, Math.min(y2 - lbH - 4, lbYraw));
-      // Leader line end: corner of label box closest to circle
-      const leX = (goUp ? lbX : lbX + lbW).toFixed(1);
-      const leY = (goUp ? lbY + lbH : lbY).toFixed(1);
+      // Лидер-линия: ближайший по горизонтали край подписи и подходящий по вертикали.
+      const leX = (Math.abs(lbX - cx) <= Math.abs((lbX + lbW) - cx) ? lbX : lbX + lbW).toFixed(1);
+      const leY = (lbY > zy ? lbY : lbY + lbH).toFixed(1);
       zeroCrossMarker = `
         <line x1="${cx}" y1="${zy}" x2="${leX}" y2="${leY}" stroke="#C0561A" stroke-width="0.8" opacity="0.65"/>
         <circle cx="${cx}" cy="${zy}" r="4.5" fill="#C0561A"/>
