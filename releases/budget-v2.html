@@ -5208,6 +5208,11 @@ async function loadBudget() {
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const incomeEventsTotal = incomeEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
+    // Плановый профит = Доходы − Фиксированные(вкл. кредиты) − Повседневные(бюджет) − Эпизодические.
+    // (= Доходы − Расходы − Долги; сбережения — распределение, не вычитаем; как в Сводке.)
+    const plannedProfit = (incomeTotal + incomeEventsTotal)
+      - (fixedTotal + loanTotal) - envBudgetTotal - episTotal;
+
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
     // ── строители строк ──
@@ -5326,7 +5331,7 @@ async function loadBudget() {
     const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет запланированных событий.');
 
     main.innerHTML = '<style>'
-      + '.bgt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
+      + '.bgt-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:16px}'
       + '.bgt-frow{display:grid;grid-template-columns:1fr minmax(150px,auto) 120px minmax(130px,auto);align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-flrow{display:grid;grid-template-columns:minmax(150px,1.2fr) 1fr 130px 120px 28px;align-items:center;gap:14px;padding:13px 18px;border-top:1px solid var(--border)}'
       + '.bgt-fc2{font-size:11px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}'
@@ -5362,6 +5367,9 @@ async function loadBudget() {
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
         + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', 'прогноз ' + f(envForecastTotal) + ' ₽ · ' + envelopes.length + ' конвертов')
         + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' запланированных')
+        + bgtCard(plannedProfit >= 0 ? '#5E9B1E' : '#bf7419', 'Профит · план',
+            '<span style="color:' + (plannedProfit >= 0 ? '#5E9B1E' : '#bf7419') + '">' + (plannedProfit >= 0 ? '+' : '−') + f(plannedProfit) + ' ₽</span>',
+            'доходы − расходы − долги')
       + '</div>'
       + bgtBlock('#5E9B1E', 'Доходы', 'регулярные правила и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
       + bgtBlock('#2AA7CC', 'Фиксированные', 'правила и платежи по кредитам', '+ Правило', "openAddRule('fixed')", fixedBodyHtml)
@@ -7642,6 +7650,12 @@ async function loadOperations() {
       debt:    { fact: sumBy(facts, t => opFlow(t)==='obligation'),
                  plan: sumBy(plans, t => opFlow(t)==='obligation'), good: 'down' },
     };
+    // Профит = Доходы − Расходы − Долги (сбережения — распределение, не вычитаем; как в Сводке).
+    kpi.profit = {
+      fact: kpi.income.fact - kpi.expense.fact - kpi.debt.fact,
+      plan: kpi.income.plan - kpi.expense.plan - kpi.debt.plan,
+      good: 'up',
+    };
 
     function kpiCard(label, k, sign) {
       const fact = k.fact, plan = k.plan, delta = fact - plan;
@@ -7731,11 +7745,12 @@ async function loadOperations() {
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px" class="ops-kpi">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px" class="ops-kpi">
           ${kpiCard('Доходы · факт', kpi.income, '+')}
           ${kpiCard('Расходы · факт', kpi.expense, '−')}
           ${kpiCard('Сбережения · факт', kpi.savings, '+')}
           ${kpiCard('Долги · факт', kpi.debt, '−')}
+          ${kpiCard('Профит · факт', kpi.profit, kpi.profit.fact >= 0 ? '+' : '−')}
         </div>
 
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
