@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
+import datetime
 from datetime import date
 from calendar import monthrange
 
@@ -40,7 +41,9 @@ class LoanCreate(BaseModel):
 
 class ScheduleRow(BaseModel):
     month_num: int
-    date: Optional[date] = None
+    # ВАЖНО: тип через модуль (datetime.date), иначе имя поля `date` затеняет тип
+    # `date` → Pydantic считает поле None-only ("Input should be None") и отвергает дату.
+    date: Optional[datetime.date] = None
     payment: Optional[float] = None
     principal: Optional[float] = None
     interest: Optional[float] = None
