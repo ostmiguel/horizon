@@ -5192,16 +5192,13 @@ async function loadBudget() {
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const loanTotal = loanPlan.reduce((s, p) => s + (+p.amount || 0), 0);
 
-    // ── эпизодические: предстоящие события (резервы-цели — на листе «Цели») ──
+    // ── эпизодические: ВСЕ запланированные события месяца (резервы-цели — на «Цели») ──
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
-    // В текущем/будущем месяце показываем все эпизодические события месяца (planRows уже
-    // отфильтрованы по месяцу), чтобы при правке даты «в прошлое» строка не исчезала.
-    // В прошлых месяцах оставляем прежнее поведение (только ещё не наступившие — т.е. пусто).
-    const episShowAll = (year > now.getFullYear()) || (year === now.getFullYear() && month >= now.getMonth() + 1);
+    // Показываем все плановые эпизодические строки месяца (включая уже прошедшие даты),
+    // чтобы блок отражал полный план месяца, а не только «предстоящие».
     const episEvents = planRows
       .filter(p => p.categories && p.categories.character === 'Эпизодический'
-        && p.account_from !== 'Доход'   // эпизодический доход — в блоке «Доходы», не здесь
-        && (episShowAll || (p.date || '') >= todayStr))
+        && p.account_from !== 'Доход')   // эпизодический доход — в блоке «Доходы», не здесь
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
 
@@ -5268,11 +5265,18 @@ async function loadBudget() {
     }
     function eventRow(p) {
       const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
-      const nm = (p.note && p.note.trim()) || (p.categories && (p.categories.subcategory || p.categories.category)) || 'Событие';
+      const note = (p.note || '').trim();
+      const subcat = (p.categories && p.categories.subcategory) || '';
+      const category = (p.categories && p.categories.category) || '';
+      const title = note || subcat || category || 'Событие';
+      // Подпись категории — как в Фиксированных (bgt-rsub). Если заголовок уже = подкатегория,
+      // показываем родительскую категорию, чтобы не дублировать.
+      let subLabel = subcat || category;
+      if (subLabel === title) subLabel = (category && category !== title) ? category : '';
       const covered = reserveNames.has(p.account_from);
       const badge = covered ? '<span class="bgt-cov bgt-cov-ok">обеспечено резервом</span>' : '<span class="bgt-cov bgt-cov-no">нет резерва</span>';
       return '<div class="bgt-evrow">'
-        + '<div class="bgt-rn">' + esc(nm) + '</div>'
+        + '<div class="bgt-rn">' + esc(title) + (subLabel ? '<div class="bgt-rsub">' + esc(subLabel) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + d + '</span>' + badge
         + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
@@ -5319,7 +5323,7 @@ async function loadBudget() {
     const envRowsHtml = (envelopes.length || suggestions.length)
       ? envelopes.map((e, i) => envelopeRow(e, i)).join('') + suggBlock
       : emptyMsg('Нет конвертов — «+ Конверт».');
-    const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет предстоящих событий.');
+    const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет запланированных событий.');
 
     main.innerHTML = '<style>'
       + '.bgt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
@@ -5357,12 +5361,12 @@ async function loadBudget() {
         + bgtCard('#5E9B1E', 'Доходы', '+' + f(incomeTotal + incomeEventsTotal) + ' ₽', incomeRules.length + ' правил' + (incomeEvents.length ? ' · ' + incomeEvents.length + ' разовых' : ''))
         + bgtCard('#2AA7CC', 'Фиксированные', '−' + f(fixedTotal + loanTotal) + ' ₽/мес', fixedRules.length + ' правил · ' + loanPlan.length + ' по кредитам')
         + bgtCard('#1FA497', 'Повседневные · конверты', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽', 'прогноз ' + f(envForecastTotal) + ' ₽ · ' + envelopes.length + ' конвертов')
-        + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' предстоящих')
+        + bgtCard('#8FBE1E', 'Эпизодические · события', '−' + f(episTotal) + ' ₽', episEvents.length + ' запланированных')
       + '</div>'
       + bgtBlock('#5E9B1E', 'Доходы', 'регулярные правила и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
       + bgtBlock('#2AA7CC', 'Фиксированные', 'правила и платежи по кредитам', '+ Правило', "openAddRule('fixed')", fixedBodyHtml)
       + bgtBlock('#1FA497', 'Повседневные · конверты', 'месячный бюджет против трат', '+ Конверт', 'openAddEnvelope()', envRowsHtml)
-      + bgtBlock('#8FBE1E', 'Эпизодические · события', 'предстоящие разовые траты', '+ Событие', 'openEpisodicEvent()', eventRowsHtml);
+      + bgtBlock('#8FBE1E', 'Эпизодические · события', 'запланированные разовые траты', '+ Событие', 'openEpisodicEvent()', eventRowsHtml);
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
