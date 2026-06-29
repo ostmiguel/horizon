@@ -3,6 +3,7 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import asyncpg
 import os
@@ -37,6 +38,19 @@ app.include_router(category_budgets.router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+# ── Юр-страницы (публичные, без авторизации) — ДО монтирования статики ─────────
+@app.get("/privacy")
+async def privacy_page():
+    return FileResponse("static/privacy.html")
+
+@app.get("/terms")
+async def terms_page():
+    return FileResponse("static/terms.html")
+
+@app.get("/consent")
+async def consent_page():
+    return FileResponse("static/consent.html")
 
 # ── Static files — монтируем ПОСЛЕДНИМИ на / ──────────────────────────────────
 # html=True → index.html для /, все остальные файлы по имени (/chart.js, /logo.svg…)

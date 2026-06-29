@@ -9,6 +9,9 @@ on:
       - 'personal_budget/horizon-api/**'
       - 'scripts/deploy_remote.sh'
       - '.github/workflows/deploy.yml'
+      - 'docs/privacy.html'
+      - 'docs/terms.html'
+      - 'docs/consent.html'
 
 jobs:
   deploy:
@@ -35,7 +38,10 @@ jobs:
             personal_budget/horizon-api/middleware.py \
             personal_budget/horizon-api/routers \
             personal_budget/horizon-api/migrations \
-            personal_budget/horizon-api/deploy
+            personal_budget/horizon-api/deploy \
+            docs/privacy.html \
+            docs/terms.html \
+            docs/consent.html
 
       # ── scp + ssh с авто-ретраями (лечит flaky connection refused / i/o timeout) ──
       - name: Deploy with retry
