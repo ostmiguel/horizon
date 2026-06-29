@@ -3985,12 +3985,18 @@ async function schedTogglePaid(loanId, monthNum, isPaid) {
   const extraVal    = parseFloat(row?.querySelector('[data-field=extra_payment]')?.value) || null;
 
   // Upsert this row
-  await sb.from('loan_schedule').upsert([{
+  const { error } = await sb.from('loan_schedule').upsert([{
     loan_id: loanId, month_num: monthNum,
     date: dateVal, payment: payVal, principal: princVal,
     interest: intVal, balance: balVal, extra_payment: extraVal,
     is_paid: isPaid
   }], { onConflict: 'loan_id,month_num' });
+  if (error) {
+    // НЕ показываем ложный «saved»: откатываем галку и сообщаем реальную ошибку.
+    const cb = row?.querySelector('input[type=checkbox]'); if (cb) cb.checked = !isPaid;
+    toast('Не удалось сохранить отметку: ' + (error.message || 'ошибка сервера'), false);
+    return;
+  }
   if (row) row.className = isPaid ? 'paid' : '';
   await refreshLoanBalance(loanId);
   setSaveStatus('saved');
