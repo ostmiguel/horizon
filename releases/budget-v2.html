@@ -4877,7 +4877,7 @@ async function loadSummary() {
   <div class="summary-kpi">
     ${sumKpi('#5E9B1E', 'Доходы', fmt(totalIncome), '#5E9B1E')}
     ${sumKpi('#bf7419', 'Расходы' + (_summaryChar!=='all' ? ' ('+({'Повседневный':'повсед.','Фиксированный':'фикс.','Эпизодический':'эпизод.'}[_summaryChar]||'')+')' : ''), fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0)), '#bf7419')}
-    ${sumKpi('#C0741A', 'Обязательства', fmt(totalObligation), '#C0741A')}
+    ${sumKpi('#C0741A', 'Долги', fmt(totalObligation), '#C0741A')}
     ${sumKpi(profit>=0?'#5E9B1E':'#bf7419', 'Профит', fmt(profit), profit>=0?'#5E9B1E':'#bf7419')}
     ${sumKpi('#1FA497', 'Сбережения', fmt(totalSavings), totalSavings>=0?'#5E9B1E':'#bf7419')}
     ${sumKpi('#2AA7CC', 'Норма сбережений', savingsRate.toFixed(1)+'%', '#2AA7CC')}
@@ -4887,7 +4887,7 @@ async function loadSummary() {
   ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)', 'rgba(94,155,30,0.10)', 'var(--income)')}
   ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? '#bf7419' : 'var(--text3)', 'rgba(191,116,25,0.10)', '#bf7419')}
   ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? '#bf7419' : 'var(--text3)', 'rgba(31,164,151,0.10)', 'var(--text)')}
-  ${section('Обязательства', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null, 'rgba(192,116,26,0.10)', 'var(--text)')}
+  ${section('Долги', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null, 'rgba(192,116,26,0.10)', 'var(--text)')}
 </div>`;
   setTimeout(bindSummaryHover, 0);
 
@@ -6545,7 +6545,7 @@ async function loadDashboardNew() {
       <div class="hero">
         <div class="hero-left">
           <div class="kpi-label">Свободно на конец месяца</div>
-          <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${sts.value < 0 ? '#B0492A' : '#0F243C'}">${sts.value < 0 ? '−' : ''}${f(sts.value)} ₽</div>
+          <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${sts.value < 0 ? '#B0492A' : '#0F243C'}">${sts.value < 0 ? '−' : ''}${f(sts.value)} <span style="font-size:20px;color:#5E7088;font-weight:500">₽</span></div>
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
           <div style="font-size:12.5px;color:#5E7088;line-height:1.5;margin-bottom:6px;font-variant-numeric:tabular-nums">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
           ${warningHtml}

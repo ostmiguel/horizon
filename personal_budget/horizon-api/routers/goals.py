@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+from datetime import date
 
 router = APIRouter(prefix="/api/goals", tags=["goals"])
 
@@ -9,14 +10,14 @@ class GoalCreate(BaseModel):
     name: str
     target_amount: float
     account_id: Optional[int] = None
-    due_date: Optional[str] = None
+    due_date: Optional[date] = None
 
 
 class GoalUpdate(BaseModel):
     name: Optional[str] = None
     target_amount: Optional[float] = None
     account_id: Optional[int] = None
-    due_date: Optional[str] = None
+    due_date: Optional[date] = None
 
 
 @router.get("")
