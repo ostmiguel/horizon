@@ -31,6 +31,8 @@ async def get_metrics(request: Request):
     V_remain = m["V_remain"]; sigma_remain = m["sigma_remain"]
     plan_rows = m["plan_rows"]; reserve_names = m["reserve_names"]
     I_remain = m["I_remain"]; F_remain = m["F_remain"]; R_topup = m["R_topup"]
+    F_before = m["F_before"]; V_to_income = m["V_to_income"]; R_before = m["R_before"]
+    next_income_date = m["next_income_date"]; days_to_income = m["days_to_income"]
     sts = m["sts"]; sts_low = m["sts_low"]; sts_high = m["sts_high"]; sts_status = m["sts_status"]
 
     # ── §4.3 Net capital + Δ% ────────────────────────────────────────────────
@@ -457,12 +459,14 @@ async def get_metrics(request: Request):
             "low":     round(sts_low),
             "high":    round(sts_high),
             "status":  sts_status,
+            "next_income_date": next_income_date.isoformat(),
+            "days_to_income":   days_to_income,
             "waterfall": {
                 "b0":        round(B0),
-                "i_remain":  round(I_remain),
-                "f_remain":  round(F_remain),
-                "v_remain":  round(V_remain),
-                "r_topup":   round(R_topup),
+                "i_remain":  0,
+                "f_remain":  round(F_before),
+                "v_remain":  round(V_to_income),
+                "r_topup":   round(R_before),
                 "c_cushion": round(C_cushion),
             },
             "b0_accounts": b0_accounts,
@@ -473,7 +477,7 @@ async def get_metrics(request: Request):
                 "reserve_topup_items":   reserve_topup_items,
                 "cushion_accounts":      cushion_accounts_detail,
                 "v_daily_rate":          round(r_var),
-                "d_left":                d_left,
+                "d_left":                days_to_income,
             },
         },
         "net_capital": {

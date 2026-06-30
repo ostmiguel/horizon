@@ -6553,7 +6553,7 @@ async function loadDashboardNew() {
 
       <div class="hero">
         <div class="hero-left">
-          <div class="kpi-label">Свободно на конец месяца</div>
+          <div class="kpi-label">Свободно · до следующего дохода</div>
           <div class="kpi-val" style="font-size:40px;line-height:1.1;color:${sts.value < 0 ? '#B0492A' : '#0F243C'}">${sts.value < 0 ? '−' : ''}${f(sts.value)} <span style="font-size:20px;color:#5E7088;font-weight:500">₽</span></div>
           <span class="pill" style="background:${pill.bg};color:${pill.color}">${pill.label}</span>
           <div style="font-size:12.5px;color:#5E7088;line-height:1.5;margin-bottom:6px;font-variant-numeric:tabular-nums">коридор ${sts.low < 0 ? '−' : ''}${f(sts.low)} — ${sts.high < 0 ? '−' : ''}${f(sts.high)} ₽ · уверенность 80%</div>
@@ -7503,7 +7503,7 @@ async function mobileHome() {
     </div>
     ${mobileTopHeader()}
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow)">
-      <div style="font-size:12px;color:var(--text2);font-weight:500"><span style="color:var(--text);font-weight:600">Свободно</span> · до конца месяца</div>
+      <div style="font-size:12px;color:var(--text2);font-weight:500"><span style="color:var(--text);font-weight:600">Свободно</span> · до следующего дохода</div>
       <div style="font-family:Sora;font-weight:700;font-size:46px;letter-spacing:-.03em;line-height:1;margin:8px 0 0;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums;white-space:nowrap">${neg ? '−' : ''}${f(v)} <span style="font-size:22px;color:${neg ? '#A8472F' : 'var(--text2)'};font-weight:500${neg ? ';opacity:.65' : ''}">₽</span></div>
       <div style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:${pill.col};background:${pill.bg};border:1px solid ${pill.bd};padding:6px 12px;border-radius:999px;margin-top:13px"><span style="width:6px;height:6px;border-radius:50%;background:${pill.dot}"></span>${pill.txt}</div>
       <div style="margin-top:12px;font-size:12.5px;color:var(--text2);line-height:1.45">${heroLine}</div>

@@ -176,6 +176,22 @@ async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -
     return [dict(r) for r in rows]
 
 
+async def plan_window(db, user_id: str, after: date, until: date) -> list:
+    """Плановые строки в (after, until] — для расчёта «до следующего дохода».
+    Окно может выходить за границу месяца (план следующего месяца)."""
+    rows = await db.fetch("""
+        SELECT p.date, p.amount, p.account_from, p.account_to,
+               c.category AS cat_category,
+               c.character AS cat_character,
+               c.expense_type AS cat_expense_type
+        FROM plan p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1 AND p.date > $2 AND p.date <= $3
+        ORDER BY p.date
+    """, user_id, after, until)
+    return [dict(r) for r in rows]
+
+
 # ── Safe-to-Spend (единый расчёт для API и крона) ─────────────────────────────
 async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     """Считает STS и все его компоненты. Единственное место расчёта STS.
@@ -223,15 +239,36 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
         if r.get("account_to") in reserve_names
     )
 
-    # ── Safe to spend ──────────────────────────────────────────────────────────
-    # Подушка (C_cushion) уже исключена из B0 через _is_op (как резерв) —
-    # повторно её НЕ вычитаем, чтобы не огораживать дважды.
-    # TODO: решить, учитывать ли подушку в runway-ликвидности (liquid).
-    sts = B0 + I_remain - F_remain - V_remain - R_topup
-    sts_low  = sts - Z_80 * sigma_remain
-    sts_high = sts + Z_80 * sigma_remain
+    # ── Свободно «до следующего дохода» (trough) ───────────────────────────────
+    # Между «сегодня» и следующим плановым доходом доходов нет → баланс только
+    # убывает, низшая точка — перед самой зарплатой. Поэтому:
+    #   Свободно = B0 − (плановые оттоки до даты дохода) − r_var × дней_до_дохода.
+    # Доход — граница окна, в сумму НЕ входит. Окно может выходить за месяц.
+    # Подушка уже вне B0 (через _is_op), повторно не вычитаем.
+    horizon = today + timedelta(days=75)
+    fut_rows = await plan_window(db, user_id, today, horizon)
+    incomes = [r for r in fut_rows if r.get("account_from") == "Доход"]
+    next_income_date = min((r["date"] for r in incomes), default=month_end)
+    days_to_income = max((next_income_date - today).days, 0)
+    win = [r for r in fut_rows if r["date"] < next_income_date]
 
-    buffer = sts / max(V_remain, 1)
+    F_before = sum(
+        float(r["amount"]) for r in win
+        if r.get("account_to") == "Расход" and (
+            r.get("cat_expense_type") == "fixed"
+            or r.get("cat_character") in EPISODIC_CHARS
+        )
+    )
+    F_before += sum(float(r["amount"]) for r in win if r.get("account_to") == "Обязательства")
+    R_before = sum(float(r["amount"]) for r in win if r.get("account_to") in reserve_names)
+    V_to_income = r_var * days_to_income
+    sigma_to_income = sigma_day * math.sqrt(days_to_income) if days_to_income > 0 else 0.0
+
+    sts = B0 - F_before - V_to_income - R_before
+    sts_low  = sts - Z_80 * sigma_to_income
+    sts_high = sts + Z_80 * sigma_to_income
+
+    buffer = sts / max(V_to_income, 1)
     if sts < 0:
         sts_status = "red"
     elif buffer < 0.15:
@@ -250,5 +287,8 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
         "V_remain": V_remain, "sigma_remain": sigma_remain,
         "plan_rows": plan_rows, "reserve_names": reserve_names,
         "I_remain": I_remain, "F_remain": F_remain, "R_topup": R_topup,
+        # trough «до следующего дохода»
+        "next_income_date": next_income_date, "days_to_income": days_to_income,
+        "F_before": F_before, "V_to_income": V_to_income, "R_before": R_before,
         "sts": sts, "sts_low": sts_low, "sts_high": sts_high, "sts_status": sts_status,
     }
