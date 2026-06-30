@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 PUBLIC_API_PATHS = {
     "/api/auth/google", "/api/auth/google/callback",
     "/api/auth/yandex", "/api/auth/yandex/callback",
+    "/api/auth/mailru", "/api/auth/mailru/callback",
 }
 
 # ── CSRF: разрешённые источники изменяющих запросов ──────────────────────────
