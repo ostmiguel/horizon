@@ -96,12 +96,19 @@ async def auth_mailru_callback(code: str, state: str, request: Request, response
             "grant_type": "authorization_code",
             "redirect_uri": redirect_uri,
         })
-        tokens = token_res.json()
+        try:
+            tokens = token_res.json()
+        except Exception:
+            raise HTTPException(400, f"Mail.ru token: невалидный ответ ({token_res.status_code}): {token_res.text[:300]}")
+        if "access_token" not in tokens:
+            raise HTTPException(400, f"Mail.ru token error: {tokens}")
         user_res = await client.get(
             "https://oauth.mail.ru/userinfo",
             params={"access_token": tokens["access_token"]},
         )
         user_info = user_res.json()
+        if "id" not in user_info:
+            raise HTTPException(400, f"Mail.ru userinfo error: {user_info}")
 
     name = user_info.get("name") or " ".join(
         x for x in [user_info.get("first_name"), user_info.get("last_name")] if x
