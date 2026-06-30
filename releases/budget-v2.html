@@ -6114,10 +6114,10 @@ function renderBalanceChart(fc, ariaLabel){
   if(minP<0 && maxP>0){ const zy=vY(0); zero=`<line x1="${x1}" y1="${zy.toFixed(1)}" x2="${x2}" y2="${zy.toFixed(1)}" stroke="#C28A3A" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${(x1-6).toFixed(0)}" y="${(zy+4).toFixed(0)}" fill="#B07A1E" font-size="10.5" font-weight="600" text-anchor="end">0</text>`; }
 
   let minBand=''; const sm=fc.safe_min||0;
-  if(sm>0){ const smY=vY(sm); minBand=`<rect x="${x1}" y="${smY.toFixed(1)}" width="${plotW}" height="${(y2-smY).toFixed(1)}" fill="rgba(194,114,74,.05)"/><line x1="${x1}" y1="${smY.toFixed(1)}" x2="${x2}" y2="${smY.toFixed(1)}" stroke="rgba(194,114,74,.35)" stroke-width="1.1" stroke-dasharray="5 5"/><text x="${(x1+5).toFixed(0)}" y="${(smY-6).toFixed(0)}" fill="#8A4B28" font-size="10" font-weight="600">безопасный минимум · ${k(sm)}</text>`; }
+  if(sm>0){ const smY=vY(sm); minBand=`<rect x="${x1}" y="${smY.toFixed(1)}" width="${plotW}" height="${(y2-smY).toFixed(1)}" fill="rgba(194,114,74,.05)"/><line x1="${x1}" y1="${smY.toFixed(1)}" x2="${x2}" y2="${smY.toFixed(1)}" stroke="rgba(194,114,74,.35)" stroke-width="1.1" stroke-dasharray="5 5"/><text x="${(x1+5).toFixed(0)}" y="${(Math.max(y1+10, smY-7)).toFixed(0)}" fill="#8A4B28" font-size="9.5" font-weight="600">безопасный минимум · ${k(sm)}</text>`; }
 
   let xLbl='';
-  pts.forEach((p,i)=>{ const isFirst=p.date.slice(8,10)==='01'; const isT=(i===todayI); xLbl+=`<text x="${iX(i).toFixed(1)}" y="${(y2+17).toFixed(0)}" fill="${(isT||isFirst)?'#5E7088':'#A7B4C2'}" font-size="9" font-weight="${(isT||isFirst)?'600':'400'}" text-anchor="middle">${p.date.slice(8,10)}</text>`; });
+  pts.forEach((p,i)=>{ const isFirst=p.date.slice(8,10)==='01'; const isT=(i===todayI); xLbl+=`<text x="${iX(i).toFixed(1)}" y="${(y2+16).toFixed(0)}" fill="${(isT||isFirst)?'#5E7088':'#A7B4C2'}" font-size="7.5" font-weight="${(isT||isFirst)?'600':'400'}" text-anchor="middle">${p.date.slice(8,10)}.${p.date.slice(5,7)}</text>`; });
 
   const factPts=pts.filter(p=>p.fact!=null), fcstPts=pts.filter(p=>p.forecast!=null);
   const seg=(arr,key)=>arr.map((p,j)=>`${j?'L':'M'}${iX(p._i).toFixed(1)} ${vY(p[key]).toFixed(1)}`).join(' ');
@@ -6143,7 +6143,7 @@ function renderBalanceChart(fc, ariaLabel){
 
   const svgId='fc'+Math.random().toString(36).slice(2,7);
   window._fcCharts=(window._fcCharts||{});
-  window._fcCharts[svgId]={pts, n, x1, plotW, troughDate:fc.trough_date};
+  window._fcCharts[svgId]={pts, n, x1, plotW, troughDate:fc.trough_date, troughValue:fc.trough_value};
   const crosshair=`<line id="${svgId}-tl" x1="0" y1="${y1}" x2="0" y2="${y2}" stroke="rgba(15,36,60,.18)" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>`;
   const overlay=`<rect x="${x1}" y="${y1}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair" onmousemove="fcHover(event,this)" onmouseleave="fcHoverLeave()"/>`;
   return `<svg id="${svgId}" viewBox="0 0 ${VW} ${VH}" class="chart" role="img" aria-label="${ariaLabel||'Прогноз баланса до следующего дохода'}">${grad}${grid}${yLbl}${zero}${minBand}${factArea}${factLine}${fcstLine}${todayMk}${salaryMk}${troughMk}${xLbl}${crosshair}${overlay}</svg>`;
@@ -6367,7 +6367,7 @@ window.fcHover = function(evt, el) {
   if (!svg || !svg.id) return;
   const meta = (window._fcCharts || {})[svg.id];
   if (!meta) return;
-  const { pts, n, x1, plotW, troughDate } = meta;
+  const { pts, n, x1, plotW, troughDate, troughValue } = meta;
 
   const svgRect = svg.getBoundingClientRect();
   const scaleX  = svg.viewBox.baseVal.width / svgRect.width;
@@ -6384,19 +6384,22 @@ window.fcHover = function(evt, el) {
   if (tl) { tl.setAttribute('x1', cx); tl.setAttribute('x2', cx); tl.style.display = ''; }
 
   const fv = v => v != null ? (v < 0 ? '−' : '') + new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(v))) + ' ₽' : null;
-  const v = (pt.fact != null) ? pt.fact : pt.forecast;
   const isFcst = (pt.fact == null);
   const isTrough = (pt.date === troughDate);
+  // На низшей точке показываем то же число, что в маркере/герое («Свободно»).
+  const v = (isTrough && troughValue != null) ? troughValue : ((pt.fact != null) ? pt.fact : pt.forecast);
   const fmtV = (v < 0 ? '−' : '') + new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(v)));
 
   let tip = document.getElementById('fc-tooltip');
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'fc-tooltip';
-    tip.style.cssText = 'position:fixed;background:#fff;border:1px solid rgba(15,36,60,.09);border-radius:10px;padding:10px 14px;font-family:Inter,sans-serif;box-shadow:0 4px 20px rgba(15,36,60,.14);pointer-events:none;z-index:9999;min-width:154px;';
+    tip.style.cssText = 'position:fixed;background:#0F243C;border-radius:10px;padding:9px 13px;font-family:Inter,sans-serif;box-shadow:0 10px 24px -10px rgba(15,36,60,.5);pointer-events:none;z-index:9999;min-width:120px;';
     document.body.appendChild(tip);
   }
-  tip.innerHTML = `<div style="font-size:11px;color:#93A1B5;margin-bottom:4px">${fcRuDate(pt.date)}${isFcst ? ' · прогноз' : ''}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:14px;color:${isTrough ? '#A8472F' : '#0F243C'}">${fmtV} ₽</div>${isTrough ? '<div style="font-size:10.5px;color:#A8472F;font-weight:600;margin-top:2px">это «Свободно»</div>' : ''}`;
+  const sub = isTrough ? '<div style="font-size:10.5px;color:#FF9E80;font-weight:600;margin-top:2px">это «Свободно»</div>'
+                       : (isFcst ? '<div style="font-size:10.5px;color:#9FB2C7;margin-top:2px">прогноз</div>' : '');
+  tip.innerHTML = `<div style="font-size:10.5px;color:#9FB2C7;margin-bottom:2px">${fcRuDate(pt.date)}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:14px;color:${isTrough ? '#FF9E80' : '#fff'};font-variant-numeric:tabular-nums">${fmtV} ₽</div>${sub}`;
   tip.style.display = 'block';
   const tx = Math.min(evt.clientX + 16, window.innerWidth - 160);
   tip.style.left = tx + 'px';
