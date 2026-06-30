@@ -88,34 +88,37 @@ async def auth_mailru_callback(code: str, state: str, request: Request, response
         raise HTTPException(400, "Invalid OAuth state")
     db = request.state.db
     redirect_uri = f"{BASE_URL}/api/auth/mailru/callback"
-    async with httpx.AsyncClient() as client:
-        token_res = await client.post("https://oauth.mail.ru/token", data={
-            "code": code,
-            "client_id": MAILRU_CLIENT_ID,
-            "client_secret": MAILRU_CLIENT_SECRET,
-            "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
-        })
-        try:
+    try:
+        async with httpx.AsyncClient() as client:
+            token_res = await client.post("https://oauth.mail.ru/token", data={
+                "code": code,
+                "client_id": MAILRU_CLIENT_ID,
+                "client_secret": MAILRU_CLIENT_SECRET,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri,
+            })
             tokens = token_res.json()
-        except Exception:
-            raise HTTPException(400, f"Mail.ru token: невалидный ответ ({token_res.status_code}): {token_res.text[:300]}")
-        if "access_token" not in tokens:
-            raise HTTPException(400, f"Mail.ru token error: {tokens}")
-        user_res = await client.get(
-            "https://oauth.mail.ru/userinfo",
-            params={"access_token": tokens["access_token"]},
-        )
-        user_info = user_res.json()
+            if "access_token" not in tokens:
+                raise HTTPException(400, f"Mail.ru token error ({token_res.status_code}): {str(tokens)[:300]}")
+            user_res = await client.get(
+                "https://oauth.mail.ru/userinfo",
+                params={"access_token": tokens["access_token"]},
+            )
+            user_info = user_res.json()
         if "id" not in user_info:
-            raise HTTPException(400, f"Mail.ru userinfo error: {user_info}")
-
-    name = user_info.get("name") or " ".join(
-        x for x in [user_info.get("first_name"), user_info.get("last_name")] if x
-    ).strip() or None
-    user = await _get_or_create_user(db, "mailru", str(user_info["id"]),
-                                      user_info.get("email"), name)
-    session_token = await _create_session(db, user["id"])
+            raise HTTPException(400, f"Mail.ru userinfo: {str(user_info)[:300]}")
+        email = user_info.get("email")
+        if not email:
+            raise HTTPException(400, f"Mail.ru: профиль без email. Поля: {list(user_info.keys())}")
+        name = user_info.get("name") or " ".join(
+            x for x in [user_info.get("first_name"), user_info.get("last_name")] if x
+        ).strip() or None
+        user = await _get_or_create_user(db, "mailru", str(user_info["id"]), email, name)
+        session_token = await _create_session(db, user["id"])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Mail.ru callback: {type(e).__name__}: {str(e)[:300]}")
 
     from fastapi.responses import RedirectResponse
     r = RedirectResponse(f"{BASE_URL}/?logged_in=1")
