@@ -7,7 +7,7 @@ from metrics_core import (
     Z_80, FLOW_CHARS, EPISODIC_CHARS, FIXED_CHARS,
     month_context, robust_rate, robust_sigma, _is_op, _is_rsv,
     account_balances, flow_daily_rate, monthly_income_sum,
-    monthly_fixed_income_sum, monthly_expense_sum, plan_remaining, safe_to_spend,
+    monthly_fixed_income_sum, monthly_expense_sum, plan_remaining, plan_window, safe_to_spend,
 )
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -533,92 +533,103 @@ async def get_forecast(request: Request):
     today, year, month, d_now, d_left, days_in_month, month_start, month_end = month_context()
 
     accs = await account_balances(db, user_id)
-    op_names    = [a["name"] for a in accs.values() if _is_op(a)]
+    op_names      = [a["name"] for a in accs.values() if _is_op(a)]
     reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
+    B0_now  = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
+    cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
 
-    B0_now = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
+    r_var, sigma_day = await flow_daily_rate(db, user_id, today)
+    # Безопасный минимум: хотя бы недельный запас трат, или подушка, если она крупнее.
+    safe_min = max(cushion, r_var * 7)
 
+    # ── Следующий доход (план; может быть в следующем месяце) ──────────────────
+    fut = await plan_window(db, user_id, today, today + timedelta(days=75))
+    incomes = [r for r in fut if r.get("account_from") == "Доход"]
+    next_income_date = min((r["date"] for r in incomes), default=month_end)
+    days_to_income = max((next_income_date - today).days, 0)
+
+    # ── Окно графика: скользящие ~30 дней (прошлое + прогноз до дохода + 3 дня) ─
+    end_date = next_income_date + timedelta(days=3)
+    past_days = max(2, min(21, 30 - (days_to_income + 3)))
+    start_date = max(month_start, today - timedelta(days=past_days))
+
+    # ── Факт (операционный нетто) по датам окна ────────────────────────────────
     if op_names:
         daily_fact = await db.fetch("""
             SELECT date,
                    SUM(CASE WHEN account_to   = ANY($4::text[]) THEN amount ELSE 0 END)
-                 - SUM(CASE WHEN account_from = ANY($4::text[]) THEN amount ELSE 0 END)
-                   AS net
+                 - SUM(CASE WHEN account_from = ANY($4::text[]) THEN amount ELSE 0 END) AS net
             FROM transactions
-            WHERE user_id=$1
-              AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-            GROUP BY date ORDER BY date
-        """, user_id, year, month, op_names)
+            WHERE user_id=$1 AND date > $2 AND date <= $3
+            GROUP BY date
+        """, user_id, start_date, today, op_names)
     else:
         daily_fact = []
+    fact_by_date = {r["date"]: float(r["net"]) for r in daily_fact}
+    B_start = B0_now - sum(fact_by_date.values())   # баланс на начало окна
 
-    fact_by_day = {r["date"].day: float(r["net"]) for r in daily_fact}
-
-    month_net_so_far = sum(fact_by_day.get(d, 0) for d in range(1, d_now + 1))
-    B_month_start = B0_now - month_net_so_far
-
-    r_var, sigma_day = await flow_daily_rate(db, user_id, today)
-
-    plan_rows = await plan_remaining(db, user_id, year, month, today)
-
-    # plan_by_day_all  → plan line (все плановые операции, как задумал пользователь)
-    # plan_by_day_fixed → forecast line (только фикс/долги/эпизод — переменные уже в r_var)
-    plan_by_day_all:   dict[int, float] = {}
-    plan_by_day_fixed: dict[int, float] = {}
-    for r in plan_rows:
-        day    = r["date"].day
-        amount = float(r["amount"])
-        af     = r.get("account_from", "")
-        at     = r.get("account_to", "")
-        cat_et = r.get("cat_expense_type")
-        cat_ch = r.get("cat_character", "")
-
-        is_variable_flow = (
-            at == "Расход"
-            and cat_et == "variable"
-            and cat_ch not in EPISODIC_CHARS
-        )
-
+    # ── Плановые «фикс»-движения в окне прогноза (today, end_date] ─────────────
+    # (повседневные уже в r_var; income добавляем — он поднимает линию после зарплаты)
+    plan_fixed_by_date: dict = {}
+    F_before = 0.0   # оттоки до даты дохода → для trough = «Свободно» (как в safe_to_spend)
+    R_before = 0.0
+    for r in fut:
+        d = r["date"]
+        if d <= today or d > end_date:
+            continue
+        amount = float(r["amount"]); af = r.get("account_from", ""); at = r.get("account_to", "")
+        cat_et = r.get("cat_expense_type"); cat_ch = r.get("cat_character", "")
+        is_var = (at == "Расход" and cat_et == "variable" and cat_ch not in EPISODIC_CHARS)
         if af == "Доход":
-            plan_by_day_all[day]   = plan_by_day_all.get(day, 0)   + amount
-            plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) + amount
+            plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
         elif at in ("Расход", "Обязательства"):
-            plan_by_day_all[day] = plan_by_day_all.get(day, 0) - amount
-            if not is_variable_flow:
-                # Variable flow already accounted for via r_var; skip to avoid double-counting
-                plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) - amount
+            if not is_var:
+                plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
+                if d < next_income_date:
+                    F_before += amount
         elif at in reserve_names:
-            # Reserve top-up: money leaves operational accounts
-            plan_by_day_all[day]   = plan_by_day_all.get(day, 0)   - amount
-            plan_by_day_fixed[day] = plan_by_day_fixed.get(day, 0) - amount
+            plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
+            if d < next_income_date:
+                R_before += amount
 
+    # trough = «Свободно» (тот же закрытый расчёт, что в safe_to_spend) — числа сходятся
+    trough_value = round(B0_now - F_before - r_var * days_to_income - R_before)
+    trough_date = (next_income_date - timedelta(days=1)).isoformat() if days_to_income > 0 else today.isoformat()
+
+    # ── Точки по дням ──────────────────────────────────────────────────────────
     points = []
-    running_fact     = B_month_start
-    running_forecast = B0_now
-    running_plan     = B0_now
-
-    for d in range(1, days_in_month + 1):
-        point: dict = {"day": d}
-
-        if d <= d_now:
-            running_fact += fact_by_day.get(d, 0)
-            point["fact"] = round(running_fact)
+    running_fact = B_start
+    running_fcst = B0_now
+    d = start_date
+    while d <= end_date:
+        pt = {"date": d.isoformat()}
+        if d < today:
+            running_fact += fact_by_date.get(d, 0)
+            pt["fact"] = round(running_fact)
+        elif d == today:
+            running_fact += fact_by_date.get(d, 0)   # → B0_now
+            pt["fact"] = round(running_fact)
+            pt["forecast"] = round(running_fcst)     # стыкуем линии без разрыва
         else:
-            point["fact"] = None
-            running_forecast -= r_var
-            running_forecast += plan_by_day_fixed.get(d, 0)
-            days_ahead = d - d_now
+            running_fcst -= r_var
+            running_fcst += plan_fixed_by_date.get(d, 0)
+            days_ahead = (d - today).days
             sigma = sigma_day * math.sqrt(days_ahead)
-            point["forecast"] = round(running_forecast)
-            point["low"]      = round(running_forecast - Z_80 * sigma)
-            point["high"]     = round(running_forecast + Z_80 * sigma)
+            pt["forecast"] = round(running_fcst)
+            pt["low"]      = round(running_fcst - Z_80 * sigma)
+            pt["high"]     = round(running_fcst + Z_80 * sigma)
+        points.append(pt)
+        d += timedelta(days=1)
 
-            running_plan += plan_by_day_all.get(d, 0)
-            point["plan"] = round(running_plan)
-
-        points.append(point)
-
-    return {"month": f"{year}-{month:02d}", "points": points}
+    return {
+        "today":            today.isoformat(),
+        "next_income_date": next_income_date.isoformat(),
+        "days_to_income":   days_to_income,
+        "trough_date":      trough_date,
+        "trough_value":     trough_value,
+        "safe_min":         round(safe_min),
+        "points":           points,
+    }
 
 
 # ── /api/metrics/affordability — §4.8 ────────────────────────────────────────
