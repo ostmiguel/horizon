@@ -11,6 +11,8 @@ SRC="$T/personal_budget/horizon-api"
 # ── frontend ──
 mv -f "$T/releases/budget-v2.html" "$APP/static/index.html"
 cp -f "$T/chart.js" "$APP/static/"
+# лендинг (отдаётся маршрутом /welcome в main.py)
+cp -f "$T/releases/landing.html" "$APP/static/landing.html" 2>/dev/null || true
 # юр-страницы (отдаются маршрутами /privacy, /terms, /consent в main.py)
 cp -f "$T/docs/privacy.html" "$T/docs/terms.html" "$T/docs/consent.html" "$APP/static/" 2>/dev/null || true
 

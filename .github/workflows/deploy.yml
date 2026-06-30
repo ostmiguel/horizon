@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'releases/budget-v2.html'
+      - 'releases/landing.html'
       - 'chart.js'
       - 'personal_budget/horizon-api/**'
       - 'scripts/deploy_remote.sh'
@@ -29,6 +30,7 @@ jobs:
         run: |
           tar czf /tmp/hzbuild.tgz \
             releases/budget-v2.html \
+            releases/landing.html \
             chart.js \
             personal_budget/horizon-api/forecast_cron.py \
             personal_budget/horizon-api/metrics_core.py \

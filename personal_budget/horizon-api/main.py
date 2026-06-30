@@ -52,6 +52,11 @@ async def terms_page():
 async def consent_page():
     return FileResponse("static/consent.html")
 
+# ── Лендинг (превью) ──────────────────────────────────────────────────────────
+@app.get("/welcome")
+async def welcome_page():
+    return FileResponse("static/landing.html")
+
 # ── Static files — монтируем ПОСЛЕДНИМИ на / ──────────────────────────────────
 # html=True → index.html для /, все остальные файлы по имени (/chart.js, /logo.svg…)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
