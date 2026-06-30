@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
@@ -52,9 +52,23 @@ async def terms_page():
 async def consent_page():
     return FileResponse("static/consent.html")
 
-# ── Лендинг (превью) ──────────────────────────────────────────────────────────
+# ── Лендинг (превью по прямой ссылке) ─────────────────────────────────────────
 @app.get("/welcome")
 async def welcome_page():
+    return FileResponse("static/landing.html")
+
+# ── Главная: развязка по сессии (ДО монтирования статики) ─────────────────────
+# Залогинен → приложение (index.html). Разлогинен → лендинг. request.state.db
+# проставляется middleware и для не-/api путей.
+@app.get("/")
+async def root(request: Request):
+    token = request.cookies.get("session")
+    if token:
+        row = await request.state.db.fetchrow(
+            "SELECT 1 FROM sessions WHERE token=$1 AND expires_at > NOW()", token
+        )
+        if row:
+            return FileResponse("static/index.html")
     return FileResponse("static/landing.html")
 
 # ── Static files — монтируем ПОСЛЕДНИМИ на / ──────────────────────────────────
