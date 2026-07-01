@@ -591,31 +591,13 @@ async def get_forecast(request: Request):
     plan_fixed_by_date: dict = {}
     F_before = 0.0   # оттоки до даты дохода → для trough = «Свободно» (как в safe_to_spend)
     R_before = 0.0
-    _dbg_rows = []   # ВРЕМЕННО: диагностика расхождения на графике
     for r in fut:
         d = r["date"]
+        if d <= today or d > end_date:
+            continue
         amount = float(r["amount"]); af = r.get("account_from", ""); at = r.get("account_to", "")
         cat_et = r.get("cat_expense_type"); cat_ch = r.get("cat_character", "")
         is_var = (at == "Расход" and cat_et == "variable" and cat_ch not in EPISODIC_CHARS)
-        in_window = not (d <= today or d > end_date)
-        if in_window:
-            if af == "Доход":
-                cls = "income+"
-            elif at in ("Расход", "Обязательства"):
-                cls = "flow(в r_var, пропуск)" if is_var else "fixed−"
-            elif at in reserve_names:
-                cls = "reserve−"
-            else:
-                cls = "прочее(пропуск)"
-        else:
-            cls = "вне окна"
-        _dbg_rows.append({
-            "date": d.isoformat(), "amount": round(amount),
-            "from": af, "to": at, "cat": r.get("cat_category"),
-            "et": cat_et, "ch": cat_ch, "class": cls,
-        })
-        if d <= today or d > end_date:
-            continue
         if af == "Доход":
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
         elif at in ("Расход", "Обязательства"):
@@ -665,14 +647,6 @@ async def get_forecast(request: Request):
         "trough_value":     trough_value,
         "safe_min":         round(safe_min),
         "points":           points,
-        "_debug": {
-            "B0_now":            round(B0_now),
-            "r_var":             round(r_var, 2),
-            "start_date":        start_date.isoformat(),
-            "end_date":          end_date.isoformat(),
-            "plan_fixed_by_date": {k.isoformat(): round(v) for k, v in sorted(plan_fixed_by_date.items())},
-            "plan_rows_75d":     sorted(_dbg_rows, key=lambda x: x["date"]),
-        },
     }
 
 
