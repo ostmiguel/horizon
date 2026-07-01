@@ -68,6 +68,35 @@ async def materialize_rules(db, user_id, year: int, month: int) -> int:
     return created
 
 
+async def ensure_materialized(db, user_id, year: int, month: int) -> int:
+    """Ленивая материализация: если за (год, месяц) НЕТ строк, порождённых
+    правилами, а активные правила есть — штампуем. Закрывает разрыв «будущий
+    месяц ещё ни разу не материализовался» (кроном план текущего месяца
+    штампуется только в день-1, а окно прогноза/пилюль читает plan напрямую).
+
+    Дёшево: два EXISTS. Материализация правил всегда атомарна по ВСЕМ активным
+    правилам месяца (materialize_rules сносит и пересоздаёт целиком), поэтому
+    достаточно проверить наличие любой rule-строки — частичного расхождения
+    по отдельным правилам быть не может. Свежесть уже материализованного месяца
+    поддерживают правки правил (_materialize_current_next) и день-1 крон."""
+    has_rows = await db.fetchval("""
+        SELECT EXISTS(
+            SELECT 1 FROM plan
+            WHERE user_id=$1 AND source_rule_id IS NOT NULL
+              AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+        )
+    """, user_id, year, month)
+    if has_rows:
+        return 0
+    has_rules = await db.fetchval(
+        "SELECT EXISTS(SELECT 1 FROM plan_rules WHERE user_id=$1 AND is_active=true)",
+        user_id,
+    )
+    if not has_rules:
+        return 0
+    return await materialize_rules(db, user_id, year, month)
+
+
 def current_and_next_month(today: date = None):
     """[(год, месяц)] текущего и следующего месяца — для прогона при правке правила."""
     today = today or date.today()

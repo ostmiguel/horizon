@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 # гарантируем импорт metrics_core независимо от рабочей директории запуска
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from metrics_core import safe_to_spend  # noqa: E402
-from plan_materialize import materialize_rules  # noqa: E402
+from plan_materialize import materialize_rules, ensure_materialized, current_and_next_month  # noqa: E402
 
 load_dotenv()
 DB_URL = os.getenv("DATABASE_URL")
@@ -130,6 +130,10 @@ async def run():
                     nr = await materialize_rules(conn, uid, year, month)
                     if nr:
                         print(f"  [{uid}] plan rules materialized: {nr} rows")
+                # Проактивно штампуем следующий месяц (окно прогноза/пилюль до ~75
+                # дней читает plan напрямую). ensure дёшев и не трогает уже готовый.
+                for y, mo in current_and_next_month(today):
+                    await ensure_materialized(conn, uid, y, mo)
                 r = await snapshot_user(conn, uid, today, month_end)
                 print(
                     f"  [{uid}] ok | b0={r['b0']:.0f} i={r['i_remain']:.0f} "

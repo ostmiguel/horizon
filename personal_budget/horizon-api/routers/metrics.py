@@ -9,6 +9,16 @@ from metrics_core import (
     account_balances, flow_daily_rate, monthly_income_sum,
     monthly_fixed_income_sum, monthly_expense_sum, plan_remaining, plan_window, safe_to_spend,
 )
+from plan_materialize import ensure_materialized, current_and_next_month
+
+
+async def _ensure_plan_fresh(db, user_id):
+    """Гарантирует, что план текущего и следующего месяца материализован из
+    правил перед чтением (пилюли, прогноз, trough читают plan напрямую).
+    Иначе «Бюджет» (рисует из правил) и Обзор/график (читают plan) расходятся —
+    напр., фикс-расход в дату есть в правилах, но не вычитается в прогнозе."""
+    for y, mo in current_and_next_month():
+        await ensure_materialized(db, user_id, y, mo)
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
@@ -19,6 +29,8 @@ router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 async def get_metrics(request: Request):
     user_id = request.state.user_id
     db = request.state.db
+
+    await _ensure_plan_fresh(db, user_id)
 
     # Единый расчёт STS и его компонентов (см. metrics_core.safe_to_spend) — один источник истины с forecast_cron.
     m = await safe_to_spend(db, user_id)
@@ -533,6 +545,8 @@ async def get_metrics(request: Request):
 async def get_forecast(request: Request):
     user_id = request.state.user_id
     db = request.state.db
+
+    await _ensure_plan_fresh(db, user_id)
 
     today, year, month, d_now, d_left, days_in_month, month_start, month_end = month_context()
 
