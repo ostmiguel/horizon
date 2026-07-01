@@ -6234,7 +6234,7 @@ function renderBalanceChart(fc, ariaLabel, opts){
 
   const svgId='fc'+Math.random().toString(36).slice(2,7);
   window._fcCharts=(window._fcCharts||{});
-  window._fcCharts[svgId]={pts, n, x1, plotW, troughIdx:trI, troughValue:fc.trough_value};
+  window._fcCharts[svgId]={pts, n, x1, plotW, troughIdx:trI, troughValue:fc.trough_value, range:(fc&&fc.range)||'30'};
   const crosshair=`<line id="${svgId}-tl" x1="0" y1="${y1}" x2="0" y2="${y2}" stroke="rgba(15,36,60,.18)" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>`;
   const overlay=`<rect x="${x1}" y="${y1}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair" onmousemove="fcHover(event,this)" onmouseleave="fcHoverLeave()"/>`;
   return `<svg id="${svgId}" viewBox="0 0 ${VW} ${VH}" class="chart" style="width:100%;height:auto;display:block" role="img" aria-label="${ariaLabel||'Прогноз баланса до следующего дохода'}">${grad}${grid}${yLbl}${zero}${minBand}${factArea}${factLine}${fcstLine}${todayMk}${salaryMk}${troughMk}${xLbl}${crosshair}${overlay}</svg>`;
@@ -6253,7 +6253,8 @@ function fcChartHtml(fc, range){
   const nf = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(+n||0)));
   const legend = range==='year'
     ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:8px 14px;padding:6px 8px 0;font-size:11px;color:var(--text2)">
-         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз баланса на 12 мес</span>
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз на 12 мес</span>
+         ${fc.trough_value!=null?`<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:2.5px solid #C0561A;display:inline-block"></span>Низшая точка года</span>`:''}
          <span style="color:${(+fc.monthly_net||0)>=0?'#5E9B1E':'#A8472F'};font-weight:600">${(+fc.monthly_net||0)>=0?'▲':'▼'} ${nf(fc.monthly_net)} ₽/мес в среднем</span>
        </div>`
     : `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:14px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
@@ -6499,7 +6500,7 @@ window.fcHover = function(evt, el) {
   if (!svg || !svg.id) return;
   const meta = (window._fcCharts || {})[svg.id];
   if (!meta) return;
-  const { pts, n, x1, plotW, troughIdx, troughValue } = meta;
+  const { pts, n, x1, plotW, troughIdx, troughValue, range } = meta;
 
   const svgRect = svg.getBoundingClientRect();
   const scaleX  = svg.viewBox.baseVal.width / svgRect.width;
@@ -6529,7 +6530,7 @@ window.fcHover = function(evt, el) {
     tip.style.cssText = 'position:fixed;background:#0F243C;border-radius:10px;padding:9px 13px;font-family:Inter,sans-serif;box-shadow:0 10px 24px -10px rgba(15,36,60,.5);pointer-events:none;z-index:9999;min-width:120px;';
     document.body.appendChild(tip);
   }
-  const sub = isTrough ? '<div style="font-size:10.5px;color:#FF9E80;font-weight:600;margin-top:2px">это «Свободно»</div>'
+  const sub = isTrough ? `<div style="font-size:10.5px;color:#FF9E80;font-weight:600;margin-top:2px">${range==='year'?'низшая точка года':'это «Свободно»'}</div>`
                        : (isFcst ? '<div style="font-size:10.5px;color:#9FB2C7;margin-top:2px">прогноз</div>' : '');
   tip.innerHTML = `<div style="font-size:10.5px;color:#9FB2C7;margin-bottom:2px">${fcRuDate(pt.date)}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:14px;color:${isTrough ? '#FF9E80' : '#fff'};font-variant-numeric:tabular-nums">${fmtV} ₽</div>${sub}`;
   tip.style.display = 'block';

@@ -543,65 +543,119 @@ async def get_metrics(request: Request):
 # ── /api/metrics/forecast — balance trajectory for chart ─────────────────────
 
 async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names):
-    """Годовой прогноз — помесячный тренд по текущему run-rate.
+    """Годовой прогноз — РЕАЛЬНАЯ траектория день-в-день на 365 дней.
 
-    Месячный нетто = регулярные доходы (правила) − регулярные фикс.платежи
-    (правила, не-повседневные) − пополнения резервов (правила) − платежи по
-    кредитам − повседневные (r_var × среднее дней в месяце). Проецируем от B0
-    на 12 месяцев вперёд, точки — на конец каждого месяца. Это честный тренд
-    «при текущем ритме», без разовых будущих событий и без учёта завершения
-    кредитов — макро-картина роста/убыли за год."""
+    Источники (всё, что пользователь уже задал):
+      • правила (plan_rules) — регулярные доходы/фикс.платежи/пополнения резервов,
+        разворачиваются на каждый месяц по day_of_month;
+      • разовые плановые события (plan, не из правил и не кредиты) — эпизодические
+        покупки, отпуск и т.п. на конкретные даты;
+      • график кредитов (loan_schedule) — тело+процент как отток в дату платежа
+        (естественно учитывает завершение кредита — платежи просто кончаются);
+      • повседневные — по конвертам месяца (category_budgets), распределённым
+        равномерно по дням; если конверта на месяц нет — падаем на r_var.
+    Точки — ежедневные, поэтому виден настоящий рельеф: зарплатные подъёмы,
+    провалы под эпизодические траты, снижение нагрузки после закрытия кредитов."""
+    horizon_end = today + timedelta(days=365)
+    events: dict = {}   # дата → знаковая дельта (доход +, отток −)
+
+    def add(d, amt):
+        events[d] = events.get(d, 0.0) + amt
+
+    # 1) Регулярные правила → раскладываем по месяцам
     rules = await db.fetch("""
-        SELECT pr.amount, pr.account_from, pr.account_to,
+        SELECT pr.amount, pr.account_from, pr.account_to, pr.day_of_month,
                c.expense_type AS et, c.character AS ch
         FROM plan_rules pr
         LEFT JOIN categories c ON pr.category_id = c.id
         WHERE pr.user_id=$1 AND pr.is_active=true
     """, user_id)
-    m_income = m_fixed = m_reserve = 0.0
-    for r in rules:
+    cur = date(today.year, today.month, 1)
+    for _ in range(14):   # текущий + 13 месяцев — покрывает 365 дней
+        dim = monthrange(cur.year, cur.month)[1]
+        for r in rules:
+            dom = int(r["day_of_month"]) if r["day_of_month"] else 1
+            d = date(cur.year, cur.month, max(1, min(dom, dim)))
+            if d <= today or d > horizon_end:
+                continue
+            amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
+            if af == "Доход":
+                add(d, amt)
+            elif at in ("Расход", "Обязательства"):
+                is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
+                if not is_var:
+                    add(d, -amt)
+            elif at in reserve_names:
+                add(d, -amt)
+        cur = date(cur.year + (1 if cur.month == 12 else 0), 1 if cur.month == 12 else cur.month + 1, 1)
+
+    # 2) Разовые плановые события (эпизодические, ручные) — не из правил, не кредиты
+    oneoffs = await db.fetch("""
+        SELECT p.date, p.amount, p.account_from, p.account_to,
+               c.expense_type AS et, c.character AS ch
+        FROM plan p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1 AND p.date > $2 AND p.date <= $3
+          AND p.source_rule_id IS NULL
+          AND (p.source IS NULL OR p.source <> 'loan_schedule')
+    """, user_id, today, horizon_end)
+    for r in oneoffs:
         amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
         if af == "Доход":
-            m_income += amt
+            add(r["date"], amt)
         elif at in ("Расход", "Обязательства"):
             is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
             if not is_var:
-                m_fixed += amt
+                add(r["date"], -amt)
         elif at in reserve_names:
-            m_reserve += amt
+            add(r["date"], -amt)
 
-    m_loans = float(await db.fetchval(
-        "SELECT COALESCE(SUM(monthly_payment), 0) FROM loans WHERE user_id=$1 AND is_active=true",
-        user_id
-    ))
-    m_var = r_var * 30.44
-    monthly_net = m_income - m_fixed - m_reserve - m_loans - m_var
+    # 3) График кредитов — тело+процент как отток (завершение кредита учтено само)
+    loan_rows = await db.fetch("""
+        SELECT ls.date, ls.principal, ls.interest
+        FROM loan_schedule ls JOIN loans l ON ls.loan_id = l.id
+        WHERE l.user_id=$1 AND l.is_active=true AND ls.is_paid=false
+          AND ls.date > $2 AND ls.date <= $3
+    """, user_id, today, horizon_end)
+    for r in loan_rows:
+        add(r["date"], -(float(r["principal"] or 0) + float(r["interest"] or 0)))
 
+    # 4) Повседневные по конвертам месяца (иначе r_var)
+    budgets = await db.fetch("""
+        SELECT year, month, COALESCE(SUM(budget), 0) AS total
+        FROM category_budgets WHERE user_id=$1 GROUP BY year, month
+    """, user_id)
+    env_by_ym = {(b["year"], b["month"]): float(b["total"]) for b in budgets}
+
+    # ── Проекция день-в-день ────────────────────────────────────────────────────
     points = [{"date": today.isoformat(), "forecast": round(B0_now)}]
     running = B0_now
-    y, mo = today.year, today.month
+    d = today + timedelta(days=1)
+    while d <= horizon_end:
+        dim = monthrange(d.year, d.month)[1]
+        env = env_by_ym.get((d.year, d.month))
+        daily_flow = (env / dim) if env is not None else r_var
+        running -= daily_flow
+        running += events.get(d, 0.0)
+        points.append({"date": d.isoformat(), "forecast": round(running)})
+        d += timedelta(days=1)
 
-    # Текущий месяц — пропорционально остатку дней.
-    dim = monthrange(y, mo)[1]
-    running += monthly_net * ((dim - today.day) / dim)
-    points.append({"date": date(y, mo, dim).isoformat(), "forecast": round(running)})
+    # Низшая точка года (если она в будущем, а не сегодня) — маркер риска.
+    min_pt = min(points, key=lambda p: p["forecast"])
+    trough_value = trough_date = None
+    if min_pt is not points[0]:
+        min_pt["trough"] = True
+        trough_value = min_pt["forecast"]; trough_date = min_pt["date"]
 
-    # Следующие 12 месяцев — полный месячный нетто.
-    for _ in range(12):
-        mo += 1
-        if mo > 12:
-            mo = 1; y += 1
-        dim = monthrange(y, mo)[1]
-        running += monthly_net
-        points.append({"date": date(y, mo, dim).isoformat(), "forecast": round(running)})
+    monthly_net = round((points[-1]["forecast"] - B0_now) / 12)
 
     return {
         "today":            today.isoformat(),
         "range":            "year",
-        "monthly_net":      round(monthly_net),
+        "monthly_net":      monthly_net,
         "next_income_date": None,
-        "trough_date":      None,
-        "trough_value":     None,
+        "trough_date":      trough_date,
+        "trough_value":     trough_value,
         "safe_min":         0,
         "points":           points,
     }
