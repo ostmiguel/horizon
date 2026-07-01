@@ -4944,6 +4944,86 @@ function setSummaryGran(g) {
 
 
 
+// ── Подписка / промокод ──────────────────────────────────────────────────────
+function subscriptionCardHtml(st, fmtDt) {
+  if (!st) return '';
+  const dOnly = s => s ? new Date(s).toLocaleDateString('ru-RU', {day:'numeric', month:'long', year:'numeric'}) : '—';
+  const BADGE = {
+    trial:        ['Пробный период', 'rgba(42,167,204,.12)', '#1F7D8F'],
+    active:       ['Подписка активна', 'rgba(31,164,151,.12)', '#1FA497'],
+    free_forever: ['Пожизненный доступ', 'linear-gradient(135deg,#C6F25A,#9FD630)', '#0A1A10'],
+    expired:      ['Пробный период истёк', 'rgba(224,123,57,.14)', '#A85218'],
+  };
+  const [lbl, bg, fg] = BADGE[st.status] || ['—', 'var(--bg3)', 'var(--text2)'];
+  let detail = '';
+  if (st.status === 'trial')        detail = `Осталось <b>${st.trial_days_left}</b> дн. · до ${dOnly(st.trial_ends_at)}. Полный доступ ко всем возможностям.`;
+  else if (st.status === 'active')  detail = `Активна до ${dOnly(st.paid_until)}.`;
+  else if (st.status === 'free_forever') detail = 'Доступ навсегда — активирован по промокоду. Спасибо, что с нами с самого начала.';
+  else if (st.status === 'expired') detail = 'Чтобы продолжить, активируйте промокод (оплата подписки — скоро).';
+  const showPromo = st.status === 'trial' || st.status === 'expired';
+  return `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><span class="card-title">Подписка</span></div>
+      <div class="card-body">
+        <div style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:${bg};color:${fg}">${lbl}</div>
+        <div style="font-size:12.5px;color:var(--text2);margin-top:9px;line-height:1.5">${detail}</div>
+        ${showPromo ? `
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Есть промокод?</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="promoInput" type="text" placeholder="Введите код" autocomplete="off" spellcheck="false" style="flex:1;min-width:160px;padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);font-size:13px;color:var(--text);text-transform:uppercase;font-family:Sora,sans-serif;letter-spacing:.02em" onkeydown="if(event.key==='Enter')redeemPromo()">
+            <button id="promoBtn" onclick="redeemPromo()" style="padding:10px 18px;border-radius:var(--radius-sm);border:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);color:#fff;font-size:13px;font-weight:600;font-family:Sora,sans-serif;cursor:pointer">Активировать</button>
+          </div>
+          <div id="promoMsg" style="font-size:12px;margin-top:8px"></div>
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
+async function redeemPromo() {
+  const inp = document.getElementById('promoInput');
+  const btn = document.getElementById('promoBtn');
+  const msg = document.getElementById('promoMsg');
+  const code = (inp?.value || '').trim();
+  if (!code) { if (msg) { msg.textContent = 'Введите промокод'; msg.style.color = 'var(--expense)'; } return; }
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (msg) msg.textContent = '';
+  try {
+    const res = await fetch('/api/account/promo', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Не удалось активировать промокод');
+    toast('✓ Промокод активирован — доступ навсегда');
+    window._acctStatus = data;
+    loadProfile();
+  } catch (e) {
+    if (msg) { msg.textContent = e.message; msg.style.color = 'var(--expense)'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Активировать'; }
+  }
+}
+
+// Компактный баннер статуса для Обзора (триал/истёк). Пусто для active/free_forever.
+function accessBannerHtml() {
+  const st = window._acctStatus;
+  if (!st) return '';
+  if (st.status === 'trial') {
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:rgba(42,167,204,.08);border:1px solid rgba(42,167,204,.2);border-radius:12px;padding:10px 14px;margin-bottom:14px">
+      <span style="font-size:12.5px;color:#1F7D8F">Пробный период · осталось <b>${st.trial_days_left}</b> дн.</span>
+      <span onclick="loadPage('profile')" style="font-size:12px;font-weight:600;color:#1FA497;cursor:pointer">Подписка →</span>
+    </div>`;
+  }
+  if (st.status === 'expired') {
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:rgba(224,123,57,.1);border:1px solid rgba(224,123,57,.28);border-radius:12px;padding:10px 14px;margin-bottom:14px">
+      <span style="font-size:12.5px;color:#A85218;font-weight:500">Пробный период истёк. Активируйте промокод, чтобы продолжить.</span>
+      <span onclick="loadPage('profile')" style="font-size:12px;font-weight:700;color:#A85218;cursor:pointer">Ввести код →</span>
+    </div>`;
+  }
+  return '';
+}
+
 async function loadProfile() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
@@ -4958,6 +5038,11 @@ async function loadProfile() {
   const name     = user.name || user.email?.split('@')[0] || '—';
   const email    = user.email || '—';
   const provider = user.provider === 'google' ? 'Google' : user.provider === 'yandex' ? 'Яндекс' : user.provider || '—';
+
+  // Подписка / триал
+  const st = await fetch('/api/account/status', { credentials: 'include' }).then(r => r.json()).catch(() => null);
+  window._acctStatus = st;
+  const subCard = subscriptionCardHtml(st, fmtDt);
 
   mc.innerHTML = `
     <div style="max-width:600px;padding:24px">
@@ -4998,6 +5083,8 @@ async function loadProfile() {
 
         </div>
       </div>
+
+      ${subCard}
 
       <!-- Документы -->
       <div class="card" style="margin-bottom:16px">
@@ -6622,6 +6709,8 @@ async function loadDashboardNew() {
         </div>
       </div>
 
+      ${accessBannerHtml()}
+
       <div class="hero">
         <div class="hero-left">
           <div class="kpi-label">Свободно · до ${(fc && fc.next_income_date) ? fcRuDate(fc.next_income_date) : 'следующего дохода'}</div>
@@ -7164,6 +7253,8 @@ window.onload = async () => {
   }
 
   await loadMeta();
+  // Статус подписки/триала — один раз при загрузке (для баннера на Обзоре).
+  window._acctStatus = await fetch('/api/account/status', { credentials: 'include' }).then(r => r.json()).catch(() => null);
   // Новый пользователь без счетов — гайд первого запуска (категории уже посеяны).
   if (!(accounts_cache && accounts_cache.length)) { showOnboarding(); return; }
   // Мобильный режим (узкий экран) — capture-first лента, без десктоп-страниц.
