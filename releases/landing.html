@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>horizon — прогноз личных финансов</title>
-<meta name="description" content="horizon показывает, как ваши деньги распределятся до конца месяца. Прогноз баланса, запас прочности, плановые платежи — на одном экране. Без подключения к банкам.">
+<meta name="description" content="Horizon показывает, как будет меняться ваш баланс с учётом всех платежей, подписок и планов. Прогноз на 30 дней и год вперёд. Без подключения к банку.">
 <meta property="og:title" content="horizon — прогноз личных финансов">
-<meta property="og:description" content="Финансовая ясность за 2 минуты в день.">
+<meta property="og:description" content="Вся ваша финансовая картина — на одном экране. Прогноз баланса, запас прочности, плановые платежи. Без подключения к банкам.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://horizonapp.ru">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -15,347 +16,334 @@
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{font-family:Inter,system-ui,sans-serif;color:#0F243C;-webkit-font-smoothing:antialiased;
-    background:
-      radial-gradient(1100px 620px at 82% -14%,rgba(31,164,151,.13),transparent 60%),
-      radial-gradient(900px 540px at -4% 8%,rgba(73,208,234,.12),transparent 55%),
-      #EEF2F7;
+    background:radial-gradient(1100px 620px at 82% -14%,rgba(31,164,151,.13),transparent 60%),
+    radial-gradient(900px 540px at -4% 8%,rgba(73,208,234,.12),transparent 55%),#EEF2F7;
     background-attachment:fixed}
-  .num,h1,h2,h3,h4{font-family:Sora,sans-serif}
+  h1,h2,h3,h4{font-family:Sora,sans-serif}
   .tnum{font-variant-numeric:tabular-nums}
   a{color:inherit}
-  a:focus-visible,button:focus-visible{outline:2px solid #2AA7CC;outline-offset:3px;border-radius:8px}
-  @keyframes hzfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #2AA7CC;outline-offset:3px;border-radius:8px}
+  button{font-family:inherit;cursor:pointer}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
-  @media(max-width:880px){
-    .hero-grid{grid-template-columns:1fr!important;gap:36px!important}
-    .hero-grid > div:last-child{perspective:none!important}
-    .hero-grid > div:last-child > div{transform:none!important;transform-origin:center!important}
-    .two-col{grid-template-columns:1fr!important}
-    .two-col-rev{grid-template-columns:1fr!important}
-    .two-col-rev > div:first-child{order:2}
-    .steps-grid{grid-template-columns:1fr!important}
-    .warn-cards{grid-template-columns:1fr!important}
+  @media(max-width:900px){
+    .grid2{grid-template-columns:1fr!important}
+    .grid2rev > *:first-child{order:2}
+    .grid3{grid-template-columns:1fr!important}
+    .price2{grid-template-columns:1fr!important}
+    .hero-demo{transform:none!important;transform-origin:center!important}
+    .hero-persp{perspective:none!important}
+    .navlinks{display:none!important}
   }
-  @media(min-width:721px){
-    header nav a.navlink{display:inline-flex!important}
+  @media(max-width:560px){
+    .trustrow{flex-direction:column;align-items:flex-start!important}
+    .auth-row{grid-template-columns:1fr!important}
   }
 </style>
 </head>
 <body>
-<div style="min-height:100vh">
+<div style="min-height:100vh;overflow-x:hidden">
 
-<!-- ===== STICKY NAV ===== -->
-<header style="position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);background:rgba(238,242,247,.78);border-bottom:1px solid rgba(15,36,60,.07)">
-  <div style="max-width:1160px;margin:0 auto;padding:13px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px">
+<!-- HEADER -->
+<header style="position:sticky;top:0;z-index:60;backdrop-filter:blur(10px);background:rgba(238,242,247,.8);border-bottom:1px solid rgba(15,36,60,.07)">
+  <div style="max-width:1180px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px">
     <a href="#top" style="display:flex;align-items:center;gap:10px;text-decoration:none">
-      <svg viewBox="0 0 56 56" width="32" height="32" aria-hidden="true"><defs><linearGradient id="lc" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#49D0EA"></stop><stop offset="1" stop-color="#2393BE"></stop></linearGradient><linearGradient id="lt" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#42DCC6"></stop><stop offset="1" stop-color="#1FA497"></stop></linearGradient><linearGradient id="ll" x1="0" y1="0" x2="0.25" y2="1"><stop offset="0" stop-color="#D2F468"></stop><stop offset="1" stop-color="#A6DA3A"></stop></linearGradient></defs><rect width="56" height="56" rx="14" fill="#0C1828"></rect><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="url(#lc)" opacity="0.9"></rect><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="url(#lt)" opacity="0.9"></rect><rect x="34" y="15" width="15" height="29" rx="3.8" fill="url(#ll)"></rect></g></svg>
-      <span style="font-family:Sora,sans-serif;font-weight:600;font-size:21px;letter-spacing:-.01em">horizon<span style="color:#9FC22A">.</span></span>
+      <svg viewBox="0 0 56 56" width="30" height="30" aria-hidden="true"><linearGradient id="lc" x1="0" y1="0" x2=".25" y2="1"><stop offset="0" stop-color="#49D0EA"/><stop offset="1" stop-color="#2393BE"/></linearGradient><linearGradient id="lt" x1="0" y1="0" x2=".25" y2="1"><stop offset="0" stop-color="#42DCC6"/><stop offset="1" stop-color="#1FA497"/></linearGradient><linearGradient id="ll" x1="0" y1="0" x2=".25" y2="1"><stop offset="0" stop-color="#D2F468"/><stop offset="1" stop-color="#A6DA3A"/></linearGradient><rect width="56" height="56" rx="14" fill="#0C1828"/><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="url(#lc)" opacity=".9"/><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="url(#lt)" opacity=".9"/><rect x="34" y="15" width="15" height="29" rx="3.8" fill="url(#ll)"/></g></svg>
+      <span style="font-family:Sora,sans-serif;font-weight:600;font-size:20px;letter-spacing:-.01em">horizon<span style="color:#9FC22A">.</span></span>
     </a>
-    <nav style="display:flex;align-items:center;gap:8px">
-      <a href="#how" class="navlink" style="display:none;padding:9px 14px;border-radius:10px;font-size:14px;font-weight:500;color:#5E7088;text-decoration:none">Как это работает</a>
-      <a href="#warn" class="navlink" style="display:none;padding:9px 14px;border-radius:10px;font-size:14px;font-weight:500;color:#5E7088;text-decoration:none">Возможности</a>
-      <a href="#start" style="display:inline-flex;align-items:center;min-height:44px;padding:11px 20px;border-radius:12px;font-family:Sora,sans-serif;font-weight:600;font-size:14.5px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 8px 20px -10px rgba(31,164,151,.7)">Войти</a>
+    <nav style="display:flex;align-items:center;gap:4px">
+      <div class="navlinks" style="display:flex;align-items:center;gap:2px">
+        <a href="#how" style="padding:9px 13px;border-radius:10px;font-size:14px;font-weight:500;color:#5E7088;text-decoration:none">Как это работает</a>
+        <a href="#features" style="padding:9px 13px;border-radius:10px;font-size:14px;font-weight:500;color:#5E7088;text-decoration:none">Возможности</a>
+        <a href="#price" style="padding:9px 13px;border-radius:10px;font-size:14px;font-weight:500;color:#5E7088;text-decoration:none">Цена</a>
+      </div>
+      <a href="#final" style="display:inline-flex;align-items:center;min-height:44px;padding:11px 19px;border-radius:12px;font-family:Sora,sans-serif;font-weight:600;font-size:14.5px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 8px 20px -10px rgba(31,164,151,.7);margin-left:6px">Попробовать бесплатно</a>
     </nav>
   </div>
 </header>
 
 <a id="top"></a>
 
-<!-- ===== 1. HERO ===== -->
-<section style="max-width:1160px;margin:0 auto;padding:clamp(40px,7vw,84px) 24px clamp(28px,5vw,56px)">
-  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:clamp(28px,5vw,64px);align-items:center" class="hero-grid">
+<!-- HERO -->
+<section style="max-width:1180px;margin:0 auto;padding:clamp(40px,7vw,84px) 24px clamp(30px,5vw,56px)">
+  <div class="grid2" style="display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:clamp(32px,5vw,64px);align-items:center">
     <div>
       <div style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#1FA497;background:rgba(31,164,151,.1);padding:7px 13px;border-radius:999px;margin-bottom:22px">
-        <span style="width:7px;height:7px;border-radius:50%;background:#1FA497"></span>Деньги под контролем
+        <span style="width:7px;height:7px;border-radius:50%;background:#1FA497"></span>Прогноз личных финансов
       </div>
-      <h1 style="font-size:clamp(34px,5vw,58px);font-weight:700;letter-spacing:-.03em;line-height:1.05;margin-bottom:20px;text-wrap:balance">Финансовая ясность<br>за 2 минуты в день</h1>
-      <p style="font-size:clamp(17px,2vw,20px);line-height:1.55;color:#5E7088;max-width:31em;margin-bottom:30px">horizon показывает ваш свободный остаток до следующего поступления. Всё видно заранее, ещё до того как деньги двинутся со счёта. Только сумма, график и полное понимание.</p>
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
-        <a href="#start" style="display:inline-flex;align-items:center;gap:10px;min-height:54px;padding:16px 30px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:17px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 14px 30px -12px rgba(31,164,151,.65)">Начать бесплатно
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      <h1 style="font-size:clamp(34px,4.8vw,56px);font-weight:700;letter-spacing:-.035em;line-height:1.04;margin-bottom:20px;text-wrap:balance">Вся ваша финансовая картина — на одном экране</h1>
+      <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.55;color:#5E7088;max-width:32em;margin-bottom:28px">Horizon показывает, как будет меняться ваш баланс с учётом всех платежей, подписок и планов. Крупная покупка, отпуск, ипотека — вы принимаете решение, заранее видя последствия. <span style="color:#0F243C;font-weight:600">Без подключения к банку.</span></p>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:20px">
+        <a href="#final" style="display:inline-flex;align-items:center;gap:10px;min-height:54px;padding:16px 30px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:17px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 14px 30px -12px rgba(31,164,151,.65)">Попробовать бесплатно
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
-        <span style="font-size:13.5px;color:#93A1B5;line-height:1.4">Без подключения к банкам.<br>Все данные под вашим контролем.</span>
+        <a href="#how" style="display:inline-flex;align-items:center;min-height:54px;padding:16px 22px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#1F7D8F;text-decoration:none;border:1px solid rgba(31,125,143,.28);background:rgba(255,255,255,.6)">Как это работает</a>
+      </div>
+      <div class="trustrow" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;font-size:13.5px;color:#5E7088">
+        <span style="display:inline-flex;align-items:center;gap:7px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>35 дней бесплатно</span>
+        <span style="display:inline-flex;align-items:center;gap:7px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Без карты</span>
+        <span style="display:inline-flex;align-items:center;gap:7px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Без подключения к банкам</span>
       </div>
     </div>
 
-    <!-- SCREEN: overview -->
-    <div style="perspective:2200px">
-      <div style="transform:rotateY(-7deg) rotateX(3deg);transform-origin:center left;border-radius:18px;overflow:hidden;background:#fff;border:1px solid rgba(15,36,60,.09);box-shadow:0 2px 6px rgba(15,36,60,.06),0 44px 80px -34px rgba(15,36,60,.42)">
-        <div style="display:flex;align-items:center;gap:7px;padding:12px 16px;background:#F5F8FB;border-bottom:1px solid rgba(15,36,60,.07)">
+    <!-- INTERACTIVE DEMO -->
+    <div class="hero-persp" style="perspective:2200px">
+      <div class="hero-demo" style="transform:rotateY(-6deg) rotateX(2.5deg);transform-origin:center left;border-radius:18px;overflow:hidden;background:#fff;border:1px solid rgba(15,36,60,.09);box-shadow:0 2px 6px rgba(15,36,60,.06),0 44px 84px -34px rgba(15,36,60,.42)">
+        <div style="display:flex;align-items:center;gap:7px;padding:11px 16px;background:#F5F8FB;border-bottom:1px solid rgba(15,36,60,.07)">
           <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
           <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
           <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
           <span style="margin-left:10px;font-size:12px;color:#93A1B5;font-weight:500">horizonapp.ru · Обзор</span>
         </div>
-        <div style="padding:24px 24px 26px">
-          <div style="font-size:13px;color:#5E7088;font-weight:500">Свободно до следующего дохода</div>
-          <div class="tnum" style="font-family:Sora,sans-serif;font-size:46px;font-weight:700;letter-spacing:-.03em;line-height:1;margin:7px 0 0">142 800 <span style="font-size:24px;color:#5E7088;font-weight:500">₽</span></div>
-          <div style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#0A1A10;background:linear-gradient(135deg,#C6F25A,#9FD630);padding:5px 11px;border-radius:999px;margin-top:13px">
-            <span style="width:6px;height:6px;border-radius:50%;background:#0A1A10"></span>В графике</div>
-          <div style="font-size:12.5px;color:#93A1B5;margin-top:12px;line-height:1.5">Диапазон 128–157 тыс ₽ · уверенность 80%<br>Хватит на всё запланированное и резерв.</div>
-          <div style="font-size:13px;font-weight:600;color:#5E7088;margin:22px 0 12px">Прогноз баланса · Июнь</div>
-          <svg viewBox="0 0 760 280" style="width:100%;height:auto;display:block" aria-hidden="true"><defs>
-            <linearGradient id="aF" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#49D0EA" stop-opacity="0.22"></stop><stop offset="1" stop-color="#49D0EA" stop-opacity="0"></stop></linearGradient></defs>
-            <line x1="60" y1="178.9" x2="740" y2="178.9" stroke="#E4EAF1"></line><line x1="60" y1="117.8" x2="740" y2="117.8" stroke="#E4EAF1"></line><line x1="60" y1="56.7" x2="740" y2="56.7" stroke="#E4EAF1"></line>
-            <text x="50" y="182.9" fill="#93A1B5" font-size="11" text-anchor="end">100</text><text x="50" y="121.8" fill="#93A1B5" font-size="11" text-anchor="end">200</text><text x="50" y="60.7" fill="#93A1B5" font-size="11" text-anchor="end">300</text>
-            <line x1="458.6" y1="20" x2="458.6" y2="240" stroke="#B9C6D6" stroke-dasharray="3 3"></line>
-            <text x="458.6" y="32" fill="#5E7088" font-size="11" text-anchor="middle">сегодня</text>
-            <path d="M458.6 88.4 L529.0 93.3 L599.3 103.1 L669.7 111.7 L740.0 120.2 L740.0 141.0 L669.7 130.0 L599.3 117.8 L529.0 103.1 L458.6 88.4 Z" fill="#1FA497" fill-opacity="0.10"></path>
-            <path d="M60.0 240.0 L60.0 49.3 106.9 54.2 153.8 61.6 200.7 67.1 271.0 38.3 317.9 45.7 364.8 65.2 411.7 79.9 458.6 88.4 L458.6 240.0 Z" fill="url(#aF)"></path>
-            <path d="M60.0 49.3 L106.9 54.2 L153.8 61.6 L200.7 67.1 L271.0 38.3 L317.9 45.7 L364.8 65.2 L411.7 79.9 L458.6 88.4" fill="none" stroke="#2AA7CC" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path>
-            <path d="M458.6 88.4 L529.0 94.6 L599.3 104.3 L669.7 114.1 L740.0 122.7" fill="none" stroke="#8FBE1E" stroke-width="2.5" stroke-dasharray="6 4" stroke-linejoin="round" stroke-linecap="round"></path>
-            <path d="M458.6 88.4 L529.0 98.2 L599.3 110.4 L669.7 121.4 L740.0 131.2" fill="none" stroke="#1FA497" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></path>
-            <circle cx="458.6" cy="88.4" r="4" fill="#2AA7CC"></circle><circle cx="740.0" cy="122.7" r="4" fill="#8FBE1E"></circle><circle cx="740.0" cy="131.2" r="4" fill="#1FA497"></circle>
+        <div style="padding:22px 22px 20px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div>
+              <div style="font-size:13px;color:#5E7088;font-weight:500">Свободно до следующего дохода</div>
+              <div class="tnum" id="heroSum" style="font-family:Sora,sans-serif;font-size:clamp(32px,4vw,44px);font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:6px">142 800 <span style="font-size:22px;color:#5E7088;font-weight:500">₽</span></div>
+            </div>
+            <div id="heroBadge" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;white-space:nowrap;color:#A85218;background:rgba(224,123,57,.12)">
+              <span id="heroBadgeDot" style="width:6px;height:6px;border-radius:50%;background:#E07B39"></span><span id="heroBadgeTxt">Узкое место 3-го</span>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 10px">
+            <span style="font-size:12.5px;font-weight:600;color:#5E7088">Прогноз баланса · <span id="heroLabel">30 дней</span></span>
+            <button onclick="heroToggle()" style="display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:6px 12px;border-radius:9px;font-size:12.5px;font-weight:600;color:#1F7D8F;background:rgba(31,125,143,.09);border:1px solid rgba(31,125,143,.2)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20L20 4M20 4h-6M20 4v6" stroke="#1F7D8F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span id="heroToggleLbl">Развернуть на год</span>
+            </button>
+          </div>
+
+          <svg id="heroSvg" viewBox="0 0 780 270" style="width:100%;height:auto;display:block" aria-hidden="true">
+            <defs><linearGradient id="hArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#49D0EA" stop-opacity=".2"/><stop offset="1" stop-color="#49D0EA" stop-opacity="0"/></linearGradient></defs>
+            <line x1="64" y1="248" x2="744" y2="248" stroke="#EDF1F6"/>
+            <line x1="64" y1="180" x2="744" y2="180" stroke="#EDF1F6"/>
+            <line x1="64" y1="112" x2="744" y2="112" stroke="#EDF1F6"/>
+            <line x1="64" y1="44" x2="744" y2="44" stroke="#EDF1F6"/>
+            <path id="heroArea" fill="url(#hArea)"/>
+            <line id="heroTodayLine" stroke="#B9C6D6" stroke-dasharray="3 4"/>
+            <text id="heroTodayLbl" fill="#5E7088" font-size="11" text-anchor="middle">сегодня</text>
+            <path id="heroFact" fill="none" stroke="#2AA7CC" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+            <path id="heroFore" fill="none" stroke="#1FA497" stroke-width="3" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round"/>
+            <circle id="heroDipCircle" r="6.5" fill="#fff" stroke="#E07B39" stroke-width="3"/>
+            <text id="heroDipLbl" fill="#A85218" font-size="11.5" font-weight="600" text-anchor="middle"/>
           </svg>
-          <div style="display:flex;gap:18px;margin-top:8px;font-size:12px;color:#5E7088"><span><i style="display:inline-block;width:14px;height:3px;border-radius:2px;background:#2AA7CC;margin-right:6px;vertical-align:middle"></i>Факт</span><span><i style="display:inline-block;width:14px;height:3px;border-radius:2px;background:#1FA497;margin-right:6px;vertical-align:middle"></i>Прогноз</span><span><i style="display:inline-block;width:14px;height:3px;border-radius:2px;background:#8FBE1E;margin-right:6px;vertical-align:middle"></i>План</span></div>
+
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
+            <div style="display:flex;gap:16px;font-size:11.5px;color:#5E7088">
+              <span><i style="display:inline-block;width:13px;height:3px;border-radius:2px;background:#2AA7CC;margin-right:5px;vertical-align:middle"></i>Факт</span>
+              <span><i style="display:inline-block;width:13px;height:3px;border-radius:2px;background:#1FA497;margin-right:5px;vertical-align:middle"></i>Прогноз</span>
+            </div>
+            <button id="moveBtnEl" onclick="heroMove()" style="display:inline-flex;align-items:center;gap:7px;min-height:36px;padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;border:1px solid rgba(31,164,151,.25);color:#1FA497;background:rgba(31,164,151,.1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path id="moveBtnArrow" d="M4 12h13M12 5l7 7-7 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span id="moveBtnLbl">Перенести платёж</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
-</section>
-
-<!-- ===== 2. PROBLEM (прошлое vs будущее) ===== -->
-<section style="max-width:1160px;margin:0 auto;padding:clamp(56px,8vw,104px) 24px">
-  <div style="max-width:880px">
-    <div style="font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93A1B5;margin-bottom:18px">В чём разница</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,56px)" class="two-col">
-      <div>
-        <div style="font-family:Sora,sans-serif;font-size:clamp(20px,2.4vw,26px);font-weight:500;line-height:1.3;color:#93A1B5;letter-spacing:-.01em">Финансовые трекеры показывают прошлое.<br><span style="color:#5E7088">Сколько вы уже потратили, где превысили бюджет.</span></div>
-        <p style="margin-top:14px;font-size:15.5px;line-height:1.6;color:#93A1B5;max-width:25em">Это полезно. Но главный вопрос остаётся без ответа: «Что меня ждёт до следующего дохода?»</p>
-      </div>
-      <div>
-        <div style="font-family:Sora,sans-serif;font-size:clamp(20px,2.4vw,26px);font-weight:600;line-height:1.3;color:#0F243C;letter-spacing:-.01em">horizon отвечает на него <span style="color:#1FA497">каждый день.</span></div>
-        <p style="margin-top:14px;font-size:15.5px;line-height:1.6;color:#5E7088;max-width:25em">Прогноз баланса, плановые платежи, запас прочности — всё на одном экране. Решения вы принимаете не по интуиции, а по данным, которые видите сами.</p>
+      <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:16px;font-size:12.5px;color:#93A1B5">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 11l3 3 9-9" stroke="#B4C0CE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9" stroke="#B4C0CE" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Попробуйте: разверните график на год или перенесите платёж
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===== 3. HOW IT WORKS ===== -->
-<section id="how" style="max-width:1160px;margin:0 auto;padding:clamp(40px,6vw,72px) 24px">
+<!-- PAST vs FUTURE -->
+<section id="features" style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07)">
+  <div style="max-width:1180px;margin:0 auto;padding:clamp(52px,7vw,92px) 24px">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:16px">В чём разница</div>
+    <h2 style="font-size:clamp(28px,3.8vw,44px);font-weight:700;letter-spacing:-.03em;line-height:1.1;max-width:16em;text-wrap:balance">Финансовые трекеры показывают <span style="color:#93A1B5">прошлое</span>. Horizon показывает <span style="color:#1FA497">будущее</span>.</h2>
+    <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.65;color:#5E7088;max-width:44em;margin-top:22px">Обычные трекеры отвечают на вопрос «сколько я уже потратил». Это полезно, но не помогает принимать решения. Главный вопрос — другой: «что меня ждёт впереди и что я могу себе позволить». Horizon отвечает на него каждый день: прогноз баланса, плановые платежи, запас прочности — на 30 дней и на год вперёд. Вы решаете не по интуиции, а по данным, которые видите сами.</p>
+    <div class="grid3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:36px">
+      <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><div class="tnum" style="font-family:Sora,sans-serif;font-size:28px;font-weight:700;letter-spacing:-.02em;color:#1FA497">30 дней / год</div><div style="font-size:13.5px;color:#5E7088;margin-top:4px">горизонт прогноза — по умолчанию и вглубь</div></div>
+      <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><div class="tnum" style="font-family:Sora,sans-serif;font-size:28px;font-weight:700;letter-spacing:-.02em">~5 сек</div><div style="font-size:13.5px;color:#5E7088;margin-top:4px">на ввод операции — категория и счёт сами</div></div>
+      <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><div class="tnum" style="font-family:Sora,sans-serif;font-size:28px;font-weight:700;letter-spacing:-.02em;color:#2AA7CC">0</div><div style="font-size:13.5px;color:#5E7088;margin-top:4px">доступов к банку — данные вводите только вы</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA BAND -->
+<section style="max-width:1180px;margin:0 auto;padding:clamp(28px,4vw,44px) 24px">
+  <div class="grid2" style="display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;background:linear-gradient(135deg,#0F243C,#123B4A);border-radius:18px;padding:clamp(22px,3.5vw,34px) clamp(24px,4vw,40px);box-shadow:0 24px 50px -28px rgba(15,36,60,.5)">
+    <div>
+      <div style="font-family:Sora,sans-serif;font-size:clamp(19px,2.4vw,26px);font-weight:600;color:#fff;letter-spacing:-.01em">Постройте свой прогноз за пару минут</div>
+      <div style="font-size:14px;color:#9FB6C4;margin-top:6px">35 дней бесплатно, без карты</div>
+    </div>
+    <a href="#final" style="display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:15px 28px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#0F243C;text-decoration:none;background:linear-gradient(135deg,#C6F25A,#9FD630);box-shadow:0 14px 26px -12px rgba(159,214,48,.5);white-space:nowrap">Построить свой прогноз
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="#0F243C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="max-width:1180px;margin:0 auto;padding:clamp(48px,7vw,84px) 24px">
   <h2 style="font-size:clamp(28px,3.6vw,40px);font-weight:700;letter-spacing:-.025em;margin-bottom:8px">Как это работает</h2>
-  <p style="font-size:17px;color:#5E7088;margin-bottom:clamp(28px,4vw,48px);max-width:34em">Три шага. От пары минут ввода до ясности на весь месяц.</p>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px" class="steps-grid">
-
+  <p style="font-size:17px;color:#5E7088;margin-bottom:clamp(28px,4vw,44px);max-width:36em">Три шага. От пары минут в день до картины на месяц и год вперёд.</p>
+  <div class="grid3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
     <div style="background:#fff;border:1px solid rgba(15,36,60,.09);border-radius:18px;padding:26px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 18px 40px -24px rgba(15,36,60,.2)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <span style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,rgba(42,167,204,.14),rgba(31,164,151,.12));display:grid;place-items:center">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14.5 4.5l5 5L9 20l-5.5.5L4 15z" stroke="#1F8FB0" stroke-width="1.8" stroke-linejoin="round"></path><path d="M13 6l5 5" stroke="#1F8FB0" stroke-width="1.8"></path></svg>
-        </span>
+        <span style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,rgba(42,167,204,.14),rgba(31,164,151,.12));display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="#1F8FB0" stroke-width="2.2" stroke-linecap="round"/></svg></span>
         <span style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#C4D0DD">01</span>
       </div>
-      <h3 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">Ведёте учёт</h3>
-      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Несколько минут в день: доходы, расходы, плановые платежи. Без подключения к банку — данные вводите вы и только вы.</p>
+      <h3 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">Заносите операции за секунды</h3>
+      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Регулярные доходы и платежи настраиваете один раз, повседневные вносите на ходу. Нажали [+], ввели сумму — счёт подтянется сам, «Расход» уже выбран, нужная категория первой в списке. 5 секунд, а не рутина.</p>
     </div>
-
     <div style="background:#fff;border:1px solid rgba(15,36,60,.09);border-radius:18px;padding:26px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 18px 40px -24px rgba(15,36,60,.2)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <span style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,rgba(31,164,151,.14),rgba(180,222,60,.14));display:grid;place-items:center">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" stroke="#1FA497" stroke-width="1.8" stroke-linejoin="round"></path><circle cx="12" cy="12" r="2.6" stroke="#1FA497" stroke-width="1.8"></circle></svg>
-        </span>
+        <span style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,rgba(31,164,151,.14),rgba(180,222,60,.14));display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" stroke="#1FA497" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" stroke="#1FA497" stroke-width="1.8"/></svg></span>
         <span style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#C4D0DD">02</span>
       </div>
       <h3 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">Получаете прогноз</h3>
-      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">horizon рассчитывает, как будет меняться баланс до конца месяца. С учётом повторяющихся платежей, подписок и плановых поступлений.</p>
+      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Horizon рассчитывает, как будет меняться баланс — с учётом подписок, регулярных платежей, разовых событий и вашей реальной скорости расходов. На 30 дней и на год вперёд.</p>
     </div>
-
     <div style="background:#fff;border:1px solid rgba(15,36,60,.09);border-radius:18px;padding:26px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 18px 40px -24px rgba(15,36,60,.2)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <span style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,rgba(180,222,60,.18),rgba(143,190,30,.14));display:grid;place-items:center">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 21V4.5h9l-1.5 3.5L14 11.5H5" stroke="#6E9416" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></path></svg>
-        </span>
+        <span style="width:48px;height:48px;border-radius:13px;background:linear-gradient(135deg,rgba(180,222,60,.18),rgba(143,190,30,.14));display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 21V4.5h9l-1.5 3.5L14 11.5H5" stroke="#6E9416" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></span>
         <span style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#C4D0DD">03</span>
       </div>
-      <h3 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">Принимаете решения</h3>
-      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Крупная покупка, отпуск, ипотека — вы заранее видите, как это повлияет на ваши деньги.</p>
+      <h3 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">Держите всё под контролем</h3>
+      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Наступает плановый платёж — Horizon спрашивает: подтвердить? Одним тапом отмечаете, что случилось, переносите или отменяете. Ничего не происходит за вашей спиной — и ничего не нужно помнить.</p>
     </div>
   </div>
 </section>
 
-<!-- ===== 4. BALANCE IS A GRAPH ===== -->
-<section id="warn" style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07);margin-top:clamp(40px,6vw,72px)">
-  <div style="max-width:1160px;margin:0 auto;padding:clamp(56px,8vw,100px) 24px">
-    <div style="max-width:660px;margin-bottom:clamp(32px,4vw,52px)">
-      <div style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#1F8FB0;background:rgba(42,167,204,.1);padding:7px 13px;border-radius:999px;margin-bottom:18px">
-        <span style="width:7px;height:7px;border-radius:50%;background:#2AA7CC"></span>Прогноз по дням
+<!-- BALANCE IS A GRAPH -->
+<section style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07)">
+  <div style="max-width:1180px;margin:0 auto;padding:clamp(52px,8vw,96px) 24px">
+    <div style="max-width:660px;margin-bottom:clamp(28px,4vw,44px)">
+      <div style="display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#B26A41;background:rgba(224,123,57,.11);padding:7px 13px;border-radius:999px;margin-bottom:18px">
+        <span style="width:7px;height:7px;border-radius:50%;background:#E07B39"></span>Прогноз по дням — и на год
       </div>
-      <h2 style="font-size:clamp(28px,3.8vw,44px);font-weight:700;letter-spacing:-.03em;line-height:1.1;margin-bottom:18px;text-wrap:balance">Баланс — это не одна цифра, это график</h2>
-      <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.6;color:#5E7088">Средний остаток за месяц может выглядеть хорошо. Но между зарплатами бывают дни, когда свободных денег остаётся минимум. horizon показывает ситуацию по дням и подсвечивает точки, где расходы стоит планировать аккуратнее. Видно и итоговую цифру, и каждый день до неё. План можно скорректировать, пока есть время.</p>
+      <h2 style="font-size:clamp(28px,3.8vw,44px);font-weight:700;letter-spacing:-.03em;line-height:1.08;margin-bottom:18px;text-wrap:balance">Баланс — это не одна цифра, это график</h2>
+      <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.6;color:#5E7088">Средний остаток за месяц может выглядеть хорошо. Но между поступлениями бывают дни, когда свободных денег в обрез. Horizon показывает ситуацию по дням и подсвечивает моменты, где стоит планировать аккуратнее. А если нужно заглянуть дальше — разверните график на год: увидите, как решения сегодня отражаются на балансе через месяцы.</p>
     </div>
 
-    <!-- SCREEN: forecast with dip -->
     <div style="border-radius:18px;overflow:hidden;background:#fff;border:1px solid rgba(15,36,60,.09);box-shadow:0 2px 6px rgba(15,36,60,.06),0 40px 80px -38px rgba(15,36,60,.4)">
-      <div style="display:flex;align-items:center;gap:7px;padding:12px 18px;background:#F5F8FB;border-bottom:1px solid rgba(15,36,60,.07)">
-        <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
-        <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
-        <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
-        <span style="margin-left:10px;font-size:12px;color:#93A1B5;font-weight:500">horizonapp.ru · Прогноз</span>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;padding:14px 18px;background:#F5F8FB;border-bottom:1px solid rgba(15,36,60,.07)">
+        <div style="display:flex;align-items:center;gap:9px"><span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span><span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span><span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span><span style="margin-left:6px;font-size:12px;color:#93A1B5;font-weight:500">horizonapp.ru · Прогноз</span></div>
+        <div style="display:inline-flex;background:#E9EEF4;border-radius:10px;padding:3px">
+          <button id="b6btn30" onclick="b6Set('30')" style="min-height:34px;padding:7px 15px;border-radius:8px;font-size:13px;font-weight:600;border:none;color:#0F243C;background:#fff;box-shadow:0 2px 6px rgba(15,36,60,.12)">30 дней</button>
+          <button id="b6btnYear" onclick="b6Set('year')" style="min-height:34px;padding:7px 15px;border-radius:8px;font-size:13px;font-weight:600;border:none;color:#5E7088;background:transparent">Год</button>
+        </div>
       </div>
       <div style="padding:clamp(20px,3vw,32px)">
-        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px">
-          <div>
-            <div style="font-size:13px;font-weight:600;color:#5E7088">Прогноз баланса · до следующего дохода</div>
-            <div style="font-size:12.5px;color:#93A1B5;margin-top:3px">Зарплата 5-го · крупные платежи 1–3 числа</div>
-          </div>
-          <div style="display:inline-flex;align-items:center;gap:9px;background:rgba(178,106,65,.09);border:1px solid rgba(178,106,65,.2);padding:9px 14px;border-radius:12px">
-            <span style="width:9px;height:9px;border-radius:50%;background:#C2724A"></span>
-            <span style="font-size:13px;font-weight:600;color:#8A4B28">Дефицит 3-го · остаток 9 400 ₽</span>
-          </div>
-        </div>
-
-        <svg viewBox="0 0 980 360" style="width:100%;height:auto;display:block" aria-hidden="true">
-          <defs>
-            <linearGradient id="dipFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2AA7CC" stop-opacity="0.18"></stop><stop offset="1" stop-color="#2AA7CC" stop-opacity="0"></stop></linearGradient>
-          </defs>
-          <rect x="70" y="266" width="888" height="42" fill="rgba(194,114,74,.08)"></rect>
-          <line x1="70" y1="266" x2="958" y2="266" stroke="rgba(194,114,74,.45)" stroke-width="1.4" stroke-dasharray="5 5"></line>
-          <text x="78" y="284" fill="#8A4B28" font-size="13" font-weight="600">безопасный минимум · 30 000 ₽</text>
-          <line x1="70" y1="210" x2="958" y2="210" stroke="#EDF1F6"></line><line x1="70" y1="140" x2="958" y2="140" stroke="#EDF1F6"></line><line x1="70" y1="70" x2="958" y2="70" stroke="#EDF1F6"></line>
-          <text x="60" y="214" fill="#93A1B5" font-size="12" text-anchor="end">50</text><text x="60" y="144" fill="#93A1B5" font-size="12" text-anchor="end">150</text><text x="60" y="74" fill="#93A1B5" font-size="12" text-anchor="end">250</text>
-          <path d="M70 96 L168 168 L266 250 L364 286 L462 96 L560 120 L658 150 L756 178 L854 206 L958 230 L958 308 L70 308 Z" fill="url(#dipFill)"></path>
-          <path d="M70 96 L168 168 L266 250 L364 286 L462 96 L560 120 L658 150 L756 178 L854 206 L958 230" fill="none" stroke="#2AA7CC" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"></path>
-          <line x1="462" y1="40" x2="462" y2="308" stroke="#B9C6D6" stroke-dasharray="3 4"></line>
-          <text x="462" y="32" fill="#5E7088" font-size="12" text-anchor="middle">зарплата · 5-е</text>
-          <circle cx="364" cy="286" r="7" fill="#fff" stroke="#C2724A" stroke-width="3"></circle>
-          <g>
-            <rect x="226" y="312" width="276" height="34" rx="9" fill="#0F243C"></rect>
-            <text x="246" y="334" fill="#fff" font-size="13.5" font-weight="600">деньги заканчиваются · 3-е число</text>
-            <path d="M364 286 L364 312" stroke="#C2724A" stroke-width="1.6" stroke-dasharray="3 3"></path>
-          </g>
-          <text x="70" y="332" fill="#93A1B5" font-size="12" text-anchor="middle">1</text><text x="854" y="332" fill="#93A1B5" font-size="12" text-anchor="middle">28</text>
+        <svg id="b6Svg" viewBox="0 0 980 340" style="width:100%;height:auto;display:block" aria-hidden="true">
+          <defs><linearGradient id="b6Area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2AA7CC" stop-opacity=".16"/><stop offset="1" stop-color="#2AA7CC" stop-opacity="0"/></linearGradient></defs>
+          <line x1="70" y1="250" x2="940" y2="250" stroke="#EDF1F6"/>
+          <line x1="70" y1="180" x2="940" y2="180" stroke="#EDF1F6"/>
+          <line x1="70" y1="110" x2="940" y2="110" stroke="#EDF1F6"/>
+          <line x1="70" y1="44" x2="940" y2="44" stroke="#EDF1F6"/>
+          <rect id="b6DangerRect" fill="rgba(224,123,57,.08)"/>
+          <line id="b6DangerLine" stroke="rgba(224,123,57,.5)" stroke-width="1.4" stroke-dasharray="5 5"/>
+          <text id="b6DangerLbl" fill="#A85218" font-size="13" font-weight="600"/>
+          <path id="b6AreaPath" fill="url(#b6Area)"/>
+          <path id="b6LinePath" fill="none" stroke="#2AA7CC" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          <line id="b6SalLine" stroke="#B9C6D6" stroke-dasharray="3 4"/>
+          <text id="b6SalLbl" fill="#5E7088" font-size="12" text-anchor="middle"/>
+          <circle id="b6DipCircle" r="7" fill="#fff" stroke="#E07B39" stroke-width="3"/>
+          <rect id="b6DipBox" width="290" height="34" rx="9" fill="#0F243C"/>
+          <text id="b6DipTxt" fill="#fff" font-size="13.5" font-weight="600"/>
+          <path id="b6DipLine" stroke="#E07B39" stroke-width="1.6" stroke-dasharray="3 3"/>
         </svg>
-
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px" class="warn-cards">
-          <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:16px">
-            <div style="font-size:12.5px;color:#5E7088;font-weight:500">Минимум до зарплаты</div>
-            <div class="tnum" style="font-family:Sora,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px;color:#8A4B28">9 400 ₽</div>
-            <div style="font-size:12px;color:#93A1B5;margin-top:4px">наступит 3-го числа</div>
-          </div>
-          <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:16px">
-            <div style="font-size:12.5px;color:#5E7088;font-weight:500">Если перенести платёж</div>
-            <div class="tnum" style="font-family:Sora,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px;color:#1FA497">+ 34 000 ₽</div>
-            <div style="font-size:12px;color:#93A1B5;margin-top:4px">провал исчезает</div>
-          </div>
-          <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:16px">
-            <div style="font-size:12.5px;color:#5E7088;font-weight:500">Запас прочности</div>
-            <div class="tnum" style="font-family:Sora,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px">2 дня</div>
-            <div style="font-size:12px;color:#93A1B5;margin-top:4px">время решить заранее</div>
-          </div>
+        <div class="grid3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:22px">
+          <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:16px"><div style="font-size:12.5px;color:#5E7088;font-weight:500">Минимум до дохода</div><div class="tnum" style="font-family:Sora,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px;color:#A85218">9 400 ₽</div><div style="font-size:12px;color:#93A1B5;margin-top:4px">наступит 3-го числа</div></div>
+          <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:16px"><div style="font-size:12.5px;color:#5E7088;font-weight:500">Если перенести платёж</div><div class="tnum" style="font-family:Sora,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px;color:#1FA497">+ 34 000 ₽</div><div style="font-size:12px;color:#93A1B5;margin-top:4px">яма исчезает</div></div>
+          <div style="background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:16px"><div style="font-size:12.5px;color:#5E7088;font-weight:500">Запас прочности</div><div class="tnum" style="font-family:Sora,sans-serif;font-size:24px;font-weight:600;letter-spacing:-.02em;margin-top:6px">2 дня</div><div style="font-size:12px;color:#93A1B5;margin-top:4px">время решить спокойно</div></div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===== 5. CLARITY, NOT ANXIETY ===== -->
-<section style="max-width:1160px;margin:0 auto;padding:clamp(64px,9vw,116px) 24px">
-  <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:clamp(32px,5vw,72px);align-items:center" class="two-col">
-    <div>
-      <div style="font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93A1B5;margin-bottom:18px">Спокойствие, а не контроль</div>
-      <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.12;margin-bottom:18px;text-wrap:balance">Ясность вместо тревоги</h2>
-      <p style="font-size:clamp(16px,1.9vw,18px);line-height:1.65;color:#5E7088;max-width:31em">Когда вы видите всё целиком — прогноз, запас, плановые платежи — неопределённость уходит. Не потому что кто-то сказал «всё хорошо», а потому что вы сами видите: всё учтено. horizon не ограничивает и не ставит оценок. Он лишь показывает данные. Решения — за вами.</p>
-    </div>
-    <div style="aspect-ratio:1/1;border-radius:24px;background:linear-gradient(165deg,#F7FBFD,#EAF3F7);border:1px solid rgba(15,36,60,.07);position:relative;overflow:hidden;display:grid;place-items:center;box-shadow:0 18px 50px -30px rgba(15,36,60,.3)">
-      <div style="position:absolute;top:-30%;left:-10%;width:120%;height:80%;background:radial-gradient(closest-side,rgba(180,222,60,.16),transparent)"></div>
-      <div style="position:relative;width:64%;animation:hzfloat 7s ease-in-out infinite">
-        <svg viewBox="0 0 200 120" style="width:100%;height:auto;display:block" aria-hidden="true">
-          <line x1="10" y1="84" x2="190" y2="84" stroke="rgba(15,36,60,.12)" stroke-width="1.5"></line>
-          <circle cx="100" cy="56" r="26" fill="none" stroke="#1FA497" stroke-width="2.5"></circle>
-          <path d="M10 84 Q100 78 190 84" fill="none" stroke="#2AA7CC" stroke-width="2.5" stroke-linecap="round"></path>
-          <circle cx="148" cy="48" r="5" fill="#B4DE3C"></circle>
-        </svg>
+<!-- PRIVACY + SMART INPUT -->
+<section style="max-width:1180px;margin:0 auto;padding:clamp(52px,8vw,96px) 24px">
+  <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:16px">Почему без банка — это лучше</div>
+  <h2 style="font-size:clamp(26px,3.6vw,42px);font-weight:700;letter-spacing:-.03em;line-height:1.1;margin-bottom:clamp(28px,4vw,44px);max-width:18em;text-wrap:balance">Мы не подключаемся к вашему банку. И это осознанно.</h2>
+  <div class="grid2" style="display:grid;grid-template-columns:1fr .92fr;gap:clamp(28px,4vw,52px);align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px">
+      <div style="display:flex;gap:16px">
+        <span style="flex-shrink:0;width:44px;height:44px;border-radius:12px;background:rgba(42,167,204,.1);display:grid;place-items:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" stroke="#2393BE" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="#2393BE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <div><h3 style="font-size:18px;font-weight:600;margin-bottom:6px">Приватность</h3><p style="font-size:15px;line-height:1.6;color:#5E7088">Horizon физически не видит ваши счета. Вы вводите только то, что хотите. Ваши деньги — только ваше дело: никаких токенов доступа, никаких посредников между вами и банком.</p></div>
       </div>
-      <div style="position:absolute;bottom:22px;left:0;right:0;text-align:center;font-family:Sora,sans-serif;font-size:14px;font-weight:500;color:#5E7088;letter-spacing:.01em">всё учтено</div>
+      <div style="display:flex;gap:16px">
+        <span style="flex-shrink:0;width:44px;height:44px;border-radius:12px;background:rgba(31,164,151,.1);display:grid;place-items:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 3L4 14h6l-1 7 9-11h-6z" stroke="#1FA497" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+        <div><h3 style="font-size:18px;font-weight:600;margin-bottom:6px">Скорость</h3><p style="font-size:15px;line-height:1.6;color:#5E7088">Чтобы ручной ввод не стал рутиной, мы сделали его мгновенным. Нажали [+], ввели сумму — счёт подтянется сам, «Расход» уже выбран, последние и частые категории сразу под рукой. 5 секунд — смешная плата за прогноз на месяц и год вперёд.</p></div>
+      </div>
+    </div>
+
+    <!-- INPUT ANIMATION -->
+    <div style="display:flex;justify-content:center">
+      <div style="width:300px;border-radius:26px;background:#fff;border:1px solid rgba(15,36,60,.09);box-shadow:0 2px 6px rgba(15,36,60,.06),0 32px 66px -34px rgba(15,36,60,.4);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(15,36,60,.06)">
+          <span style="font-family:Sora,sans-serif;font-weight:600;font-size:15px">Новая операция</span>
+          <span style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#2AA7CC,#1FA497);display:grid;place-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg></span>
+        </div>
+        <div style="padding:18px;display:flex;flex-direction:column;gap:10px" id="inputAnim">
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ===== 6. ANY MONTH ===== -->
-<section style="max-width:1160px;margin:0 auto;padding:clamp(40px,6vw,72px) 24px clamp(64px,9vw,116px)">
-  <div style="display:grid;grid-template-columns:1fr 1.1fr;gap:clamp(32px,5vw,64px);align-items:center" class="two-col-rev">
-    <!-- SCREEN: calm-amber state -->
+<!-- CONFIDENCE -->
+<section style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07)">
+  <div class="grid2 grid2rev" style="max-width:1180px;margin:0 auto;padding:clamp(52px,8vw,96px) 24px;display:grid;grid-template-columns:1fr 1.05fr;gap:clamp(32px,5vw,64px);align-items:center">
     <div style="border-radius:18px;overflow:hidden;background:#fff;border:1px solid rgba(15,36,60,.09);box-shadow:0 2px 6px rgba(15,36,60,.06),0 36px 70px -36px rgba(15,36,60,.36)">
-      <div style="display:flex;align-items:center;gap:7px;padding:12px 16px;background:#F5F8FB;border-bottom:1px solid rgba(15,36,60,.07)">
-        <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
-        <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
-        <span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span>
-        <span style="margin-left:10px;font-size:12px;color:#93A1B5;font-weight:500">horizonapp.ru · Месяц с крупными платежами</span>
-      </div>
+      <div style="display:flex;align-items:center;gap:7px;padding:12px 16px;background:#F5F8FB;border-bottom:1px solid rgba(15,36,60,.07)"><span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span><span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span><span style="width:11px;height:11px;border-radius:50%;background:#E2E8F0"></span><span style="margin-left:10px;font-size:12px;color:#93A1B5;font-weight:500">horizonapp.ru · Месяц с крупными платежами</span></div>
       <div style="padding:24px">
         <div style="font-size:13px;color:#5E7088;font-weight:500">Свободно до следующего дохода</div>
-        <div class="tnum" style="font-family:Sora,sans-serif;font-size:42px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:7px;color:#8A4B28">8 200 <span style="font-size:22px;color:#B26A41;font-weight:500">₽</span></div>
-        <div style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#6B3A1E;background:linear-gradient(135deg,#F0C9A8,#E6B083);padding:5px 11px;border-radius:999px;margin-top:13px">
-          <span style="width:6px;height:6px;border-radius:50%;background:#8A4B28"></span>На грани</div>
-        <div style="font-size:12.5px;color:#93A1B5;margin-top:12px;line-height:1.5">Без новых трат дотянете до зарплаты с запасом 2 дня.</div>
-
-        <div style="margin-top:20px;font-size:12.5px;font-weight:600;color:#5E7088;margin-bottom:12px">Шаги, чтобы вернуть запас</div>
+        <div class="tnum" style="font-family:Sora,sans-serif;font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:6px;color:#A85218">8 200 <span style="font-size:20px;color:#B26A41;font-weight:500">₽</span></div>
+        <div style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#7A3E17;background:rgba(224,123,57,.13);padding:5px 11px;border-radius:999px;margin-top:12px"><span style="width:6px;height:6px;border-radius:50%;background:#E07B39"></span>Туго, но под контролем</div>
+        <div style="font-size:12.5px;color:#93A1B5;margin-top:12px;line-height:1.5">Без новых трат дотянете до дохода с запасом 2 дня.</div>
+        <div style="margin-top:20px;font-size:12.5px;font-weight:600;color:#5E7088;margin-bottom:12px">Шаги, которые восстановят запас</div>
         <div style="display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:12px;padding:13px 15px">
-            <span style="font-size:13.5px;color:#0F243C">Перенести подписку на 7-е</span>
-            <span class="tnum" style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;color:#1FA497">+ 3 200 ₽</span>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:12px;padding:13px 15px">
-            <span style="font-size:13.5px;color:#0F243C">Сдвинуть крупную покупку</span>
-            <span class="tnum" style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;color:#1FA497">+ 18 000 ₽</span>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:12px;padding:13px 15px">
-            <span style="font-size:13.5px;color:#0F243C">Резерв на крайний случай</span>
-            <span class="tnum" style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;color:#5E7088">12 000 ₽</span>
-          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:12px;padding:13px 15px"><span style="font-size:13.5px;color:#0F243C">Перенести подписку на 7-е</span><span class="tnum" style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;color:#1FA497">+ 3 200 ₽</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:12px;padding:13px 15px"><span style="font-size:13.5px;color:#0F243C">Сдвинуть крупную покупку</span><span class="tnum" style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;color:#1FA497">+ 18 000 ₽</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#F5F8FB;border:1px solid rgba(15,36,60,.07);border-radius:12px;padding:13px 15px"><span style="font-size:13.5px;color:#0F243C">Задействовать резерв</span><span class="tnum" style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;color:#5E7088">12 000 ₽</span></div>
         </div>
       </div>
     </div>
     <div>
-      <div style="font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93A1B5;margin-bottom:18px">Для любого месяца</div>
-      <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.12;margin-bottom:18px;text-wrap:balance">Прогноз работает в любом месяце</h2>
-      <p style="font-size:clamp(16px,1.9vw,18px);line-height:1.65;color:#5E7088;max-width:31em;margin-bottom:14px">В месяц с крупными платежами, в период отпуска, в начале ипотеки — прогноз подстраивается под вашу ситуацию. Вы видите, как каждое решение влияет на ваш баланс в целом.</p>
-      <p style="font-size:clamp(16px,1.9vw,18px);line-height:1.65;color:#5E7088;max-width:31em">Если запас снижается, horizon покажет, какие шаги его восстановят: перенести платёж, скорректировать план, задействовать резерв. Спокойно, по шагам.</p>
+      <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:18px">Уверенность, а не тревога</div>
+      <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.12;margin-bottom:18px;text-wrap:balance">Уверенность в любой месяц</h2>
+      <p style="font-size:clamp(16px,1.9vw,18px);line-height:1.65;color:#5E7088;max-width:32em">Месяц с крупными платежами, отпуск, старт ипотеки — прогноз подстраивается под вашу ситуацию, и вы видите, как каждое решение влияет на общую картину. Если запас снижается, Horizon подскажет шаги, которые его восстановят: перенести платёж, скорректировать план, задействовать резерв. Спокойно, по шагам — а решение всегда за вами.</p>
     </div>
   </div>
 </section>
 
-<!-- ===== 7. MOBILE ===== -->
-<section style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07)">
-  <div style="max-width:1160px;margin:0 auto;padding:clamp(56px,8vw,100px) 24px;display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,5vw,64px);align-items:center" class="two-col">
+<!-- ALL IN HAND (MOBILE) -->
+<section style="max-width:1180px;margin:0 auto;padding:clamp(52px,8vw,96px) 24px">
+  <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,5vw,64px);align-items:center">
     <div>
-      <div style="font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#93A1B5;margin-bottom:18px">Всё в кармане</div>
-      <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.12;margin-bottom:18px;text-wrap:balance">Ясность всегда с вами</h2>
-      <p style="font-size:clamp(16px,1.9vw,18px);line-height:1.65;color:#5E7088;max-width:31em">Прогноз, запас, плановые платежи — всё доступно с телефона. Перед любым финансовым решением у вас под рукой есть полная картина.</p>
-      <a href="#start" style="display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:15px 28px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 14px 30px -12px rgba(31,164,151,.6);margin-top:28px">Попробовать</a>
+      <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:18px">Веб и телефон</div>
+      <h2 style="font-size:clamp(26px,3.4vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.12;margin-bottom:18px;text-wrap:balance">Ваша картина всегда с вами</h2>
+      <p style="font-size:clamp(16px,1.9vw,18px);line-height:1.65;color:#5E7088;max-width:30em">Прогноз, запас прочности, плановые платежи — в браузере и на телефоне. Устанавливать ничего не нужно: открыли и работаете. Перед любым решением полная картина у вас под рукой.</p>
+      <a href="#final" style="display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:15px 28px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 14px 30px -12px rgba(31,164,151,.6);margin-top:28px">Попробовать бесплатно</a>
     </div>
-
     <div style="display:flex;justify-content:center">
       <div style="width:280px;border-radius:42px;background:#0C1828;padding:11px;box-shadow:0 2px 6px rgba(15,36,60,.1),0 44px 80px -34px rgba(15,36,60,.5)">
         <div style="border-radius:32px;overflow:hidden;background:#EEF2F7;position:relative">
           <div style="position:absolute;top:9px;left:50%;transform:translateX(-50%);width:96px;height:22px;background:#0C1828;border-radius:99px;z-index:2"></div>
           <div style="padding:42px 18px 24px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:22px">
-              <svg viewBox="0 0 56 56" width="24" height="24" aria-hidden="true"><rect width="56" height="56" rx="14" fill="#0C1828"></rect><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="#3FC6E0" opacity="0.9"></rect><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="#1FA497" opacity="0.9"></rect><rect x="34" y="15" width="15" height="29" rx="3.8" fill="#B4DE3C"></rect></g></svg>
-              <span style="font-family:Sora,sans-serif;font-weight:600;font-size:16px">Июнь</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px">
+              <svg viewBox="0 0 56 56" width="24" height="24" aria-hidden="true"><rect width="56" height="56" rx="14" fill="#0C1828"/><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="#3FC6E0" opacity=".9"/><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="#1FA497" opacity=".9"/><rect x="34" y="15" width="15" height="29" rx="3.8" fill="#B4DE3C"/></g></svg>
+              <span style="font-family:Sora,sans-serif;font-weight:600;font-size:16px">Июль</span>
             </div>
             <div style="background:#fff;border:1px solid rgba(15,36,60,.08);border-radius:18px;padding:18px;box-shadow:0 10px 24px -16px rgba(15,36,60,.2)">
               <div style="font-size:12px;color:#5E7088;font-weight:500">Свободно до следующего дохода</div>
               <div class="tnum" style="font-family:Sora,sans-serif;font-size:32px;font-weight:700;letter-spacing:-.03em;margin-top:5px;line-height:1">142 800 <span style="font-size:16px;color:#5E7088;font-weight:500">₽</span></div>
-              <div style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#0A1A10;background:linear-gradient(135deg,#C6F25A,#9FD630);padding:4px 9px;border-radius:999px;margin-top:11px">
-                <span style="width:5px;height:5px;border-radius:50%;background:#0A1A10"></span>В графике</div>
+              <div style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#0A1A10;background:linear-gradient(135deg,#C6F25A,#9FD630);padding:4px 9px;border-radius:999px;margin-top:11px"><span style="width:5px;height:5px;border-radius:50%;background:#0A1A10"></span>В графике</div>
               <svg viewBox="0 0 240 90" style="width:100%;height:auto;display:block;margin-top:14px" aria-hidden="true">
-                <defs><linearGradient id="mF" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#49D0EA" stop-opacity="0.22"></stop><stop offset="1" stop-color="#49D0EA" stop-opacity="0"></stop></linearGradient></defs>
-                <path d="M6 20 L46 24 L86 14 L126 30 L150 36 L150 90 L6 90 Z" fill="url(#mF)"></path>
-                <path d="M6 20 L46 24 L86 14 L126 30 L150 36" fill="none" stroke="#2AA7CC" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
-                <path d="M150 36 L190 46 L234 56" fill="none" stroke="#1FA497" stroke-width="2.5" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round"></path>
-                <circle cx="150" cy="36" r="3.5" fill="#2AA7CC"></circle>
+                <defs><linearGradient id="mF" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#49D0EA" stop-opacity=".22"/><stop offset="1" stop-color="#49D0EA" stop-opacity="0"/></linearGradient></defs>
+                <path d="M6 20 L46 24 L86 14 L126 30 L150 36 L150 90 L6 90 Z" fill="url(#mF)"/>
+                <path d="M6 20 L46 24 L86 14 L126 30 L150 36" fill="none" stroke="#2AA7CC" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M150 36 L190 46 L234 56" fill="none" stroke="#1FA497" stroke-width="2.5" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="150" cy="36" r="3.5" fill="#2AA7CC"/>
               </svg>
             </div>
             <div style="display:flex;gap:8px;margin-top:12px">
-              <div style="flex:1;background:#fff;border:1px solid rgba(15,36,60,.08);border-radius:14px;padding:12px">
-                <div style="font-size:10.5px;color:#93A1B5">Запас прочности</div>
-                <div class="tnum" style="font-family:Sora,sans-serif;font-size:16px;font-weight:600;margin-top:3px">8,4 мес</div>
-              </div>
-              <div style="flex:1;background:#fff;border:1px solid rgba(15,36,60,.08);border-radius:14px;padding:12px">
-                <div style="font-size:10.5px;color:#93A1B5">Устойчивость</div>
-                <div class="tnum" style="font-family:Sora,sans-serif;font-size:16px;font-weight:600;margin-top:3px;color:#1FA497">7,8/10</div>
-                <div style="font-size:10px;font-weight:600;color:#5E9B1E;margin-top:2px">Высокая</div>
-              </div>
+              <div style="flex:1;background:#fff;border:1px solid rgba(15,36,60,.08);border-radius:14px;padding:12px"><div style="font-size:10.5px;color:#93A1B5">Запас</div><div class="tnum" style="font-family:Sora,sans-serif;font-size:16px;font-weight:600;margin-top:3px">8,4 мес</div></div>
+              <div style="flex:1;background:#fff;border:1px solid rgba(15,36,60,.08);border-radius:14px;padding:12px"><div style="font-size:10.5px;color:#93A1B5">Устойчивость</div><div class="tnum" style="font-family:Sora,sans-serif;font-size:16px;font-weight:600;margin-top:3px;color:#1FA497">7,8/10</div></div>
             </div>
           </div>
         </div>
@@ -364,44 +352,353 @@
   </div>
 </section>
 
-<!-- ===== 8. FINAL CTA ===== -->
-<section id="start" style="max-width:1160px;margin:0 auto;padding:clamp(72px,11vw,140px) 24px;text-align:center">
-  <h2 style="font-size:clamp(30px,4.6vw,52px);font-weight:700;letter-spacing:-.03em;line-height:1.06;margin-bottom:20px;text-wrap:balance">Начните видеть своё<br>финансовое будущее</h2>
-  <p style="font-size:clamp(17px,2vw,20px);line-height:1.55;color:#5E7088;max-width:32em;margin:0 auto 34px">Прогноз баланса, запас прочности, плановые платежи. Бесплатно, без подключения к банкам.</p>
-  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:14px">
-    <a href="/api/auth/yandex" style="display:inline-flex;align-items:center;gap:11px;min-height:58px;padding:16px 30px;border-radius:14px;font-family:Sora,sans-serif;font-weight:600;font-size:16.5px;color:#0F243C;text-decoration:none;background:#fff;border:1px solid rgba(15,36,60,.12);box-shadow:0 12px 28px -16px rgba(15,36,60,.34)">
-      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#FC3F1D"></circle><text x="12" y="17.2" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="15" fill="#fff">Я</text></svg>
-      Войти через Яндекс
-    </a>
-    <a href="/api/auth/mailru" style="display:inline-flex;align-items:center;gap:11px;min-height:58px;padding:16px 30px;border-radius:14px;font-family:Sora,sans-serif;font-weight:600;font-size:16.5px;color:#0F243C;text-decoration:none;background:#fff;border:1px solid rgba(15,36,60,.12);box-shadow:0 12px 28px -16px rgba(15,36,60,.34)">
-      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#005FF9"></circle><path d="M6 9.2c0-.5.4-.9.9-.9h10.2c.5 0 .9.4.9.9v5.6c0 .5-.4.9-.9.9H6.9c-.5 0-.9-.4-.9-.9z" fill="#fff"></path><path d="M6.5 9.4l5.5 3.7 5.5-3.7" fill="none" stroke="#005FF9" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"></path></svg>
-      Войти через Mail.ru
-    </a>
-  </div>
-  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin-top:28px;font-size:14px;color:#5E7088">
-    <span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Бесплатно</span>
-    <span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Без подключения к банкам</span>
-    <span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Все данные под вашим контролем</span>
+<!-- SOCIAL PROOF + FOUNDER -->
+<section style="background:#fff;border-top:1px solid rgba(15,36,60,.07)">
+  <div style="max-width:1180px;margin:0 auto;padding:clamp(52px,8vw,96px) 24px">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:14px">Что говорят первые пользователи</div>
+    <p style="font-size:clamp(17px,2vw,20px);color:#5E7088;max-width:40em;margin-bottom:clamp(28px,4vw,44px)">Мы только запустились. Вот что говорят участники закрытого теста, которые уже пользуются Horizon.</p>
+    <div class="grid3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+      <!-- TESTIMONIAL 1 — ЗАМЕНИТЬ ПЕРЕД ПУБЛИКАЦИЕЙ -->
+      <div style="background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:16px">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7H6a2 2 0 00-2 2v3a2 2 0 002 2h2v3H5m13-10h-4a2 2 0 00-2 2v3a2 2 0 002 2h2v3h-3" stroke="#B4C9D5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p style="font-size:15px;line-height:1.6;color:#3A4E63;flex:1;font-style:italic">«Наконец-то понял, где именно деньги "утекают" до зарплаты. График всё показывает наглядно — больше не приходится гадать.»</p>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#2AA7CC,#1FA497);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#fff;flex-shrink:0">А</div>
+          <div><div style="font-size:14px;font-weight:600;color:#0F243C">Алексей</div><div style="font-size:12px;color:#93A1B5">участник закрытого теста</div></div>
+        </div>
+      </div>
+      <!-- TESTIMONIAL 2 — ЗАМЕНИТЬ ПЕРЕД ПУБЛИКАЦИЕЙ -->
+      <div style="background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:16px">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7H6a2 2 0 00-2 2v3a2 2 0 002 2h2v3H5m13-10h-4a2 2 0 00-2 2v3a2 2 0 002 2h2v3h-3" stroke="#B4C9D5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p style="font-size:15px;line-height:1.6;color:#3A4E63;flex:1;font-style:italic">«Без подключения к банку — именно то, что нужно. Сама решаю, что вносить. За неделю уже привыкла, это занимает меньше 5 минут в день.»</p>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1FA497,#B4DE3C);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#fff;flex-shrink:0">М</div>
+          <div><div style="font-size:14px;font-weight:600;color:#0F243C">Мария</div><div style="font-size:12px;color:#93A1B5">участник закрытого теста</div></div>
+        </div>
+      </div>
+      <!-- TESTIMONIAL 3 — ЗАМЕНИТЬ ПЕРЕД ПУБЛИКАЦИЕЙ -->
+      <div style="background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:18px;padding:24px;display:flex;flex-direction:column;gap:16px">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 7H6a2 2 0 00-2 2v3a2 2 0 002 2h2v3H5m13-10h-4a2 2 0 00-2 2v3a2 2 0 002 2h2v3h-3" stroke="#B4C9D5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p style="font-size:15px;line-height:1.6;color:#3A4E63;flex:1;font-style:italic">«Увидел через две недели, что ипотека + машина + подписки — это уже 60% дохода. Стало понятно, почему всегда ощущение нехватки. Теперь хотя бы знаю, с чем работать.»</p>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#49D0EA,#2AA7CC);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#fff;flex-shrink:0">Д</div>
+          <div><div style="font-size:14px;font-weight:600;color:#0F243C">Дмитрий</div><div style="font-size:12px;color:#93A1B5">участник закрытого теста</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOUNDER LETTER -->
+    <div style="margin-top:clamp(32px,5vw,56px);background:linear-gradient(135deg,#0F243C,#123B4A);border-radius:22px;padding:clamp(28px,4vw,48px);box-shadow:0 30px 60px -34px rgba(15,36,60,.5)">
+      <div class="grid2" style="display:grid;grid-template-columns:auto 1fr;gap:clamp(24px,4vw,44px);align-items:start">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
+          <div style="width:132px;height:132px;border-radius:50%;background:linear-gradient(135deg,#1A3A52,#0F243C);border:3px solid rgba(255,255,255,.1);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:52px;color:rgba(255,255,255,.4)">М</div>
+          <div style="text-align:center"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#fff">Максим</div><div style="font-size:12.5px;color:#7FA0AF">основатель Horizon</div></div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#7FA0AF;margin-bottom:16px">Почему я это сделал</div>
+          <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.7;color:#DDE8ED;font-style:italic">«Я сам не мог спокойно планировать крупные траты: вроде деньги есть, а между зарплатами то и дело оказывался в напряжении. Ни один трекер не отвечал на простой вопрос — что будет дальше. Я не хотел отдавать доступ к своим счетам ради этого, поэтому сделал Horizon так, чтобы данные оставались только у вас, а прогноз всё равно был точным. Это сервис, которым я хотел пользоваться сам.»</p>
+          <div style="margin-top:18px;font-family:Sora,sans-serif;font-size:15px;color:#fff">— Максим, основатель <span style="color:#B4DE3C">horizon.</span></div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
-<!-- ===== FOOTER ===== -->
-<footer style="border-top:1px solid rgba(15,36,60,.07)">
-  <div style="max-width:1160px;margin:0 auto;padding:30px 24px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px">
+<!-- DATA SECURITY -->
+<section style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07)">
+  <div style="max-width:1180px;margin:0 auto;padding:clamp(48px,7vw,80px) 24px">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:14px">Ваши данные</div>
+    <h2 style="font-size:clamp(26px,3.4vw,38px);font-weight:700;letter-spacing:-.025em;margin-bottom:clamp(24px,4vw,40px)">Данные под вашим контролем</h2>
+    <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div style="display:flex;gap:14px;background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><span style="flex-shrink:0;width:40px;height:40px;border-radius:11px;background:rgba(42,167,204,.1);display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2" stroke="#2393BE" stroke-width="1.8"/><path d="M8 10V7a4 4 0 018 0v3" stroke="#2393BE" stroke-width="1.8"/></svg></span><div><div style="font-size:15.5px;font-weight:600;margin-bottom:4px">Никакого доступа к банку</div><p style="font-size:14px;line-height:1.55;color:#5E7088">Мы не видим ваши счета и не храним банковские данные.</p></div></div>
+      <div style="display:flex;gap:14px;background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><span style="flex-shrink:0;width:40px;height:40px;border-radius:11px;background:rgba(31,164,151,.1);display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4a4 4 0 100 8 4 4 0 000-8zM5 20a7 7 0 0114 0" stroke="#1FA497" stroke-width="1.8" stroke-linecap="round"/></svg></span><div><div style="font-size:15.5px;font-weight:600;margin-bottom:4px">Только вы вводите информацию</div><p style="font-size:14px;line-height:1.55;color:#5E7088">И только то, что считаете нужным.</p></div></div>
+      <div style="display:flex;gap:14px;background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><span style="flex-shrink:0;width:40px;height:40px;border-radius:11px;background:rgba(180,222,60,.16);display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 7h12M9 7V5h6v2M8 7l1 13h6l1-13" stroke="#6E9416" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><div><div style="font-size:15.5px;font-weight:600;margin-bottom:4px">Данные можно удалить</div><p style="font-size:14px;line-height:1.55;color:#5E7088">В любой момент, полностью — по вашему запросу.</p></div></div>
+      <div style="display:flex;gap:14px;background:#F7FAFC;border:1px solid rgba(15,36,60,.07);border-radius:14px;padding:20px"><span style="flex-shrink:0;width:40px;height:40px;border-radius:11px;background:rgba(42,167,204,.1);display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" stroke="#2393BE" stroke-width="1.8" stroke-linejoin="round"/></svg></span><div><div style="font-size:15.5px;font-weight:600;margin-bottom:4px">Передача по HTTPS</div><p style="font-size:14px;line-height:1.55;color:#5E7088">Все данные передаются по зашифрованному каналу.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="price" style="max-width:1180px;margin:0 auto;padding:clamp(52px,8vw,92px) 24px">
+  <div style="text-align:center;margin-bottom:clamp(32px,4vw,48px)">
+    <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:14px">Цена</div>
+    <h2 style="font-size:clamp(28px,3.8vw,44px);font-weight:700;letter-spacing:-.03em;line-height:1.1;text-wrap:balance">35 дней бесплатно.<br>Потом — как чашка кофе</h2>
+  </div>
+  <div class="price2" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:760px;margin:0 auto">
+    <div style="background:#fff;border:1px solid rgba(15,36,60,.1);border-radius:20px;padding:30px">
+      <div style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;color:#5E7088">Месяц</div>
+      <div class="tnum" style="font-family:Sora,sans-serif;font-size:44px;font-weight:700;letter-spacing:-.03em;margin-top:10px;line-height:1">250 <span style="font-size:20px;color:#5E7088;font-weight:500">₽/мес</span></div>
+      <div style="font-size:14px;color:#93A1B5;margin-top:10px">Меньше одной чашки кофе</div>
+    </div>
+    <div style="background:#fff;border:2px solid #1FA497;border-radius:20px;padding:30px;position:relative;box-shadow:0 24px 50px -30px rgba(31,164,151,.5)">
+      <span style="position:absolute;top:-13px;right:24px;font-size:12px;font-weight:700;color:#0A1A10;background:linear-gradient(135deg,#C6F25A,#9FD630);padding:5px 12px;border-radius:999px">−33%</span>
+      <div style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;color:#1FA497">Год</div>
+      <div class="tnum" style="font-family:Sora,sans-serif;font-size:44px;font-weight:700;letter-spacing:-.03em;margin-top:10px;line-height:1">2 000 <span style="font-size:20px;color:#5E7088;font-weight:500">₽/год</span></div>
+      <div style="font-size:14px;color:#93A1B5;margin-top:10px"><span style="text-decoration:line-through">3 000 ₽</span> — экономия за год</div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:32px">
+    <p style="font-size:16px;color:#5E7088;max-width:38em;margin:0 auto 24px;line-height:1.6">35 дней бесплатно, без привязки карты. Успеете увидеть, как сбываются первые прогнозы, прежде чем решите платить.</p>
+    <a href="#final" style="display:inline-flex;align-items:center;gap:10px;min-height:54px;padding:16px 32px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:17px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 16px 34px -14px rgba(31,164,151,.65)">Начать 35 дней бесплатно
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section style="background:#fff;border-top:1px solid rgba(15,36,60,.07);border-bottom:1px solid rgba(15,36,60,.07)">
+  <div style="max-width:820px;margin:0 auto;padding:clamp(52px,8vw,92px) 24px">
+    <h2 style="font-size:clamp(28px,3.6vw,40px);font-weight:700;letter-spacing:-.025em;margin-bottom:clamp(28px,4vw,40px);text-align:center">Частые вопросы</h2>
+    <div style="display:flex;flex-direction:column;gap:10px" id="faqList"></div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section id="final" style="max-width:1180px;margin:0 auto;padding:clamp(64px,10vw,124px) 24px;text-align:center">
+  <h2 style="font-size:clamp(30px,4.6vw,52px);font-weight:700;letter-spacing:-.035em;line-height:1.06;margin-bottom:18px;text-wrap:balance">Постройте свой прогноз<br>на месяц и год вперёд</h2>
+  <p style="font-size:clamp(16px,2vw,19px);line-height:1.55;color:#5E7088;max-width:34em;margin:0 auto 34px">Прогноз баланса, запас прочности, плановые платежи. 35 дней бесплатно, без карты, без подключения к банкам.</p>
+  <div class="auth-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:420px;margin:0 auto">
+    <a href="/api/auth/yandex" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:54px;padding:15px 18px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;background:#fff;border:1px solid rgba(15,36,60,.14);box-shadow:0 8px 20px -14px rgba(15,36,60,.3);text-decoration:none"><span style="width:26px;height:26px;border-radius:7px;background:#FC3F1D;color:#fff;display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:15px">Я</span>Яндекс</a>
+    <a href="/api/auth/mailru" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:54px;padding:15px 18px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;background:#fff;border:1px solid rgba(15,36,60,.14);box-shadow:0 8px 20px -14px rgba(15,36,60,.3);text-decoration:none"><span style="width:26px;height:26px;border-radius:7px;background:#0F5CFF;color:#fff;display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:14px">@</span>Mail.ru</a>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin-top:26px;font-size:14px;color:#5E7088">
+    <span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>35 дней бесплатно</span>
+    <span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Без карты</span>
+    <span style="display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="#1FA497" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Данные под вашим контролем</span>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer style="border-top:1px solid rgba(15,36,60,.07);background:rgba(255,255,255,.5)">
+  <div style="max-width:1180px;margin:0 auto;padding:32px 24px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px">
     <div style="display:flex;align-items:center;gap:9px">
-      <svg viewBox="0 0 56 56" width="24" height="24" aria-hidden="true"><rect width="56" height="56" rx="14" fill="#0C1828"></rect><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="#3FC6E0" opacity="0.9"></rect><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="#1FA497" opacity="0.9"></rect><rect x="34" y="15" width="15" height="29" rx="3.8" fill="#B4DE3C"></rect></g></svg>
+      <svg viewBox="0 0 56 56" width="24" height="24" aria-hidden="true"><rect width="56" height="56" rx="14" fill="#0C1828"/><g transform="skewX(-15)"><rect x="20" y="24" width="12.5" height="20" rx="3.2" fill="#3FC6E0" opacity=".9"/><rect x="27" y="20" width="13.5" height="24" rx="3.4" fill="#1FA497" opacity=".9"/><rect x="34" y="15" width="15" height="29" rx="3.8" fill="#B4DE3C"/></g></svg>
       <span style="font-family:Sora,sans-serif;font-weight:600;font-size:16px">horizon<span style="color:#9FC22A">.</span></span>
     </div>
-    <nav style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;font-size:13.5px;color:#5E7088">
+    <div style="display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13.5px;color:#5E7088">
       <a href="/privacy" style="text-decoration:none">Политика конфиденциальности</a>
       <a href="/terms" style="text-decoration:none">Пользовательское соглашение</a>
       <a href="/consent" style="text-decoration:none">Согласие на обработку данных</a>
-      <a href="mailto:horizon.privacy@yandex.ru" style="text-decoration:none">horizon.privacy@yandex.ru</a>
-    </nav>
+      <a href="mailto:hello@horizonapp.ru" style="text-decoration:none">hello@horizonapp.ru</a>
+    </div>
   </div>
-  <div style="max-width:1160px;margin:0 auto;padding:0 24px 26px;font-size:12.5px;color:#93A1B5">horizonapp.ru · прогноз личных финансов</div>
+  <div style="max-width:1180px;margin:0 auto;padding:0 24px 28px;font-size:12.5px;color:#93A1B5">horizonapp.ru · прогноз личных финансов</div>
 </footer>
 
 </div>
+
+<script>
+/* ── State ── */
+const S = { heroHorizon: '30', heroMoved: false, b6: '30', faqOpen: -1, inputStep: 0 };
+
+/* ── Math helpers ── */
+function scale(vals, box) {
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const pad = (mx - mn) * 0.14 || 1, lo = mn - pad, hi = mx + pad, n = vals.length;
+  return vals.map((v, i) => [
+    box.x0 + (i / (n - 1)) * (box.x1 - box.x0),
+    box.y1 - ((v - lo) / (hi - lo)) * (box.y1 - box.y0)
+  ]);
+}
+function yOf(v, vals, box) {
+  const mn = Math.min(...vals), mx = Math.max(...vals);
+  const pad = (mx - mn) * 0.14 || 1, lo = mn - pad, hi = mx + pad;
+  return box.y1 - ((v - lo) / (hi - lo)) * (box.y1 - box.y0);
+}
+function svgLine(pts) { return pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' '); }
+function svgArea(pts, yb) { return svgLine(pts) + ' L' + pts[pts.length-1][0].toFixed(1) + ' ' + yb + ' L' + pts[0][0].toFixed(1) + ' ' + yb + ' Z'; }
+function attr(id, attrs) { const el = document.getElementById(id); if (!el) return; Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v)); }
+function text(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function style(id, prop, val) { const el = document.getElementById(id); if (el) el.style[prop] = val; }
+
+/* ── Hero chart ── */
+const HB = { x0: 64, x1: 744, y0: 44, y1: 248 };
+const heroYear = [140, 150, 138, 160, 155, 175, 168, 185, 180, 200, 195, 215];
+const heroDip  = [150, 145, 138, 100, 82, 132, 140, 138, 142, 140, 144, 142, 146, 144, 148, 150];
+const heroFlat = [150, 146, 140, 142, 144, 150, 152, 150, 154, 152, 156, 154, 158, 156, 158, 160];
+
+function renderHero() {
+  const year = S.heroHorizon === 'year';
+  const data = year ? heroYear : (S.heroMoved ? heroFlat : heroDip);
+  const pts = scale(data, HB);
+  const split = year ? 1 : 2;
+  const dipPt = pts[4] || pts[0];
+  const showDip = !year && !S.heroMoved;
+
+  attr('heroArea', { d: svgArea(pts, HB.y1) });
+  attr('heroFact', { d: svgLine(pts.slice(0, split + 1)) });
+  attr('heroFore', { d: svgLine(pts.slice(split)) });
+  attr('heroTodayLine', { x1: pts[split][0].toFixed(1), y1: '30', x2: pts[split][0].toFixed(1), y2: '248' });
+  attr('heroTodayLbl', { x: pts[split][0].toFixed(1), y: '22' });
+
+  const dip = document.getElementById('heroDipCircle');
+  const dipLbl = document.getElementById('heroDipLbl');
+  if (showDip) {
+    attr('heroDipCircle', { cx: dipPt[0].toFixed(1), cy: dipPt[1].toFixed(1), visibility: 'visible' });
+    attr('heroDipLbl', { x: dipPt[0].toFixed(1), y: (dipPt[1] + 22).toFixed(1), visibility: 'visible' });
+    dipLbl.textContent = 'на грани';
+  } else {
+    attr('heroDipCircle', { visibility: 'hidden' });
+    attr('heroDipLbl', { visibility: 'hidden' });
+  }
+
+  // Badge + sum
+  const badge = document.getElementById('heroBadge');
+  const sumEl = document.getElementById('heroSum');
+  if (S.heroMoved) {
+    badge.style.color = '#0A1A10'; badge.style.background = 'linear-gradient(135deg,#C6F25A,#9FD630)';
+    document.getElementById('heroBadgeDot').style.background = '#0A1A10';
+    text('heroBadgeTxt', 'В графике');
+    sumEl.innerHTML = '176 800 <span style="font-size:22px;color:#5E7088;font-weight:500">₽</span>';
+  } else {
+    badge.style.color = '#A85218'; badge.style.background = 'rgba(224,123,57,.12)';
+    document.getElementById('heroBadgeDot').style.background = '#E07B39';
+    text('heroBadgeTxt', year ? 'В графике' : 'Узкое место 3-го');
+    sumEl.innerHTML = '142 800 <span style="font-size:22px;color:#5E7088;font-weight:500">₽</span>';
+    if (year) { badge.style.color = '#0A1A10'; badge.style.background = 'linear-gradient(135deg,#C6F25A,#9FD630)'; document.getElementById('heroBadgeDot').style.background = '#0A1A10'; }
+  }
+
+  // Toggle button
+  text('heroLabel', year ? 'На год вперёд' : '30 дней');
+  text('heroToggleLbl', year ? 'Свернуть до 30 дней' : 'Развернуть на год');
+
+  // Move button
+  const btn = document.getElementById('moveBtnEl');
+  const lbl = document.getElementById('moveBtnLbl');
+  if (S.heroMoved) {
+    btn.style.color = '#5E7088'; btn.style.background = '#F1F4F8'; btn.style.borderColor = 'rgba(15,36,60,.12)';
+    text('moveBtnLbl', 'Вернуть как было');
+    attr('moveBtnArrow', { stroke: '#5E7088' });
+  } else {
+    btn.style.color = '#1FA497'; btn.style.background = 'rgba(31,164,151,.1)'; btn.style.borderColor = 'rgba(31,164,151,.25)';
+    text('moveBtnLbl', 'Перенести платёж');
+    attr('moveBtnArrow', { stroke: '#1FA497' });
+  }
+  btn.style.display = year ? 'none' : 'inline-flex';
+}
+
+function heroToggle() { S.heroHorizon = S.heroHorizon === '30' ? 'year' : '30'; renderHero(); }
+function heroMove() { S.heroMoved = !S.heroMoved; renderHero(); }
+
+/* ── Block 6 chart ── */
+const BB = { x0: 70, x1: 940, y0: 44, y1: 250 };
+const b6_30   = [96, 52, 9, 150, 158, 150, 146, 150, 148, 150, 149, 150, 148, 150, 149];
+const b6_year = [150, 145, 160, 155, 175, 168, 185, 180, 200, 195, 215, 210];
+
+function renderB6() {
+  const is30 = S.b6 === '30';
+  const vals = is30 ? b6_30 : b6_year;
+  const pts = scale(vals, BB);
+  const dY = is30 ? yOf(30, vals, BB) : 0;
+  const dipPt = pts[2], salPt = pts[3];
+
+  attr('b6AreaPath', { d: svgArea(pts, BB.y1) });
+  attr('b6LinePath', { d: svgLine(pts) });
+
+  if (is30) {
+    attr('b6DangerRect', { x: '70', y: dY.toFixed(1), width: '870', height: (250 - dY).toFixed(1), visibility: 'visible' });
+    attr('b6DangerLine', { x1: '70', y1: dY.toFixed(1), x2: '940', y2: dY.toFixed(1), visibility: 'visible' });
+    const lbl = document.getElementById('b6DangerLbl');
+    lbl.setAttribute('x', '80'); lbl.setAttribute('y', (dY + 18).toFixed(1)); lbl.setAttribute('visibility', 'visible');
+    lbl.textContent = 'безопасный минимум · 30 000 ₽';
+
+    attr('b6SalLine', { x1: salPt[0].toFixed(1), y1: '34', x2: salPt[0].toFixed(1), y2: '290', visibility: 'visible' });
+    const slbl = document.getElementById('b6SalLbl');
+    slbl.setAttribute('x', salPt[0].toFixed(1)); slbl.setAttribute('y', '26'); slbl.setAttribute('visibility', 'visible');
+    slbl.textContent = 'зарплата · 5-е';
+
+    attr('b6DipCircle', { cx: dipPt[0].toFixed(1), cy: dipPt[1].toFixed(1), visibility: 'visible' });
+    const bx = dipPt[0] - 10, ty = dipPt[1];
+    attr('b6DipBox', { x: bx.toFixed(1), y: '296', visibility: 'visible' });
+    attr('b6DipTxt', { x: (bx + 6).toFixed(1), y: '318', visibility: 'visible' });
+    document.getElementById('b6DipTxt').textContent = 'деньги на минимуме · 3-е · 9 400 ₽';
+    attr('b6DipLine', { d: `M${dipPt[0].toFixed(1)} ${dipPt[1].toFixed(1)} L${dipPt[0].toFixed(1)} 296`, visibility: 'visible' });
+  } else {
+    ['b6DangerRect','b6DangerLine','b6DangerLbl','b6SalLine','b6SalLbl','b6DipCircle','b6DipBox','b6DipTxt','b6DipLine']
+      .forEach(id => attr(id, { visibility: 'hidden' }));
+  }
+
+  // Toggle buttons
+  const btn30 = document.getElementById('b6btn30');
+  const btnYr = document.getElementById('b6btnYear');
+  btn30.style.color = is30 ? '#0F243C' : '#5E7088';
+  btn30.style.background = is30 ? '#fff' : 'transparent';
+  btn30.style.boxShadow = is30 ? '0 2px 6px rgba(15,36,60,.12)' : 'none';
+  btnYr.style.color = !is30 ? '#0F243C' : '#5E7088';
+  btnYr.style.background = !is30 ? '#fff' : 'transparent';
+  btnYr.style.boxShadow = !is30 ? '0 2px 6px rgba(15,36,60,.12)' : 'none';
+}
+
+function b6Set(v) { S.b6 = v; renderB6(); }
+
+/* ── Input animation ── */
+const inputDefs = [
+  { icon: '+', label: 'Тип: Расход', tag: 'по умолчанию' },
+  { icon: '₽', label: 'Сумма', tag: '1 250 ₽' },
+  { icon: '#', label: 'Категория', tag: 'Кафе' },
+  { icon: '⌂', label: 'Счёт', tag: 'подтянут сам' },
+  { icon: '✓', label: 'Готово · прогноз пересчитан', tag: '' }
+];
+
+function renderInput() {
+  const step = S.inputStep;
+  const el = document.getElementById('inputAnim');
+  if (!el) return;
+  el.innerHTML = inputDefs.map((r, i) => {
+    const done = i < step, active = i === step, last = i === inputDefs.length - 1;
+    const bg = active ? (last ? '#EDFAF3' : '#F0F9FC') : done ? '#F1FBF8' : '#F7FAFC';
+    const border = active ? (last ? 'rgba(31,164,151,.4)' : 'rgba(42,167,204,.35)') : 'rgba(15,36,60,.06)';
+    const fg = active ? '#0F243C' : done ? '#3A4E63' : '#AEBAC7';
+    const icBg = active ? (last ? '#1FA497' : '#2AA7CC') : done ? 'rgba(31,164,151,.15)' : '#E9EEF4';
+    const icFg = active ? '#fff' : done ? '#1FA497' : '#B4C0CE';
+    const tagFg = active ? '#1F7D8F' : '#93A1B5';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:13px;background:${bg};border:1px solid ${border};transition:all .35s ease">
+      <span style="flex-shrink:0;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:${icBg};color:${icFg};font-family:Sora,sans-serif;font-weight:700;font-size:15px">${r.icon}</span>
+      <span style="flex:1;font-size:14px;font-weight:500;color:${fg}">${r.label}</span>
+      <span style="font-size:12px;font-weight:600;color:${tagFg}">${r.tag}</span>
+    </div>`;
+  }).join('') + `<div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:4px;font-size:12px;color:#93A1B5"><span style="font-family:Sora,sans-serif;font-weight:600;color:#1FA497">~5 сек</span> от нажатия до готово</div>`;
+}
+
+/* ── FAQ ── */
+const faqData = [
+  { q: 'Зачем вводить операции вручную, если банк умеет сам?', a: 'Потому что мы принципиально не подключаемся к вашему банку — это ваша приватность. А чтобы ввод не был обузой, мы сделали его мгновенным: одно нажатие, сумма, и всё — 5 секунд.' },
+  { q: 'Сколько времени это реально занимает?', a: 'Регулярные платежи настраиваются один раз. Повседневные траты — около 5 секунд на операцию: категория и счёт подставляются автоматически.' },
+  { q: 'Что будет, если я забуду внести расход или подтвердить платёж?', a: 'Ничего страшного. Плановые платежи Horizon сам предложит подтвердить при следующем заходе, а прогноз пересчитается, когда вы внесёте данные. Никаких штрафов и осуждения — мы не ставим оценок.' },
+  { q: 'Почему прогнозу можно верить?', a: 'Прогноз строится на ваших реальных данных: регулярных доходах и платежах, разовых событиях и исторической скорости расходов. Чем дольше пользуетесь — тем точнее.' },
+  { q: 'Насколько далеко видно прогноз?', a: 'По умолчанию — на 30 дней вперёд, до следующего дохода. График можно развернуть на год.' },
+  { q: 'Это безопасно? Где мои данные?', a: 'Мы не имеем доступа к вашим счетам и не храним банковские данные. Информацию вводите только вы, её можно удалить в любой момент.' },
+  { q: 'Нужно ли устанавливать приложение?', a: 'Нет. Horizon работает в браузере и на телефоне — просто откройте и пользуйтесь.' },
+  { q: 'Сколько стоит после бесплатного периода?', a: '250 ₽ в месяц или 2 000 ₽ в год. Первые 35 дней — бесплатно, без карты.' }
+];
+
+function renderFaq() {
+  const el = document.getElementById('faqList');
+  if (!el) return;
+  el.innerHTML = faqData.map((f, i) => {
+    const open = S.faqOpen === i;
+    const iconBg = open ? '#1FA497' : '#E9EEF4';
+    const iconFg = open ? '#fff' : '#5E7088';
+    return `<div style="background:#F7FAFC;border:1px solid rgba(15,36,60,.08);border-radius:14px;overflow:hidden">
+      <button onclick="faqToggle(${i})" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;background:none;border:none;text-align:left;min-height:44px;cursor:pointer">
+        <span style="font-family:Sora,sans-serif;font-size:16px;font-weight:600;color:#0F243C;line-height:1.35">${f.q}</span>
+        <span style="flex-shrink:0;width:26px;height:26px;border-radius:8px;background:${iconBg};color:${iconFg};display:grid;place-items:center;font-size:18px;font-weight:600;font-family:Sora,sans-serif">${open ? '−' : '+'}</span>
+      </button>
+      ${open ? `<div style="padding:0 20px 20px;font-size:15px;line-height:1.65;color:#5E7088">${f.a}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function faqToggle(i) { S.faqOpen = S.faqOpen === i ? -1 : i; renderFaq(); }
+
+/* ── Init ── */
+document.addEventListener('DOMContentLoaded', () => {
+  renderHero();
+  renderB6();
+  renderInput();
+  renderFaq();
+  setInterval(() => { S.inputStep = (S.inputStep + 1) % 5; renderInput(); }, 1300);
+});
+</script>
 </body>
 </html>
