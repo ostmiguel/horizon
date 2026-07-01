@@ -461,12 +461,16 @@ async def get_metrics(request: Request):
             "status":  sts_status,
             "next_income_date": next_income_date.isoformat(),
             "days_to_income":   days_to_income,
+            # Пилюли живут по ТЕКУЩЕМУ МЕСЯЦУ (что ещё впереди до конца месяца),
+            # сбрасываются 1-го числа и обновляются по мере поступления фактов.
+            # Это отдельный горизонт от «Свободно» (trough до след. дохода) —
+            # см. F_before/V_to_income выше, они только для sts.
             "waterfall": {
                 "b0":        round(B0),
-                "i_remain":  0,
-                "f_remain":  round(F_before),
-                "v_remain":  round(V_to_income),
-                "r_topup":   round(R_before),
+                "i_remain":  round(I_remain),
+                "f_remain":  round(F_remain),
+                "v_remain":  round(V_remain),
+                "r_topup":   round(R_topup),
                 "c_cushion": round(C_cushion),
             },
             "b0_accounts": b0_accounts,
@@ -477,7 +481,7 @@ async def get_metrics(request: Request):
                 "reserve_topup_items":   reserve_topup_items,
                 "cushion_accounts":      cushion_accounts_detail,
                 "v_daily_rate":          round(r_var),
-                "d_left":                days_to_income,
+                "d_left":                d_left,
             },
         },
         "net_capital": {
