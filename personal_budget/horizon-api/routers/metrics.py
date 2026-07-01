@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request
 from datetime import date, timedelta
+from calendar import monthrange
 import statistics
 import math
 
@@ -541,8 +542,73 @@ async def get_metrics(request: Request):
 
 # ── /api/metrics/forecast — balance trajectory for chart ─────────────────────
 
+async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names):
+    """Годовой прогноз — помесячный тренд по текущему run-rate.
+
+    Месячный нетто = регулярные доходы (правила) − регулярные фикс.платежи
+    (правила, не-повседневные) − пополнения резервов (правила) − платежи по
+    кредитам − повседневные (r_var × среднее дней в месяце). Проецируем от B0
+    на 12 месяцев вперёд, точки — на конец каждого месяца. Это честный тренд
+    «при текущем ритме», без разовых будущих событий и без учёта завершения
+    кредитов — макро-картина роста/убыли за год."""
+    rules = await db.fetch("""
+        SELECT pr.amount, pr.account_from, pr.account_to,
+               c.expense_type AS et, c.character AS ch
+        FROM plan_rules pr
+        LEFT JOIN categories c ON pr.category_id = c.id
+        WHERE pr.user_id=$1 AND pr.is_active=true
+    """, user_id)
+    m_income = m_fixed = m_reserve = 0.0
+    for r in rules:
+        amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
+        if af == "Доход":
+            m_income += amt
+        elif at in ("Расход", "Обязательства"):
+            is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
+            if not is_var:
+                m_fixed += amt
+        elif at in reserve_names:
+            m_reserve += amt
+
+    m_loans = float(await db.fetchval(
+        "SELECT COALESCE(SUM(monthly_payment), 0) FROM loans WHERE user_id=$1 AND is_active=true",
+        user_id
+    ))
+    m_var = r_var * 30.44
+    monthly_net = m_income - m_fixed - m_reserve - m_loans - m_var
+
+    points = [{"date": today.isoformat(), "forecast": round(B0_now)}]
+    running = B0_now
+    y, mo = today.year, today.month
+
+    # Текущий месяц — пропорционально остатку дней.
+    dim = monthrange(y, mo)[1]
+    running += monthly_net * ((dim - today.day) / dim)
+    points.append({"date": date(y, mo, dim).isoformat(), "forecast": round(running)})
+
+    # Следующие 12 месяцев — полный месячный нетто.
+    for _ in range(12):
+        mo += 1
+        if mo > 12:
+            mo = 1; y += 1
+        dim = monthrange(y, mo)[1]
+        running += monthly_net
+        points.append({"date": date(y, mo, dim).isoformat(), "forecast": round(running)})
+
+    return {
+        "today":            today.isoformat(),
+        "range":            "year",
+        "monthly_net":      round(monthly_net),
+        "next_income_date": None,
+        "trough_date":      None,
+        "trough_value":     None,
+        "safe_min":         0,
+        "points":           points,
+    }
+
+
 @router.get("/forecast")
-async def get_forecast(request: Request):
+async def get_forecast(request: Request, range: str = "30"):
     user_id = request.state.user_id
     db = request.state.db
 
@@ -559,6 +625,10 @@ async def get_forecast(request: Request):
     r_var, sigma_day = await flow_daily_rate(db, user_id, today)
     # Безопасный минимум: хотя бы недельный запас трат, или подушка, если она крупнее.
     safe_min = max(cushion, r_var * 7)
+
+    # ── Горизонт «Год»: помесячный тренд по run-rate ───────────────────────────
+    if range == "year":
+        return await _forecast_year(db, user_id, today, B0_now, r_var, reserve_names)
 
     # ── Следующий доход (план; может быть в следующем месяце) ──────────────────
     fut = await plan_window(db, user_id, today, today + timedelta(days=75))

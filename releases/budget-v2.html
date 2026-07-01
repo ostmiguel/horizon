@@ -6173,7 +6173,8 @@ function fcRuDate(iso){
 
 // Балансовый график «до следующего дохода»: факт → прогноз до зарплаты, низшая
 // точка (= «Свободно»), маркер зарплаты, полоса безопасного минимума. Интерактив — fcHover.
-function renderBalanceChart(fc, ariaLabel){
+function renderBalanceChart(fc, ariaLabel, opts){
+  opts = opts || {};
   const pts = (fc && fc.points) || [];
   if (pts.length < 2) return '';
   const VW=760, VH=300, pL=52, pR=22, pT=30, pB=40;
@@ -6205,7 +6206,9 @@ function renderBalanceChart(fc, ariaLabel){
   if(sm>0){ const smY=vY(sm); minBand=`<rect x="${x1}" y="${smY.toFixed(1)}" width="${plotW}" height="${(y2-smY).toFixed(1)}" fill="rgba(194,114,74,.05)"/><line x1="${x1}" y1="${smY.toFixed(1)}" x2="${x2}" y2="${smY.toFixed(1)}" stroke="rgba(194,114,74,.35)" stroke-width="1.1" stroke-dasharray="5 5"/><text x="${(x1+5).toFixed(0)}" y="${(Math.max(y1+10, smY-7)).toFixed(0)}" fill="#8A4B28" font-size="9.5" font-weight="600">безопасный минимум · ${k(sm)}</text>`; }
 
   let xLbl='';
-  pts.forEach((p,i)=>{ if(i>0 && pts[i-1].date===p.date) return; const isFirst=p.date.slice(8,10)==='01'; const isT=(i===todayI); xLbl+=`<text x="${iX(i).toFixed(1)}" y="${(y2+16).toFixed(0)}" fill="${(isT||isFirst)?'#5E7088':'#A7B4C2'}" font-size="7.5" font-weight="${(isT||isFirst)?'600':'400'}" text-anchor="middle">${p.date.slice(8,10)}.${p.date.slice(5,7)}</text>`; });
+  const MON=['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  let _lastLbl='';
+  pts.forEach((p,i)=>{ if(i>0 && pts[i-1].date===p.date) return; const isFirst=p.date.slice(8,10)==='01'; const isT=(i===todayI); const lbl=opts.monthLabels?MON[+p.date.slice(5,7)]:(p.date.slice(8,10)+'.'+p.date.slice(5,7)); if(opts.monthLabels && (lbl===_lastLbl || i===0)) return; _lastLbl=lbl; xLbl+=`<text x="${iX(i).toFixed(1)}" y="${(y2+16).toFixed(0)}" fill="${(isT||isFirst)?'#5E7088':'#A7B4C2'}" font-size="7.5" font-weight="${(isT||isFirst)?'600':'400'}" text-anchor="middle">${lbl}</text>`; });
 
   const factPts=pts.filter(p=>p.fact!=null), fcstPts=pts.filter(p=>p.forecast!=null);
   const seg=(arr,key)=>arr.map((p,j)=>`${j?'L':'M'}${iX(p._i).toFixed(1)} ${vY(p[key]).toFixed(1)}`).join(' ');
@@ -6235,6 +6238,47 @@ function renderBalanceChart(fc, ariaLabel){
   const crosshair=`<line id="${svgId}-tl" x1="0" y1="${y1}" x2="0" y2="${y2}" stroke="rgba(15,36,60,.18)" stroke-width="1" stroke-dasharray="2 2" style="display:none"/>`;
   const overlay=`<rect x="${x1}" y="${y1}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair" onmousemove="fcHover(event,this)" onmouseleave="fcHoverLeave()"/>`;
   return `<svg id="${svgId}" viewBox="0 0 ${VW} ${VH}" class="chart" style="width:100%;height:auto;display:block" role="img" aria-label="${ariaLabel||'Прогноз баланса до следующего дохода'}">${grad}${grid}${yLbl}${zero}${minBand}${factArea}${factLine}${fcstLine}${todayMk}${salaryMk}${troughMk}${xLbl}${crosshair}${overlay}</svg>`;
+}
+
+// ── Тумблер горизонта 30 дней / Год ──────────────────────────────────────────
+function fcToggleHtml(range){
+  const btn = (r,lbl)=>`<button data-fcrange="${r}" onclick="fcSetRange('${r}')" style="min-height:30px;padding:5px 13px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:Sora,sans-serif;color:${r===range?'#0F243C':'#5E7088'};background:${r===range?'#fff':'transparent'};box-shadow:${r===range?'0 1px 3px rgba(15,36,60,.15)':'none'}">${lbl}</button>`;
+  return `<div style="display:inline-flex;background:var(--bg3);border-radius:9px;padding:2px">${btn('30','30 дней')}${btn('year','Год')}</div>`;
+}
+
+function fcChartHtml(fc, range){
+  if(!fc || !Array.isArray(fc.points) || fc.points.length<2)
+    return '<div style="padding:28px 12px;text-align:center;color:var(--text3);font-size:12.5px">Недостаточно данных для прогноза</div>';
+  const chart = renderBalanceChart(fc, range==='year'?'Прогноз баланса на год':'Прогноз баланса до следующего дохода', {monthLabels: range==='year'});
+  const nf = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(+n||0)));
+  const legend = range==='year'
+    ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:8px 14px;padding:6px 8px 0;font-size:11px;color:var(--text2)">
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз баланса на 12 мес</span>
+         <span style="color:${(+fc.monthly_net||0)>=0?'#5E9B1E':'#A8472F'};font-weight:600">${(+fc.monthly_net||0)>=0?'▲':'▼'} ${nf(fc.monthly_net)} ₽/мес в среднем</span>
+       </div>`
+    : `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:14px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#2AA7CC;border-radius:2px;display:inline-block"></span>Факт</span>
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз</span>
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:2.5px solid #C0561A;display:inline-block"></span>Низшая точка</span>
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;border-top:1.5px dashed #8FA0B3;display:inline-block"></span>Зарплата</span>
+       </div>`;
+  return chart + legend;
+}
+
+async function fcSetRange(range){
+  window._fcRange = range;
+  const tgl = document.getElementById('fcToggle');
+  if(tgl) tgl.innerHTML = fcToggleHtml(range);
+  const box = document.getElementById('fcChartBox');
+  if(!box) return;
+  let fc = range==='year' ? window._fcYear : window._fc30;
+  if(!fc){
+    box.innerHTML = '<div class="loading" style="min-height:180px"><div class="spinner"></div></div>';
+    try{ fc = await fetch(`/api/metrics/forecast${range==='year'?'?range=year':''}`, {credentials:'include'}).then(r=>r.json()); }
+    catch(e){ fc = null; }
+    if(range==='year') window._fcYear = fc; else window._fc30 = fc;
+  }
+  box.innerHTML = fcChartHtml(fc, range);
 }
 
 function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
@@ -6523,6 +6567,9 @@ async function loadDashboardNew() {
     const fc = await fRes.json();
     const af = await aRes.json();
 
+    // Кэш для тумблера горизонта 30 дней / Год (fcSetRange).
+    window._fc30 = fc; window._fcYear = null; window._fcRange = '30';
+
     const f  = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(n)));
     const C = { green: '#5E9B1E', yellow: '#D97706', red: '#B0492A' };
     const PILL = {
@@ -6721,13 +6768,8 @@ async function loadDashboardNew() {
           ${pillsHtml}
         </div>
         <div class="hero-right">
-          ${renderBalanceChart(fc, 'Прогноз баланса до следующего дохода')}
-          <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:14px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
-            <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#2AA7CC;border-radius:2px;display:inline-block"></span>Факт</span>
-            <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз</span>
-            <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:2.5px solid #C0561A;display:inline-block"></span>Низшая точка</span>
-            <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;border-top:1.5px dashed #8FA0B3;display:inline-block"></span>Зарплата</span>
-          </div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:8px" id="fcToggle">${fcToggleHtml('30')}</div>
+          <div id="fcChartBox">${fcChartHtml(fc, '30')}</div>
         </div>
       </div>
 
@@ -7647,16 +7689,14 @@ async function mobileHome() {
 
   // График прогноза баланса — тот же renderBalanceChart, что на десктопе (SVG
   // адаптивный). Внутри карточки героя, под пояснением.
+  window._fc30 = fc; window._fcYear = null; window._fcRange = '30';
   const chartBlock = (fc && Array.isArray(fc.points) && fc.points.length >= 2) ? `
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-      <div style="font-size:11.5px;color:var(--text2);font-weight:600;margin-bottom:4px">Прогноз баланса${(fc.days_to_income != null) ? ` · ${fc.days_to_income} дн. до дохода` : ''}</div>
-      ${renderBalanceChart(fc, 'Прогноз баланса до следующего дохода')}
-      <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:4px;font-size:10px;color:var(--text2)">
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#2AA7CC;border-radius:2px;display:inline-block"></span>Факт</span>
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз</span>
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#fff;border:2px solid #C0561A;display:inline-block"></span>Низшая точка</span>
-        <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;border-top:1.5px dashed #8FA0B3;display:inline-block"></span>Зарплата</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div style="font-size:11.5px;color:var(--text2);font-weight:600">Прогноз баланса</div>
+        <div id="fcToggle">${fcToggleHtml('30')}</div>
       </div>
+      <div id="fcChartBox">${fcChartHtml(fc, '30')}</div>
     </div>` : '';
 
   // Пилюли разложения «Свободно» — те же классы (wf-pill) и клик (wfPillClick),
