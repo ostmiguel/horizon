@@ -566,12 +566,14 @@ async def get_forecast(request: Request):
     next_income_date = min((r["date"] for r in incomes), default=month_end)
     days_to_income = max((next_income_date - today).days, 0)
 
-    # ── Окно графика: скользящие ~30 дней (прошлое + прогноз до дохода + 3 дня) ─
-    # НЕ клампим к началу месяца — иначе в первых числах окно схлопывается в
-    # несколько дней (график = кассовый горизонт, не календарный месяц).
-    end_date = next_income_date + timedelta(days=3)
-    future_span = days_to_income + 3           # today..end_date
-    past_days = max(4, 30 - future_span)       # добираем прошлым до ~30 дней
+    # ── Окно графика: сегодня ближе к центру, приоритет — ВПЕРЁД ────────────────
+    # Сервис про будущее, поэтому будущего не меньше прошлого. Вперёд — минимум
+    # 16 дней и как минимум до ближайшего дохода +2 (чтобы надир и скачок зарплаты
+    # были в кадре). Прошлое добираем до ~30, но короче будущего. НЕ клампим к
+    # началу месяца (иначе в первых числах окно схлопывается).
+    end_date = max(today + timedelta(days=16), next_income_date + timedelta(days=2))
+    fwd = (end_date - today).days
+    past_days = max(6, min(14, 30 - fwd))
     start_date = today - timedelta(days=past_days)
 
     # ── Факт (операционный нетто) по датам окна ────────────────────────────────
