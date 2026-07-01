@@ -25,6 +25,24 @@
   `F_before/V_to_income/R_before`, i_remain=0 — при работе над trough); detail
   `d_left` → месячный. Раскрытия пилюль всегда были месячные — рассинхрон убран.
 
+**2026-07-01 (продолжение) — Фаза 2: подписка/триал/промокоды.**
+- **Модель доступа** (`routers/subscription.py`): триал 35 дней от
+  `users.trial_started_at` → `active` (`paid_until`) → `free_forever`
+  (`is_free_forever`). `GET /api/account/status`, `POST /api/account/promo`.
+- **Промо:** один общий код **SUMMER50**, лимит **50** активаций, kind
+  `free_forever`, только по коду (не автоматом первым). Активация атомарна
+  (`FOR UPDATE` держит лимит при гонке) + `UNIQUE(user_id)` (одна на юзера).
+  Владелец сам гасит код при наборе. Migration `011_subscription_promo.sql`
+  (ALTER users IF NOT EXISTS + promo_codes/promo_redemptions + сид SUMMER50).
+- **Фронт:** Профиль → карта «Подписка» + поле промокода (`redeemPromo`);
+  Обзор → баннер триала/истечения (`accessBannerHtml`, `window._acctStatus`).
+- **Жёсткая блокировка по истечении триала — ОТЛОЖЕНА** до оплаты ЮKassa
+  (Фаза 3). Сейчас статус только для баннера/пейвола; промо открывает доступ.
+- **График (доделка):** в день дохода прогноз рисует пред-зарплатный минимум
+  (`trough:true`) отдельной точкой перед скачком — маркер «Свободно» лёг на
+  линию, провал/оплаты видны. Плюс ленивая материализация плана
+  (`ensure_materialized`) — «Бюджет» и график сошлись по источнику.
+
 **2026-06-30 — Лендинг + вход Mail.ru + развязка `/`.**
 - **Лендинг:** `releases/landing.html` → `static/landing.html`. Главная `GET /`
   (маршрут в `main.py` ДО `app.mount`): валидная cookie `session` → `index.html`
