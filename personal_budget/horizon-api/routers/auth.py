@@ -65,13 +65,16 @@ async def auth_yandex():
     return r
 
 @router.get("/yandex/callback")
-async def auth_yandex_callback(code: str, state: str, request: Request, response: Response):
+async def auth_yandex_callback(request: Request, response: Response, code: str = None, state: str = None):
     from fastapi.responses import RedirectResponse
+    if not code:
+        # Пользователь нажал «Отмена» (провайдер вернул error без code) — мягко на /.
+        return RedirectResponse(f"{BASE_URL}/")
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
-        # Обычно back-button/повторный заход по устаревшему callback (куку state уже
-        # удалили после успешного входа). Не показываем сырой 400 — мягко возвращаем
-        # на / (валидная сессия → приложение, иначе лендинг).
+        # Back-button/повторный заход по устаревшему callback (куку state уже удалили
+        # после успешного входа). Не показываем сырой 400 — мягко на / (валидная
+        # сессия → приложение, иначе лендинг).
         return RedirectResponse(f"{BASE_URL}/")
     db = request.state.db
     async with httpx.AsyncClient() as client:
@@ -120,8 +123,11 @@ async def auth_mailru():
     return r
 
 @router.get("/mailru/callback")
-async def auth_mailru_callback(code: str, state: str, request: Request, response: Response):
+async def auth_mailru_callback(request: Request, response: Response, code: str = None, state: str = None):
     from fastapi.responses import RedirectResponse
+    if not code:
+        # «Отмена» на экране Mail.ru/VK (error без code) — мягко на /.
+        return RedirectResponse(f"{BASE_URL}/")
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
         # См. yandex-callback: back-button/устаревший state — мягкий редирект на /.
