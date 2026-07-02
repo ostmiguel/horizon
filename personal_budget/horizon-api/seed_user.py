@@ -90,15 +90,7 @@ async def seed_user_categories(db, user_id) -> int:
 
 
 async def seed_user_accounts(db, user_id) -> int:
-    """Сеет системный счёт «Обязательства» (Пассив), если его нет. Идемпотентно.
-    Баланс считается из операций (ledger), initial_balance = 0."""
-    exists = await db.fetchval(
-        "SELECT 1 FROM accounts WHERE user_id=$1 AND name='Обязательства'", user_id)
-    if exists:
-        return 0
-    await db.execute("""
-        INSERT INTO accounts
-          (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve, is_cushion)
-        VALUES ($1, 'Обязательства', 'Пассив', '#C0741A', 0, false, false, false)
-    """, user_id)
-    return 1
+    """Больше НЕ сеет общий пул «Обязательства» — в новой модели каждое
+    обязательство создаётся как отдельный счёт-Пассив при добавлении кредита/
+    долга. Оставлено no-op для обратной совместимости вызова из auth.py."""
+    return 0
