@@ -3512,6 +3512,10 @@ function renderLoansPage() {
         <span>По операциям (счёт «Обязательства»): <b style="color:var(--text)">${fmt(ledgerOwed)}</b></span>
       </div>
       ${ok ? '' : '<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">Операции — источник истины. Расхождение обычно значит: не внесён платёж/страховка/проценты или founding-операция при заведении обязательства. Сверь и добавь недостающее.</div>'}
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <button onclick="migrateObligations()" style="font-size:11.5px;padding:7px 12px;border-radius:var(--radius-sm);border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;font-weight:600">Перевести в новую модель · каждое обязательство → свой счёт</button>
+        <div style="font-size:10.5px;color:var(--text3);margin-top:5px">Создаст отдельный счёт-Пассив на каждое обязательство, деактивирует общий пул. Обратимо.</div>
+      </div>
     </div>`;
   }
 
@@ -3630,7 +3634,8 @@ function renderLoanCard(loan, idx) {
   const loanIntRemaining = (loan._schedule||[]).filter(r => !r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
   // Balance from last paid row, fallback to current_balance if no paid rows
   const lastPaidRow = (loan._schedule||[]).filter(r => r.is_paid && r.balance).slice(-1)[0];
-  const displayBalance = lastPaidRow ? +lastPaidRow.balance : (nextRow?.balance ? +nextRow.balance : +loan.current_balance);
+  // После миграции остаток берём из счёта-Пассива (ledger); иначе — из графика/записи.
+  const displayBalance = oblOwed(loan.name) ?? (lastPaidRow ? +lastPaidRow.balance : (nextRow?.balance ? +nextRow.balance : +loan.current_balance));
   const closeDate = lastRow?.date ? new Date(lastRow.date).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : '—';
   const nextDate  = nextRow?.date  ? new Date(nextRow.date).toLocaleDateString('ru-RU')  : (loan.next_payment_date ? new Date(loan.next_payment_date).toLocaleDateString('ru-RU') : '—');
   const schedFilled = totalRows > 0;
@@ -4155,7 +4160,7 @@ function renderDebtsSection() {
     <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)">
       <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
       <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов</div></div>
-      <div style="font-family:Sora;font-weight:600;font-size:15px;color:#C0741A;font-variant-numeric:tabular-nums">${fmt(+d.current_balance)}</div>
+      <div style="font-family:Sora;font-weight:600;font-size:15px;color:#C0741A;font-variant-numeric:tabular-nums">${fmt(oblOwed(d.name) ?? (+d.current_balance))}</div>
       <button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="repayDebt(${d.id})">Погасил</button>
       <button class="bgt-dots" title="Действия" onclick="debtMenu(this,${d.id})">⋮</button>
     </div>`).join('');
@@ -4242,6 +4247,26 @@ function debtMenu(btn, id) {
     { label: 'Редактировать', fn: () => openEditDebt(id) },
     { label: 'Удалить', danger: true, fn: () => deleteDebt(id) },
   ]);
+}
+
+// Остаток обязательства из его счёта-Пассива (ledger), если счёт создан; иначе null.
+function oblOwed(name) {
+  const a = (accounts_cache || []).find(x => x.name === name && x.account_type === 'Пассив');
+  return a ? Math.abs(+a.current_balance || 0) : null;
+}
+
+async function migrateObligations() {
+  if (!confirm('Перевести обязательства в новую модель?\n\nДля каждого создастся отдельный счёт-Пассив (остаток из записи), старый общий счёт «Обязательства» деактивируется. Обратимо.')) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/loans/migrate-to-accounts`, { method: 'POST', credentials: 'include' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Ошибка миграции');
+    let msg = `✓ Готово: счетов создано ${data.accounts_created}, связано ${data.linked}`;
+    toast(msg);
+    if (data.warnings && data.warnings.length) alert('Внимание:\n' + data.warnings.join('\n'));
+    await loadMeta();
+    loadLoans();
+  } catch (e) { toast('Ошибка: ' + e.message, false); }
 }
 
 function openEditDebt(id) {

@@ -62,6 +62,41 @@ async def get_loans(request: Request):
     )
     return [dict(r) for r in rows]
 
+@router.post("/migrate-to-accounts")
+async def migrate_obligations_to_accounts(request: Request):
+    """Разовая миграция: каждое обязательство (loan) → свой счёт-Пассив.
+    Создаёт счёт (остаток = current_balance, знак −), связывает кредит (account_name),
+    ретайрит старый общий пул «Обязательства». Идемпотентно (повтор безопасен).
+    Пользователь запускает кнопкой и сверяет результат."""
+    user_id = request.state.user_id
+    db = request.state.db
+    created, linked, warnings = 0, 0, []
+    async with db.transaction():
+        loans = await db.fetch(
+            "SELECT id, name, current_balance, color FROM loans WHERE user_id=$1 AND is_active=true",
+            user_id)
+        for l in loans:
+            name = l["name"]
+            acc = await db.fetchrow(
+                "SELECT id, account_type FROM accounts WHERE user_id=$1 AND name=$2", user_id, name)
+            if acc and acc["account_type"] != "Пассив":
+                warnings.append(f"«{name}»: счёт с таким именем есть, но не Пассив — пропущено")
+                continue
+            if not acc:
+                await db.execute("""
+                    INSERT INTO accounts
+                      (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve, is_cushion)
+                    VALUES ($1,$2,'Пассив',$3,$4,false,false,false)
+                """, user_id, name, l["color"] or "#C0741A", -float(l["current_balance"] or 0))
+                created += 1
+            await db.execute("UPDATE loans SET account_name=$2 WHERE id=$1", l["id"], name)
+            linked += 1
+        # Ретайрить старый общий пул (уходит из метрик, история операций цела).
+        await db.execute(
+            "UPDATE accounts SET is_active=false WHERE user_id=$1 AND name='Обязательства'", user_id)
+    return {"ok": True, "accounts_created": created, "linked": linked, "warnings": warnings}
+
+
 @router.post("")
 async def create_loan(data: LoanCreate, request: Request):
     user_id = request.state.user_id
