@@ -261,8 +261,11 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     )
     F_before += sum(float(r["amount"]) for r in win if r.get("account_to") == "Обязательства")
     R_before = sum(float(r["amount"]) for r in win if r.get("account_to") in reserve_names)
-    V_to_income = r_var * days_to_income
-    sigma_to_income = sigma_day * math.sqrt(days_to_income) if days_to_income > 0 else 0.0
+    # Низшая точка = КОНЕЦ дня ПЕРЕД доходом (в день зарплаты деньги приходят —
+    # не считаем ещё один день трат до поступления). Поэтому дней спада = N−1.
+    days_before = max(days_to_income - 1, 0)
+    V_to_income = r_var * days_before
+    sigma_to_income = sigma_day * math.sqrt(days_before) if days_before > 0 else 0.0
 
     sts = B0 - F_before - V_to_income - R_before
     sts_low  = sts - Z_80 * sigma_to_income

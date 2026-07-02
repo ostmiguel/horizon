@@ -718,8 +718,6 @@ async def get_forecast(request: Request, range: str = "30"):
     # ── Плановые «фикс»-движения в окне прогноза (today, end_date] ─────────────
     # (повседневные уже в r_var; income добавляем — он поднимает линию после зарплаты)
     plan_fixed_by_date: dict = {}
-    plan_income_by_date: dict = {}   # доход отдельно — чтобы в день зарплаты
-                                     # показать пред-зарплатный минимум ДО поступления
     F_before = 0.0   # оттоки до даты дохода → для trough = «Свободно» (как в safe_to_spend)
     R_before = 0.0
     for r in fut:
@@ -731,7 +729,6 @@ async def get_forecast(request: Request, range: str = "30"):
         is_var = (at == "Расход" and cat_et == "variable" and cat_ch not in EPISODIC_CHARS)
         if af == "Доход":
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
-            plan_income_by_date[d] = plan_income_by_date.get(d, 0) + amount
         elif at in ("Расход", "Обязательства"):
             if not is_var:
                 plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
@@ -742,9 +739,14 @@ async def get_forecast(request: Request, range: str = "30"):
             if d < next_income_date:
                 R_before += amount
 
-    # trough = «Свободно» (тот же закрытый расчёт, что в safe_to_spend) — числа сходятся
-    trough_value = round(B0_now - F_before - r_var * days_to_income - R_before)
-    trough_date = next_income_date.isoformat() if days_to_income > 0 else today.isoformat()
+    # trough = «Свободно» = КОНЕЦ дня ПЕРЕД доходом (в день зарплаты деньги
+    # приходят, лишний день трат не считаем). Один день = одна точка на графике,
+    # без синтетического пред-зарплатного дубля. Закрытая формула сходится с
+    # точкой дня-перед-доходом (тот же расчёт, что sts в safe_to_spend).
+    days_before = max(days_to_income - 1, 0)
+    trough_value = round(B0_now - F_before - r_var * days_before - R_before)
+    trough_day = (next_income_date - timedelta(days=1)) if days_to_income > 0 else today
+    trough_date = trough_day.isoformat()
 
     # ── Точки по дням ──────────────────────────────────────────────────────────
     points = []
@@ -762,24 +764,14 @@ async def get_forecast(request: Request, range: str = "30"):
             pt["forecast"] = round(running_fcst)     # стыкуем линии без разрыва
         else:
             running_fcst -= r_var
-            days_ahead = (d - today).days
-            # В день дохода сперва рисуем пред-зарплатный МИНИМУМ (только спад r_var,
-            # до поступления и до оплат этого дня) — сюда садится «Свободно»/маркер,
-            # затем скачок (доход − оплаты дня). Иначе крупный доход маскирует и
-            # провал, и сами оплаты (всё схлопывается в одну точку по итогу дня).
-            if plan_income_by_date.get(d, 0) > 0:
-                sig_low = sigma_day * math.sqrt(days_ahead)
-                low_pt = {"date": d.isoformat(), "forecast": round(running_fcst),
-                          "low": round(running_fcst - Z_80 * sig_low),
-                          "high": round(running_fcst + Z_80 * sig_low)}
-                if d == next_income_date:
-                    low_pt["trough"] = True   # низшая точка «Свободно»
-                points.append(low_pt)
             running_fcst += plan_fixed_by_date.get(d, 0)
+            days_ahead = (d - today).days
             sigma = sigma_day * math.sqrt(days_ahead)
             pt["forecast"] = round(running_fcst)
             pt["low"]      = round(running_fcst - Z_80 * sigma)
             pt["high"]     = round(running_fcst + Z_80 * sigma)
+        if d == trough_day and "forecast" in pt:
+            pt["trough"] = True   # низшая точка «Свободно» — день перед доходом
         points.append(pt)
         d += timedelta(days=1)
 
