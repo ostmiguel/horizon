@@ -18,6 +18,32 @@ MAILRU_CLIENT_ID     = os.getenv("MAILRU_CLIENT_ID")
 MAILRU_CLIENT_SECRET = os.getenv("MAILRU_CLIENT_SECRET")
 BASE_URL             = os.getenv("BASE_URL", "http://localhost:8000")
 
+# Telegram-уведомления о новых регистрациях (best-effort, не блокируют вход)
+TELEGRAM_BOT_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID     = os.getenv("TELEGRAM_CHAT_ID")
+
+
+async def notify_new_user(name: str, email: str, provider: str, total: int):
+    """Шлёт в Telegram уведомление о новой регистрации. Best-effort: любые
+    ошибки (нет токена, сеть, Telegram лежит) молча глотаем — регистрация важнее."""
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        return
+    text = (
+        "🎉 Новый пользователь Horizon!\n\n"
+        f"👤 {name or '—'}\n"
+        f"✉️ {email or '—'}\n"
+        f"🔑 {provider}\n\n"
+        f"📊 Всего пользователей: {total}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
+            )
+    except Exception:
+        pass
+
 # ── Yandex OAuth ─────────────────────────────────────────────
 @router.get("/yandex")
 async def auth_yandex():
@@ -155,6 +181,7 @@ async def _get_or_create_user(db, provider: str, provider_id: str, email: str, n
         return dict(row)
     # New login or provider switch: upsert by email.
     # Also updates provider/provider_id so next login hits the fast path.
+    # (xmax=0) = строка ВСТАВЛЕНА (новая регистрация), а не обновлена (смена провайдера).
     row = await db.fetchrow("""
         INSERT INTO users (email, name, provider, provider_id)
         VALUES ($1, $2, $3, $4)
@@ -163,11 +190,16 @@ async def _get_or_create_user(db, provider: str, provider_id: str, email: str, n
               provider=EXCLUDED.provider,
               provider_id=EXCLUDED.provider_id,
               last_login=NOW()
-        RETURNING *
+        RETURNING *, (xmax = 0) AS _is_new
     """, email, name, provider, provider_id)
+    is_new = bool(row["_is_new"])
+    user = {k: v for k, v in dict(row).items() if k != "_is_new"}
     # Посев дефолтных категорий новому пользователю (идемпотентно — только если их нет).
-    await seed_user_categories(db, row["id"])
-    return dict(row)
+    await seed_user_categories(db, user["id"])
+    if is_new:
+        total = await db.fetchval("SELECT COUNT(*) FROM users")
+        await notify_new_user(user.get("name"), user.get("email"), provider, total)
+    return user
 
 async def _create_session(db, user_id) -> str:
     row = await db.fetchrow(

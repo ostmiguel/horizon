@@ -4980,6 +4980,25 @@ function subscriptionCardHtml(st, fmtDt) {
     </div>`;
 }
 
+function ownerStatsCardHtml(s){
+  const provLbl = p => p==='yandex'?'Яндекс':p==='mailru'?'Mail.ru':p==='google'?'Google':(p||'—');
+  const rows = (s.recent||[]).map(u=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-bottom:1px solid var(--border)">
+      <div style="min-width:0"><div style="color:var(--text);font-weight:500;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(u.name||u.email||'—')}</div><div style="color:var(--text3);font-size:10.5px;margin-top:1px">${provLbl(u.provider)} · ${u.created_at?new Date(u.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):'—'}</div></div>
+    </div>`).join('');
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="card-head"><span class="card-title">Пользователи (владелец)</span></div>
+    <div class="card-body" style="padding:0">
+      <div style="display:flex;border-bottom:1px solid var(--border)">
+        <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--border)"><div style="font-family:Sora;font-weight:700;font-size:26px;color:var(--text)">${s.total}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">всего</div></div>
+        <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--border)"><div style="font-family:Sora;font-weight:700;font-size:26px;color:#1FA497">+${s.last_7_days}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">за 7 дней</div></div>
+        <div style="flex:1;padding:14px 12px;text-align:center"><div style="font-family:Sora;font-weight:700;font-size:26px;color:#7FA81E">${s.free_forever}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">free forever</div></div>
+      </div>
+      ${rows || '<div style="padding:14px 16px;font-size:12px;color:var(--text3)">Пока никого</div>'}
+    </div>
+  </div>`;
+}
+
 async function redeemPromo() {
   const inp = document.getElementById('promoInput');
   const btn = document.getElementById('promoBtn');
@@ -5044,6 +5063,13 @@ async function loadProfile() {
   window._acctStatus = st;
   const subCard = subscriptionCardHtml(st, fmtDt);
 
+  // Счётчик пользователей — только владельцу
+  let statsCard = '';
+  if (window._isOwner) {
+    const stx = await fetch('/api/account/stats', { credentials: 'include' }).then(r => r.json()).catch(() => null);
+    if (stx && stx.total != null) statsCard = ownerStatsCardHtml(stx);
+  }
+
   mc.innerHTML = `
     <div style="max-width:600px;padding:24px">
       <div class="topbar" style="margin-bottom:24px">
@@ -5083,6 +5109,8 @@ async function loadProfile() {
 
         </div>
       </div>
+
+      ${statsCard}
 
       ${subCard}
 

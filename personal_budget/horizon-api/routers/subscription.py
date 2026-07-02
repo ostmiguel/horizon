@@ -13,6 +13,7 @@ import asyncpg
 router = APIRouter(prefix="/api/account", tags=["account"])
 
 TRIAL_DAYS = 35
+OWNER_ID = "60703af0-df79-484a-b965-45d5662083c6"
 
 
 def _now() -> datetime:
@@ -58,6 +59,33 @@ async def _load_user(db, user_id: str) -> dict:
 async def account_status(request: Request):
     user = await _load_user(request.state.db, request.state.user_id)
     return compute_status(user)
+
+
+@router.get("/stats")
+async def account_stats(request: Request):
+    """Счётчик регистраций — только владельцу."""
+    if request.state.user_id != OWNER_ID:
+        raise HTTPException(403, "Недоступно")
+    db = request.state.db
+    total = await db.fetchval("SELECT COUNT(*) FROM users")
+    last7 = await db.fetchval(
+        "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'"
+    )
+    free_forever = await db.fetchval("SELECT COUNT(*) FROM users WHERE is_free_forever = true")
+    recent = await db.fetch("""
+        SELECT name, email, provider, created_at
+        FROM users ORDER BY created_at DESC LIMIT 10
+    """)
+    return {
+        "total": total,
+        "last_7_days": last7,
+        "free_forever": free_forever,
+        "recent": [
+            {"name": r["name"], "email": r["email"], "provider": r["provider"],
+             "created_at": r["created_at"].isoformat() if r["created_at"] else None}
+            for r in recent
+        ],
+    }
 
 
 class PromoBody(BaseModel):
