@@ -186,7 +186,7 @@
         <span style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#C4D0DD">01</span>
       </div>
       <h3 style="font-size:19px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px">Заносите операции за секунды</h3>
-      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Регулярные доходы и платежи настраиваете один раз, повседневные вносите на ходу. Нажали [+], ввели сумму — счёт подтянется сам, «Расход» уже выбран, нужная категория первой в списке. 5 секунд, а не рутина.</p>
+      <p style="font-size:14.5px;line-height:1.6;color:#5E7088">Регулярные доходы и платежи настраиваете один раз, повседневные вносите на ходу. Нажали [+], ввели сумму — счёт подтянется сам, «Расход» уже выбран, нужная категория в начале списка. 5 секунд, а не рутина.</p>
     </div>
     <div style="background:#fff;border:1px solid rgba(15,36,60,.09);border-radius:18px;padding:26px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 18px 40px -24px rgba(15,36,60,.2)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
@@ -392,11 +392,11 @@
       <div class="grid2" style="display:grid;grid-template-columns:auto 1fr;gap:clamp(24px,4vw,44px);align-items:start">
         <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
           <div style="width:132px;height:132px;border-radius:50%;background:linear-gradient(135deg,#1A3A52,#0F243C);border:3px solid rgba(255,255,255,.1);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:700;font-size:52px;color:rgba(255,255,255,.4)">М</div>
-          <div style="text-align:center"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#fff">Максим</div><div style="font-size:12.5px;color:#7FA0AF">основатель Horizon</div></div>
+          <div style="text-align:center"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#fff">Максим Остроухов</div><div style="font-size:12.5px;color:#7FA0AF">основатель Horizon</div></div>
         </div>
         <div>
           <div style="font-size:13px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#7FA0AF;margin-bottom:16px">Почему я это сделал</div>
-          <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.7;color:#DDE8ED;font-style:italic">«Я сам не мог спокойно планировать крупные траты: вроде деньги есть, а между зарплатами то и дело оказывался в напряжении. Ни один трекер не отвечал на простой вопрос — что будет дальше. Я не хотел отдавать доступ к своим счетам ради этого, поэтому сделал Horizon так, чтобы данные оставались только у вас, а прогноз всё равно был точным. Это сервис, которым я хотел пользоваться сам.»</p>
+          <p style="font-size:clamp(16px,1.9vw,19px);line-height:1.7;color:#DDE8ED;font-style:italic">«Я сам не мог спокойно планировать крупные траты: вроде деньги есть, но за несколько дней до зарплаты чувствовал напряжение. Ни один трекер не отвечал на простой вопрос — что будет дальше. А это именно то, что было мне нужно - иметь представление о будущем для снижения тревоги. В результате я построил сервис, которым хотел бы пользоваться сам.»</p>
           <div style="margin-top:18px;font-family:Sora,sans-serif;font-size:15px;color:#fff">— Максим, основатель <span style="color:#B4DE3C">horizon.</span></div>
         </div>
       </div>
@@ -438,7 +438,7 @@
     </div>
   </div>
   <div style="text-align:center;margin-top:32px">
-    <p style="font-size:16px;color:#5E7088;max-width:38em;margin:0 auto 24px;line-height:1.6">35 дней бесплатно, без привязки карты. Успеете увидеть, как сбываются первые прогнозы, прежде чем решите платить.</p>
+    <p style="font-size:16px;color:#5E7088;max-width:38em;margin:0 auto 24px;line-height:1.6">35 дней бесплатно, без привязки карты. Успеете увидеть, как строятся первые прогнозы, прежде чем решите платить.</p>
     <a href="#final" style="display:inline-flex;align-items:center;gap:10px;min-height:54px;padding:16px 32px;border-radius:13px;font-family:Sora,sans-serif;font-weight:600;font-size:17px;color:#fff;text-decoration:none;background:linear-gradient(135deg,#2AA7CC,#1FA497);box-shadow:0 16px 34px -14px rgba(31,164,151,.65)">Начать 35 дней бесплатно
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </a>
@@ -662,10 +662,10 @@ function renderInput() {
 
 /* ── FAQ ── */
 const faqData = [
-  { q: 'Зачем вводить операции вручную, если банк умеет сам?', a: 'Потому что мы принципиально не подключаемся к вашему банку — это ваша приватность. А чтобы ввод не был обузой, мы сделали его мгновенным: одно нажатие, сумма, и всё — 5 секунд.' },
-  { q: 'Сколько времени это реально занимает?', a: 'Регулярные платежи настраиваются один раз. Повседневные траты — около 5 секунд на операцию: категория и счёт подставляются автоматически.' },
-  { q: 'Что будет, если я забуду внести расход или подтвердить платёж?', a: 'Ничего страшного. Плановые платежи Horizon сам предложит подтвердить при следующем заходе, а прогноз пересчитается, когда вы внесёте данные. Никаких штрафов и осуждения — мы не ставим оценок.' },
-  { q: 'Почему прогнозу можно верить?', a: 'Прогноз строится на ваших реальных данных: регулярных доходах и платежах, разовых событиях и исторической скорости расходов. Чем дольше пользуетесь — тем точнее.' },
+  { q: 'Зачем вводить операции вручную, если банк умеет сам?', a: 'Потому что мы принципиально не подключаемся к вашему банку — это ваша приватность. А чтобы ввод не был обузой, мы сделали его мгновенным: пара нажатий, сумма, и всё — 5 секунд.' },
+  { q: 'Сколько времени это реально занимает?', a: 'Регулярные платежи настраиваются один раз. Повседневные траты — около 5 секунд на ввод категории и суммы, счёт подставляется автоматически.' },
+  { q: 'Что будет, если я забуду внести расход или подтвердить платёж?', a: 'Ничего страшного. Плановые платежи Horizon сам предложит подтвердить при следующем заходе, а прогноз пересчитается, когда вы внесёте данные.' },
+  { q: 'Почему прогнозу можно верить?', a: 'Прогноз строится на ваших реальных данных: регулярных доходах и платежах, разовых событиях и исторической скорости расходов, которая намеренно придает большую важность свежим расходам, а не старым' },
   { q: 'Насколько далеко видно прогноз?', a: 'По умолчанию — на 30 дней вперёд, до следующего дохода. График можно развернуть на год.' },
   { q: 'Это безопасно? Где мои данные?', a: 'Мы не имеем доступа к вашим счетам и не храним банковские данные. Информацию вводите только вы, её можно удалить в любой момент.' },
   { q: 'Нужно ли устанавливать приложение?', a: 'Нет. Horizon работает в браузере и на телефоне — просто откройте и пользуйтесь.' },
