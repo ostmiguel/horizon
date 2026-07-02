@@ -32,12 +32,13 @@ class LoanCreate(BaseModel):
     name: str
     initial_amount: float
     current_balance: float
-    rate: float
-    monthly_payment: float
-    total_payments: int
+    rate: float = 0.0                 # для долга (kind='debt') не нужны
+    monthly_payment: float = 0.0
+    total_payments: int = 0
     next_payment_date: Optional[date] = None
     color: Optional[str] = "#e24b4a"
     account_from: Optional[str] = None  # счёт списания платежа; по умолч. — первый актив
+    kind: Optional[str] = "credit"      # 'credit' (график) | 'debt' (без графика)
 
 class ScheduleRow(BaseModel):
     month_num: int
@@ -68,12 +69,57 @@ async def create_loan(data: LoanCreate, request: Request):
     account_from = data.account_from or await _first_asset(db, user_id)
     row = await db.fetchrow("""
         INSERT INTO loans
-          (user_id, name, initial_amount, current_balance, rate, monthly_payment, total_payments, next_payment_date, color, account_from)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+          (user_id, name, initial_amount, current_balance, rate, monthly_payment, total_payments, next_payment_date, color, account_from, kind)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
     """, user_id, data.name, data.initial_amount, data.current_balance,
         data.rate, data.monthly_payment, data.total_payments,
-        data.next_payment_date, data.color, account_from)
+        data.next_payment_date, data.color, account_from, data.kind or "credit")
     return dict(row)
+
+
+class LoanUpdate(BaseModel):
+    name: Optional[str] = None
+    initial_amount: Optional[float] = None
+    current_balance: Optional[float] = None
+    rate: Optional[float] = None
+    monthly_payment: Optional[float] = None
+    total_payments: Optional[int] = None
+    next_payment_date: Optional[date] = None
+    color: Optional[str] = None
+    account_from: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@router.patch("/{loan_id}")
+async def update_loan(loan_id: int, data: LoanUpdate, request: Request):
+    user_id = request.state.user_id
+    db = request.state.db
+    fields = {k: v for k, v in data.model_dump().items() if v is not None}
+    if not fields:
+        return {"ok": True}
+    # Ключи из whitelisted-модели (не пользовательский ввод) — безопасно.
+    cols = ", ".join(f"{k}=${i + 3}" for i, k in enumerate(fields))
+    row = await db.fetchrow(
+        f"UPDATE loans SET {cols} WHERE id=$1 AND user_id=$2 RETURNING *",
+        loan_id, user_id, *fields.values()
+    )
+    if not row:
+        raise HTTPException(404)
+    return dict(row)
+
+
+@router.delete("/{loan_id}")
+async def delete_loan(loan_id: int, request: Request):
+    user_id = request.state.user_id
+    db = request.state.db
+    # Мягкое удаление — из списка уходит (get_loans фильтрует is_active), история цела.
+    row = await db.fetchrow(
+        "UPDATE loans SET is_active=false WHERE id=$1 AND user_id=$2 RETURNING id",
+        loan_id, user_id
+    )
+    if not row:
+        raise HTTPException(404)
+    return {"ok": True}
 
 @router.get("/{loan_id}/schedule")
 async def get_schedule(loan_id: int, request: Request):

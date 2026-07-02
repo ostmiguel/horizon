@@ -3287,6 +3287,7 @@ function moveAcc(idx, dir) {
 
 // ── LOANS PAGE ──
 let _loansData = [];
+let _debtsData = [];
 let _loanStrategy = 'snowball';
 let _schedLoanId = null;
 let _schedSaveTimer = null;
@@ -3295,9 +3296,12 @@ async function loadLoans() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
   const { data: loans } = await sb.from('loans').select('*').eq('is_active', true).order('id');
-  _loansData = loans || [];
+  const allLoans = loans || [];
+  // Кредиты (график) и долги (без графика) — разные типы, но одна таблица loans.
+  _loansData = allLoans.filter(l => (l.kind || 'credit') !== 'debt');
+  _debtsData = allLoans.filter(l => (l.kind || 'credit') === 'debt');
 
-  // Load schedule summary for each loan
+  // Load schedule summary — только для кредитов
   for (const loan of _loansData) {
     const { data: sched } = await sb.from('loan_schedule')
       .select('month_num, date, payment, principal, interest, balance, is_paid')
@@ -3504,7 +3508,7 @@ function renderLoansPage() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
     <div>
       <div class="page-title">Кредиты</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">${loans.length} кредит${loans.length===1?'':'а'} · общий долг ${fmt(totalDebt)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${loans.length} кредит${loans.length===1?'':'а'}${_debtsData.length?` · ${_debtsData.length} долг${_debtsData.length===1?'':(_debtsData.length<5?'а':'ов')}`:''} · общий долг ${fmt(totalDebt + _debtsData.reduce((s,d)=>s+ +d.current_balance,0))}</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="position:relative" id="stratWrap">
@@ -3543,8 +3547,12 @@ function renderLoansPage() {
           </div>
         </div>
       </div>
-      <button class="btn-primary" onclick="openAddLoan()" style="font-size:12px;padding:7px 14px">+ Добавить кредит</button>
+      <button class="btn-primary" onclick="openObligationChooser()" style="font-size:12px;padding:7px 14px">+ Обязательство</button>
     </div>
+  </div>
+
+  <div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;line-height:1.5">
+    Здесь все ваши <b>обязательства</b>: <b>кредиты</b> с процентами и графиком платежей, и <b>долги</b> без процентов (займы у физлиц, рассрочки). Остаток по обязательствам считается из ваших операций.
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">
@@ -3569,6 +3577,8 @@ function renderLoansPage() {
   <div class="loans-grid" id="loansGrid">
     ${sorted.map((loan, idx) => renderLoanCard(loan, idx)).join('')}
   </div>
+
+  ${renderDebtsSection()}
 
   <div class="card">
     <div class="card-head"><span class="card-title">Динамика снижения долга</span></div>
@@ -4109,6 +4119,141 @@ async function schedRecalcConfirm() {
 }
 
 // ── Add/Edit Loan ──
+// ── Долги (обязательства без процентов) ──────────────────────────────────────
+function renderDebtsSection() {
+  if (!_debtsData.length) return '';
+  const rows = _debtsData.map(d => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)">
+      <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
+      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов</div></div>
+      <div style="font-family:Sora;font-weight:600;font-size:15px;color:#C0741A;font-variant-numeric:tabular-nums">${fmt(+d.current_balance)} ₽</div>
+      <button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="repayDebt(${d.id})">Погасил</button>
+      <button class="bgt-dots" title="Удалить долг" onclick="deleteDebt(${d.id})">✕</button>
+    </div>`).join('');
+  return `<div class="card" style="margin-bottom:18px">
+    <div class="card-head"><span class="card-title">Долги · без процентов</span></div>
+    <div class="card-body" style="padding-top:0">${rows}</div>
+  </div>`;
+}
+
+function openObligationChooser() {
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.innerHTML = `<div class="modal">
+    <div class="modal-title">Новое обязательство</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+      <button class="btn-ghost" style="text-align:left;padding:14px;height:auto" onclick="this.closest('.modal-overlay').remove();openAddLoan()">
+        <div style="font-weight:600;font-size:14px;color:var(--text)">Кредит</div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:2px">С процентами и графиком платежей (банк, рассрочка с %)</div>
+      </button>
+      <button class="btn-ghost" style="text-align:left;padding:14px;height:auto" onclick="this.closest('.modal-overlay').remove();openAddDebt()">
+        <div style="font-weight:600;font-size:14px;color:var(--text)">Долг</div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:2px">Без процентов — заём у физлица, беспроцентная рассрочка</div>
+      </button>
+    </div>
+    <div class="modal-btns"><button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Отмена</button></div>
+  </div>`;
+  document.body.appendChild(mo);
+}
+
+function openAddDebt() {
+  const assets = (accounts_cache||[]).filter(a => a.account_type === 'Актив' && a.is_active !== false);
+  const opts = '<option value="">— не зачислять на счёт —</option>' + assets.map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+  document.getElementById('mainContent').innerHTML = `
+<div style="padding:20px 24px;max-width:560px">
+  <div class="page-title" style="margin-bottom:6px">Новый долг</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:18px">Заём без процентов. Остаток гасишь вручную по мере возврата.</div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="dName" placeholder="Долг Ивану"></div>
+    <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="dColor" value="#C0741A"></div>
+  </div>
+  <div class="field" style="margin-bottom:12px">
+    <div class="field-label">Сумма долга, ₽</div>
+    <input class="field-input" type="number" id="dAmount" placeholder="50000">
+  </div>
+  <div class="field" style="margin-bottom:8px">
+    <div class="field-label">Деньги зачислены на счёт</div>
+    <select class="field-input" id="dAccount">${opts}</select>
+  </div>
+  <div style="font-size:11px;color:var(--text3);margin-bottom:16px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);border:0.5px solid var(--border)">
+    Выберешь счёт → создастся операция «Взял в долг» (деньги придут на счёт, долг увеличится). Если деньги пришли не на счёт (сразу потрачены) — оставь пусто и внеси трату отдельно.
+  </div>
+  <div style="display:flex;gap:10px">
+    <button class="btn-ghost" onclick="loadLoans()">Отмена</button>
+    <button class="btn-primary" onclick="saveDebt()">Сохранить</button>
+  </div>
+</div>`;
+}
+
+async function saveDebt() {
+  const name = document.getElementById('dName').value.trim();
+  const amount = parseFloat(document.getElementById('dAmount').value);
+  const color = document.getElementById('dColor').value;
+  const acc = document.getElementById('dAccount').value;
+  if (!name || isNaN(amount) || amount <= 0) { toast('Заполни название и сумму', false); return; }
+  const { error } = await sb.from('loans').insert({
+    name, initial_amount: amount, current_balance: amount,
+    rate: 0, monthly_payment: 0, total_payments: 0, color, kind: 'debt'
+  });
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  // founding-операция «деньги пришли на счёт» (опционально): Обязательства → счёт
+  if (acc) {
+    const today = new Date().toISOString().split('T')[0];
+    await sb.from('transactions').insert({
+      date: today, amount, account_from: 'Обязательства', account_to: acc,
+      note: 'Взял в долг: ' + name, source: 'manual', use_in_forecast: true
+    });
+  }
+  toast('✓ Долг добавлен');
+  loadLoans();
+}
+
+function repayDebt(id) {
+  const debt = _debtsData.find(d => d.id === id);
+  if (!debt) return;
+  const assets = (accounts_cache||[]).filter(a => a.account_type === 'Актив' && a.is_active !== false);
+  const opts = assets.map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.innerHTML = `<div class="modal">
+    <div class="modal-title">Погасить долг — ${esc(debt.name)}</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Остаток: ${fmt(+debt.current_balance)} ₽</div>
+    <div class="field" style="margin-bottom:12px"><div class="field-label">Сумма погашения, ₽</div><input class="field-input" type="number" id="rdAmount" placeholder="${Math.round(+debt.current_balance)}"></div>
+    <div class="field" style="margin-bottom:8px"><div class="field-label">Списать со счёта</div><select class="field-input" id="rdAccount">${opts}</select></div>
+    <div class="modal-btns">
+      <button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
+      <button class="btn-primary" onclick="saveRepayDebt(${id},this)">Погасить</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+}
+
+async function saveRepayDebt(id, btn) {
+  const debt = _debtsData.find(d => d.id === id);
+  const amount = parseFloat(document.getElementById('rdAmount').value);
+  const acc = document.getElementById('rdAccount').value;
+  if (!debt || isNaN(amount) || amount <= 0 || !acc) { toast('Укажи сумму и счёт', false); return; }
+  const today = new Date().toISOString().split('T')[0];
+  const { error } = await sb.from('transactions').insert({
+    date: today, amount, account_from: acc, account_to: 'Обязательства',
+    note: 'Погашение долга: ' + debt.name, source: 'manual', use_in_forecast: true
+  });
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  const newBal = Math.max(0, (+debt.current_balance) - amount);
+  await sb.from('loans').update({ current_balance: newBal }).eq('id', id);
+  btn.closest('.modal-overlay').remove();
+  toast('✓ Погашение внесено');
+  loadLoans();
+}
+
+async function deleteDebt(id) {
+  if (!confirm('Удалить долг? Операции по нему в истории останутся.')) return;
+  const { error } = await sb.from('loans').delete().eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  toast('✓ Долг удалён');
+  loadLoans();
+}
+
 function openAddLoan() {
   document.getElementById('mainContent').innerHTML = `
 <div style="padding:20px 24px;max-width:560px">
