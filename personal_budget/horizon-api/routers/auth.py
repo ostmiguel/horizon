@@ -178,7 +178,15 @@ async def get_me(request: Request):
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(401, "Not authenticated")
-    return {"id": str(user["id"]), "email": user["email"], "name": user["name"]}
+    return {
+        "id": str(user["id"]),
+        "email": user["email"],
+        "name": user["name"],
+        "provider": user.get("provider"),
+        "avatar_url": user.get("avatar_url"),
+        "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
+        "last_login": user["last_login"].isoformat() if user.get("last_login") else None,
+    }
 
 @router.post("/logout")
 async def logout(request: Request, response: Response):

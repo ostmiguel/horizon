@@ -5056,7 +5056,7 @@ async function loadProfile() {
   const avatar   = user.avatar_url || null;
   const name     = user.name || user.email?.split('@')[0] || '—';
   const email    = user.email || '—';
-  const provider = user.provider === 'google' ? 'Google' : user.provider === 'yandex' ? 'Яндекс' : user.provider || '—';
+  const provider = user.provider === 'google' ? 'Google' : user.provider === 'yandex' ? 'Яндекс' : user.provider === 'mailru' ? 'Mail.ru' : user.provider || '—';
 
   // Подписка / триал
   const st = await fetch('/api/account/status', { credentials: 'include' }).then(r => r.json()).catch(() => null);
