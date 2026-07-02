@@ -2488,7 +2488,7 @@ async function loadReferences() {
               <th style="text-align:center" title="Виден в «откуда» при Расходе">Оплата</th>
               <th></th>
             </tr></thead>
-            <tbody id="accBody">${renderAccRows(accs||[])}</tbody>
+            <tbody id="accBody">${renderAccRows((accs||[]).filter(a => a.is_active !== false))}</tbody>
           </table></div>
           <div class="add-row-btn" onclick="openAddAccount()">＋ Добавить счёт</div>
         </div>
@@ -2541,7 +2541,7 @@ async function loadReferences() {
         <div class="add-row-btn" onclick="openAddCategory()">＋ Добавить подкатегорию</div>
       </div>`;
 
-    window._allAccs = accs || [];
+    window._allAccs = (accs || []).filter(a => a.is_active !== false);  // неактивные (ретайренный пул/архив) не показываем
     window._allCats = cats_all || [];
   } catch(err) {
     main.innerHTML = `<div class="error-box">Ошибка: ${err.message}</div>`;
