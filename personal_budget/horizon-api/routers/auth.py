@@ -66,9 +66,13 @@ async def auth_yandex():
 
 @router.get("/yandex/callback")
 async def auth_yandex_callback(code: str, state: str, request: Request, response: Response):
+    from fastapi.responses import RedirectResponse
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
-        raise HTTPException(400, "Invalid OAuth state")
+        # Обычно back-button/повторный заход по устаревшему callback (куку state уже
+        # удалили после успешного входа). Не показываем сырой 400 — мягко возвращаем
+        # на / (валидная сессия → приложение, иначе лендинг).
+        return RedirectResponse(f"{BASE_URL}/")
     db = request.state.db
     async with httpx.AsyncClient() as client:
         token_res = await client.post("https://oauth.yandex.ru/token", data={
@@ -113,9 +117,11 @@ async def auth_mailru():
 
 @router.get("/mailru/callback")
 async def auth_mailru_callback(code: str, state: str, request: Request, response: Response):
+    from fastapi.responses import RedirectResponse
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
-        raise HTTPException(400, "Invalid OAuth state")
+        # См. yandex-callback: back-button/устаревший state — мягкий редирект на /.
+        return RedirectResponse(f"{BASE_URL}/")
     db = request.state.db
     redirect_uri = f"{BASE_URL}/api/auth/mailru/callback"
     try:
