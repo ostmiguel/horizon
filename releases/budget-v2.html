@@ -6239,7 +6239,10 @@ function renderBalanceChart(fc, ariaLabel, opts){
   let xLbl='';
   const MON=['','янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
   let _lastLbl='';
-  pts.forEach((p,i)=>{ if(i>0 && pts[i-1].date===p.date) return; const isFirst=p.date.slice(8,10)==='01'; const isT=(i===todayI); const lbl=opts.monthLabels?MON[+p.date.slice(5,7)]:(p.date.slice(8,10)+'.'+p.date.slice(5,7)); if(opts.monthLabels && (lbl===_lastLbl || i===0)) return; _lastLbl=lbl; xLbl+=`<text x="${iX(i).toFixed(1)}" y="${(y2+16).toFixed(0)}" fill="${(isT||isFirst)?'#5E7088':'#A7B4C2'}" font-size="7.5" font-weight="${(isT||isFirst)?'600':'400'}" text-anchor="middle">${lbl}</text>`; });
+  // Дни-точки для метки: на плотном дневном виде прореживаем через один, но
+  // сегодня/1-е число/низшую точку показываем всегда. Наклон −38°, чтобы не липли.
+  let _uniq=-1;
+  pts.forEach((p,i)=>{ if(i>0 && pts[i-1].date===p.date) return; _uniq++; const isFirst=p.date.slice(8,10)==='01'; const isT=(i===todayI); const isKey=isT||isFirst||p.trough; const lbl=opts.monthLabels?MON[+p.date.slice(5,7)]:(p.date.slice(8,10)+'.'+p.date.slice(5,7)); if(opts.monthLabels){ if(lbl===_lastLbl || i===0) return; } else if(!isKey && (_uniq % 2 !== 0)) return; _lastLbl=lbl; const lx=iX(i).toFixed(1), ly=(y2+13).toFixed(0); xLbl+=`<text x="${lx}" y="${ly}" fill="${(isT||isFirst)?'#5E7088':'#A7B4C2'}" font-size="8" font-weight="${(isT||isFirst)?'600':'400'}" text-anchor="end" transform="rotate(-38 ${lx} ${ly})">${lbl}</text>`; });
 
   const factPts=pts.filter(p=>p.fact!=null), fcstPts=pts.filter(p=>p.forecast!=null);
   const seg=(arr,key)=>arr.map((p,j)=>`${j?'L':'M'}${iX(p._i).toFixed(1)} ${vY(p[key]).toFixed(1)}`).join(' ');
@@ -7639,16 +7642,21 @@ function mobileBudgetSections(d) {
   const envHtml = d.budgets.length ? card(noFirstBorder(envInner)) : '';
 
   // Эпизодические: предстоящие разовые события (как в Бюджете), не резервы/цели
+  const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
   const events = (d.plan || [])
     .filter(p => p.categories && p.categories.character === 'Эпизодический' && p.account_from !== 'Доход')
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const evRow = p => {
     const dt = (p.date || ''), dd = dt.slice(8, 10) + '.' + dt.slice(5, 7);
     const nm = (p.note && p.note.trim()) || (p.categories && (p.categories.subcategory || p.categories.category)) || 'Событие';
+    const covered = reserveNames.has(p.account_from);
+    const badge = covered
+      ? '<span style="font-size:10px;font-weight:600;color:#3E7A1E;background:rgba(95,155,30,.15);padding:1px 7px;border-radius:99px;white-space:nowrap">обеспечено резервом</span>'
+      : '<span style="font-size:10px;font-weight:600;color:#9A6B12;background:rgba(192,116,26,.12);padding:1px 7px;border-radius:99px;white-space:nowrap">нет резерва</span>';
     return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
       <div style="width:32px;height:32px;border-radius:9px;background:rgba(143,190,30,.18);display:grid;place-items:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E7A12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 2.5v4"/><path d="M16 2.5v4"/></svg></div>
-      <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div><div style="font-size:11.5px;color:var(--text2)">${dd}</div></div>
-      <div style="font-family:Sora;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums">−${f(p.amount)}</div></div>`;
+      <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div><div style="font-size:11.5px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">${dd} ${badge}</div></div>
+      <div style="font-family:Sora;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums;flex:none">−${f(p.amount)}</div></div>`;
   };
   const episHtml = events.length ? card(noFirstBorder(events.map(evRow).join(''))) : '';
 
