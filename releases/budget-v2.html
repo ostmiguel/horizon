@@ -4125,8 +4125,8 @@ function renderDebtsSection() {
   const rows = _debtsData.map(d => `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)">
       <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
-      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов</div></div>
-      <div style="font-family:Sora;font-weight:600;font-size:15px;color:#C0741A;font-variant-numeric:tabular-nums">${fmt(+d.current_balance)} ₽</div>
+      <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditDebt(${d.id})"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов · изменить</div></div>
+      <div style="font-family:Sora;font-weight:600;font-size:15px;color:#C0741A;font-variant-numeric:tabular-nums">${fmt(+d.current_balance)}</div>
       <button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="repayDebt(${d.id})">Погасил</button>
       <button class="bgt-dots" title="Удалить долг" onclick="deleteDebt(${d.id})">✕</button>
     </div>`).join('');
@@ -4208,6 +4208,39 @@ async function saveDebt() {
   loadLoans();
 }
 
+function openEditDebt(id) {
+  const d = _debtsData.find(x => x.id === id);
+  if (!d) return;
+  document.getElementById('mainContent').innerHTML = `
+<div style="padding:20px 24px;max-width:560px">
+  <div class="page-title" style="margin-bottom:6px">Изменить долг</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:18px">Правка остатка корректирует смоделированную сумму и не создаёт операцию. Для возврата используй «Погасил».</div>
+  <div class="g2" style="gap:12px;margin-bottom:12px">
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="edName" value="${esc(d.name)}"></div>
+    <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="edColor" value="${d.color||'#C0741A'}"></div>
+  </div>
+  <div class="field" style="margin-bottom:16px">
+    <div class="field-label">Остаток долга, ₽</div>
+    <input class="field-input" type="number" id="edAmount" value="${+d.current_balance}">
+  </div>
+  <div style="display:flex;gap:10px">
+    <button class="btn-ghost" onclick="loadLoans()">Отмена</button>
+    <button class="btn-primary" onclick="saveEditDebt(${id})">Сохранить</button>
+  </div>
+</div>`;
+}
+
+async function saveEditDebt(id) {
+  const name = document.getElementById('edName').value.trim();
+  const amount = parseFloat(document.getElementById('edAmount').value);
+  const color = document.getElementById('edColor').value;
+  if (!name || isNaN(amount) || amount < 0) { toast('Заполни название и сумму', false); return; }
+  const { error } = await sb.from('loans').update({ name, current_balance: amount, color }).eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  toast('✓ Сохранено');
+  loadLoans();
+}
+
 function repayDebt(id) {
   const debt = _debtsData.find(d => d.id === id);
   if (!debt) return;
@@ -4217,7 +4250,7 @@ function repayDebt(id) {
   mo.className = 'modal-overlay open';
   mo.innerHTML = `<div class="modal">
     <div class="modal-title">Погасить долг — ${esc(debt.name)}</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Остаток: ${fmt(+debt.current_balance)} ₽</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Остаток: ${fmt(+debt.current_balance)}</div>
     <div class="field" style="margin-bottom:12px"><div class="field-label">Сумма погашения, ₽</div><input class="field-input" type="number" id="rdAmount" placeholder="${Math.round(+debt.current_balance)}"></div>
     <div class="field" style="margin-bottom:8px"><div class="field-label">Списать со счёта</div><select class="field-input" id="rdAccount">${opts}</select></div>
     <div class="modal-btns">
