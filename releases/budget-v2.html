@@ -1412,10 +1412,16 @@ function destroyCharts() {
   [chartBar, chartDonut, chartLine].forEach(c => { if (c) c.destroy(); });
   chartBar = chartDonut = chartLine = null;
 }
+// Счёт-обязательство (Пассив): каждое обязательство — свой счёт. Включает и
+// старый пул «Обязательства» (для истории). Работает по accounts_cache.
+function isLiabilityAcc(name) {
+  if (name === 'Обязательства') return true;
+  return !!(accounts_cache || []).find(a => a.name === name && a.account_type === 'Пассив');
+}
 function getFlowType(from, to) {
   if (from === 'Доход') return 'income';
   if (to === 'Расход')  return 'expense';
-  if (to === 'Обязательства' || from === 'Обязательства') return 'obligation';
+  if (isLiabilityAcc(to) || isLiabilityAcc(from)) return 'obligation';
   return 'transfer';
 }
 
@@ -1495,8 +1501,8 @@ async function loadDashboard() {
     const planIncome      = (plan||[]).filter(p => p.account_from === 'Доход').reduce((s,p) => s + +p.amount, 0);
     const planExpense     = (plan||[]).filter(p => p.account_to   === 'Расход').reduce((s,p) => s + +p.amount, 0);
     // Obligations: transfers TO Обязательства (debt payments)
-    const obligation      = txs.filter(t => t.account_to === 'Обязательства').reduce((s,t) => s + +t.amount, 0);
-    const planObligation  = (plan||[]).filter(p => p.account_to === 'Обязательства').reduce((s,p) => s + +p.amount, 0);
+    const obligation      = txs.filter(t => isLiabilityAcc(t.account_to)).reduce((s,t) => s + +t.amount, 0);
+    const planObligation  = (plan||[]).filter(p => isLiabilityAcc(p.account_to)).reduce((s,p) => s + +p.amount, 0);
 
     const delta = income - expense - obligation;
     const savingsRate = income > 0 ? savings / income * 100 : 0;
@@ -1525,7 +1531,7 @@ async function loadDashboard() {
       if (!byMonth[m]) byMonth[m] = {inc:0,exp:0,obl:0};
       if (t.account_from === 'Доход')          byMonth[m].inc += +t.amount;
       if (t.account_to   === 'Расход')         byMonth[m].exp += +t.amount;
-      if (t.account_to   === 'Обязательства')  byMonth[m].obl += +t.amount;
+      if (isLiabilityAcc(t.account_to))  byMonth[m].obl += +t.amount;
     });
     const mLabels=[], mInc=[], mExp=[], mObl=[];
     for (let m=1; m<=12; m++) {
@@ -1770,7 +1776,7 @@ async function loadDashboard() {
         if(new Date(d) <= todayDate) {
           if(t.account_from==='Доход') getDay(day).inc += +t.amount;
           else if(t.account_to==='Расход') getDay(day).exp += +t.amount;
-          else if(t.account_to==='Обязательства') getDay(day).obl += +t.amount;
+          else if(isLiabilityAcc(t.account_to)) getDay(day).obl += +t.amount;
         }
       });
       (plan||[]).forEach(p => {
@@ -1779,7 +1785,7 @@ async function loadDashboard() {
         if(new Date(d) > todayDate) {
           if(p.account_from==='Доход') getDay(day).inc += +p.amount;
           else if(p.account_to==='Расход') getDay(day).exp += +p.amount;
-          else if(p.account_to==='Обязательства') getDay(day).obl += +p.amount;
+          else if(isLiabilityAcc(p.account_to)) getDay(day).obl += +p.amount;
         }
       });
 
@@ -1818,10 +1824,10 @@ async function loadDashboard() {
 
     // Баланс (общ.) = all assets - all liabilities
     const totalAssets = (accs||[])
-      .filter(a => a.account_type === 'Актив')
+      .filter(a => a.account_type === 'Актив' && a.is_active !== false)
       .reduce((s,a) => s + +a.current_balance, 0);
     const totalLiabilities = (accs||[])
-      .filter(a => a.account_type === 'Пассив')
+      .filter(a => a.account_type === 'Пассив' && a.is_active !== false)
       .reduce((s,a) => s + +a.current_balance, 0);
     const totalBalance = totalAssets - Math.abs(totalLiabilities);
 
@@ -2151,7 +2157,7 @@ async function loadDashboard() {
         if (!byMonthP[mp]) byMonthP[mp] = {inc:0,exp:0,obl:0};
         if (p.account_from === 'Доход')        byMonthP[mp].inc += +p.amount;
         if (p.account_to === 'Расход')         byMonthP[mp].exp += +p.amount;
-        if (p.account_to === 'Обязательства')  byMonthP[mp].obl += +p.amount;
+        if (isLiabilityAcc(p.account_to))  byMonthP[mp].obl += +p.amount;
       });
       const allM = [...new Set([...Object.keys(byMonth),...Object.keys(byMonthP)].map(Number))].sort((a,b)=>a-b);
       const hL=[],hIF=[],hIP=[],hEF=[],hEP=[],hOF=[],hOP=[];
@@ -3096,7 +3102,7 @@ async function openQuickModal(type, tx) {
   // В режиме правки тип выводим из самой операции.
   if (tx) {
     type = tx.account_from === 'Доход' ? 'income'
-      : (tx.account_to === 'Обязательства' || tx.account_from === 'Обязательства'
+      : (isLiabilityAcc(tx.account_to) || isLiabilityAcc(tx.account_from)
          || tx.account_to === 'Дебиторка' || tx.account_from === 'Дебиторка') ? 'obligation'
       : tx.account_to === 'Расход' ? 'expense' : 'transfer';
   }
@@ -3154,13 +3160,13 @@ function setQmType(type) {
     fromSel.innerHTML = '<option value="Доход">Доход</option>';
     toSel.innerHTML   = makeOpts(realAccs);
   } else if (type === 'expense') {
-    const expFromAccs = accounts_cache.filter(a => a.account_type === 'Актив' || a.account_type === 'Пассив');
+    const expFromAccs = accounts_cache.filter(a => (a.account_type === 'Актив' || a.account_type === 'Пассив') && a.is_active !== false);
     fromSel.innerHTML = makeOpts(expFromAccs);
     toSel.innerHTML   = '<option value="Расход">Расход</option>';
   } else if (type === 'obligation') {
     fromSel.innerHTML = makeOpts(realAccs);
     // Погашение — в КОНКРЕТНОЕ обязательство (счёт-Пассив). Fallback — старый пул.
-    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив');
+    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
     toSel.innerHTML   = liabs.length ? makeOpts(liabs) : '<option value="Обязательства">Обязательства</option>';
   } else {
     fromSel.innerHTML = makeOpts(allAccs);
@@ -4985,7 +4991,7 @@ async function loadSummary() {
         addCat(savings, savingsCM, to, amt);
       } else if (savingsAccNames.has(from) && operAccNames.has(to)) {
         addCat(savings, savingsCM, from, -amt);
-      } else if (to === 'Обязательства') {
+      } else if (isLiabilityAcc(to)) {
         addCat(obligation, obligationCM, gkey, amt);
       }
     });
@@ -5518,7 +5524,7 @@ async function loadBudget() {
 
     // ── разбивка правил ──
     const incomeRules = rules.filter(r => r.account_from === 'Доход');
-    const fixedRules  = rules.filter(r => r.account_to === 'Расход' || r.account_to === 'Обязательства');
+    const fixedRules  = rules.filter(r => r.account_to === 'Расход' || isLiabilityAcc(r.account_to));
     const incomeTotal = incomeRules.reduce((s, r) => s + ruleEffAmt(r), 0);
     const fixedTotal  = fixedRules.reduce((s, r) => s + ruleEffAmt(r), 0);
 
@@ -5603,7 +5609,7 @@ async function loadBudget() {
     function loanRow(p) {
       const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
       const nm = (p.categories && (p.categories.subcategory || p.categories.category))
-        || (p.account_to === 'Обязательства' ? 'Кредит — тело' : 'Кредит — процент');
+        || (isLiabilityAcc(p.account_to) ? 'Кредит — тело' : 'Кредит — процент');
       return '<div class="bgt-frow">'
         + '<div class="bgt-rn">' + esc(nm) + '<div class="bgt-rsub">из графика кредита</div></div>'
         + '<span class="bgt-rule">' + d + '</span>'
@@ -7295,8 +7301,8 @@ async function loadLab() {
     // ── Current balance (same as dashboard) ──
     // Reload accounts with current_balance
     const { data: accsLive } = await sb.from('accounts').select('*');
-    const oblAcc = (accsLive||[]).find(a => a.name === 'Обязательства');
-    const oblCurrent = oblAcc ? Math.abs(+(oblAcc.current_balance ?? oblAcc.initial_balance)) : 0;
+    const oblCurrent = (accsLive||[]).filter(a => a.account_type === 'Пассив' && a.is_active !== false)
+      .reduce((s,a) => s + Math.abs(+(a.current_balance ?? a.initial_balance ?? 0)), 0);
     const operAccs = (accsLive||[]).filter(a => a.include_in_balance && a.account_type === 'Актив');
     const assetsCurrent = operAccs.reduce((s,a) => s + +(a.current_balance ?? a.initial_balance), 0);
     const netWorth = assetsCurrent - oblCurrent;
@@ -7304,13 +7310,13 @@ async function loadLab() {
 
     // ── Credit Load ──
     const planOblChange = (planCur||[]).reduce((s,p) => {
-      if (p.account_to === 'Обязательства') return s - +p.amount;
-      if (p.account_from === 'Обязательства') return s + +p.amount;
+      if (isLiabilityAcc(p.account_to)) return s - +p.amount;
+      if (isLiabilityAcc(p.account_from)) return s + +p.amount;
       return s;
     }, 0);
     const factOblChange = (txsCur||[]).reduce((s,t) => {
-      if (t.account_to === 'Обязательства') return s - +t.amount;
-      if (t.account_from === 'Обязательства') return s + +t.amount;
+      if (isLiabilityAcc(t.account_to)) return s - +t.amount;
+      if (isLiabilityAcc(t.account_from)) return s + +t.amount;
       return s;
     }, 0);
     const creditGap = factOblChange - planOblChange;
@@ -7322,10 +7328,10 @@ async function loadLab() {
       .filter(p => p.account_to === 'Расход')
       .reduce((s,p) => s + +p.amount, 0);
     const planMonthlyObl = (planCur||[])
-      .filter(p => p.account_to === 'Обязательства')
+      .filter(p => isLiabilityAcc(p.account_to))
       .reduce((s,p) => s + +p.amount, 0); // planned debt repayments
     const planMonthlyIncObl = (planCur||[])
-      .filter(p => p.account_from === 'Обязательства')
+      .filter(p => isLiabilityAcc(p.account_from))
       .reduce((s,p) => s + +p.amount, 0); // new obligations (credit spending)
     const planMonthlyInc = (planCur||[])
       .filter(p => p.account_from === 'Доход')
@@ -7408,8 +7414,8 @@ async function loadLab() {
     const blendedPerDay=varPerDay*weight+normPerDay*(1-weight);
     const varMonthlyBlended=blendedPerDay*daysInMonth;
     const pctVsNorm=normPerDay>0?Math.round((varPerDay-normPerDay)/normPerDay*100):0;
-    const fixPlan=(planCur||[]).filter(p=>(isExp(p)&&isFixed(p)&&notEpis(p)&&notUncat(p))||p.account_to==='Обязательства').reduce((s,p)=>s+ +p.amount,0);
-    const operPlan=(planCur||[]).filter(p=>(isExp(p)&&notEpis(p)&&notUncat(p))||p.account_to==='Обязательства').reduce((s,p)=>s+ +p.amount,0);
+    const fixPlan=(planCur||[]).filter(p=>(isExp(p)&&isFixed(p)&&notEpis(p)&&notUncat(p))||isLiabilityAcc(p.account_to)).reduce((s,p)=>s+ +p.amount,0);
+    const operPlan=(planCur||[]).filter(p=>(isExp(p)&&notEpis(p)&&notUncat(p))||isLiabilityAcc(p.account_to)).reduce((s,p)=>s+ +p.amount,0);
     const operForecast=varMonthlyBlended+fixPlan;
     const operDiff=operForecast-operPlan;
     const operDiffPct=operPlan>0?Math.round(operForecast/operPlan*100):0;
@@ -7708,8 +7714,8 @@ function _mobFlow(t) {
   const c = t.categories;
   const loan = c && (/Кредит/i.test(c.category || '') || /Кредит/i.test(c.subcategory || ''));
   if (t.account_to === 'Расход') return { sign: '−', color: loan ? '#C0741A' : '#bf7419' };
-  if (t.account_to === 'Обязательства' || t.account_from === 'Дебиторка') return { sign: '−', color: '#C0741A' };
-  if (t.account_from === 'Обязательства') return { sign: '+', color: '#5E9B1E' };
+  if (isLiabilityAcc(t.account_to) || t.account_from === 'Дебиторка') return { sign: '−', color: '#C0741A' };
+  if (isLiabilityAcc(t.account_from)) return { sign: '+', color: '#5E9B1E' };
   return { sign: '', color: 'var(--text2)' };
 }
 
@@ -7851,7 +7857,7 @@ function mobileBudgetSections(d) {
 
   // Правила: доход + фиксированные
   const income = d.rules.filter(r => r.account_from === 'Доход');
-  const fixed  = d.rules.filter(r => r.account_to === 'Расход' || r.account_to === 'Обязательства');
+  const fixed  = d.rules.filter(r => r.account_to === 'Расход' || isLiabilityAcc(r.account_to));
   const ruleRow = (r, sign, color) => `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
     <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</div><div style="font-size:11.5px;color:var(--text2)">${r.day_of_month ? r.day_of_month + '-го числа' : 'ежемесячно'}</div></div>
     <div style="font-family:Sora;font-weight:600;font-size:14px;color:${color};font-variant-numeric:tabular-nums">${sign}${f(ruleEff(r))}</div></div>`;
@@ -7860,7 +7866,7 @@ function mobileBudgetSections(d) {
   const loanRowM = p => {
     const dt = (p.date || ''), d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
     const nm = (p.categories && (p.categories.subcategory || p.categories.category))
-      || (p.account_to === 'Обязательства' ? 'Кредит — тело' : 'Кредит — процент');
+      || (isLiabilityAcc(p.account_to) ? 'Кредит — тело' : 'Кредит — процент');
     return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
       <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div><div style="font-size:11.5px;color:var(--text2)">${d} · из графика кредита</div></div>
       <div style="font-family:Sora;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums">−${f(p.amount)}</div></div>`;
@@ -8107,12 +8113,12 @@ function openLabModalVar(txsCur) {
 
 function openLabModalFix(planCur) {
   const planMap = {};
-  (planCur||[]).filter(p => (p.account_to==='Расход' && p.categories?.expense_type==='fixed' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено') || p.account_to==='Обязательства').forEach(p => {
+  (planCur||[]).filter(p => (p.account_to==='Расход' && p.categories?.expense_type==='fixed' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено') || isLiabilityAcc(p.account_to)).forEach(p => {
     const k = p.categories?.subcategory || 'Прочее';
     if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
     planMap[k].plan += +p.amount;
   });
-  (window._labTxs||[]).filter(t => (t.account_to==='Расход' && t.categories?.expense_type==='fixed' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено') || t.account_to==='Обязательства').forEach(t => {
+  (window._labTxs||[]).filter(t => (t.account_to==='Расход' && t.categories?.expense_type==='fixed' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено') || isLiabilityAcc(t.account_to)).forEach(t => {
     const k = t.categories?.subcategory || 'Прочее';
     if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
     planMap[k].fact += +t.amount;
@@ -8176,7 +8182,7 @@ async function loadOperations() {
     (cats || []).forEach(c => { catById[c.id] = c; });
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
 
-    const isDebtAcc = a => a === 'Обязательства' || a === 'Дебиторка';
+    const isDebtAcc = a => isLiabilityAcc(a) || a === 'Дебиторка';
     const opFlow = t => {
       if (t.account_from === 'Доход') return 'income';
       // Любой «Расход» — это расход, ВКЛЮЧАЯ проценты по кредиту (процент = операционный
