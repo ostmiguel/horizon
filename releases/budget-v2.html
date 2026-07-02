@@ -5063,12 +5063,15 @@ async function loadProfile() {
   window._acctStatus = st;
   const subCard = subscriptionCardHtml(st, fmtDt);
 
-  // Счётчик пользователей — только владельцу
+  // Счётчик пользователей — гейт на бэкенде (200 = владелец, 403 = нет).
   let statsCard = '';
-  if (window._isOwner) {
-    const stx = await fetch('/api/account/stats', { credentials: 'include' }).then(r => r.json()).catch(() => null);
-    if (stx && stx.total != null) statsCard = ownerStatsCardHtml(stx);
-  }
+  try {
+    const sres = await fetch('/api/account/stats', { credentials: 'include' });
+    if (sres.ok) {
+      const stx = await sres.json();
+      if (stx && stx.total != null) statsCard = ownerStatsCardHtml(stx);
+    }
+  } catch (e) {}
 
   mc.innerHTML = `
     <div style="max-width:600px;padding:24px">
