@@ -64,7 +64,7 @@ async def account_status(request: Request):
 @router.get("/stats")
 async def account_stats(request: Request):
     """Счётчик регистраций — только владельцу."""
-    if request.state.user_id != OWNER_ID:
+    if str(request.state.user_id) != OWNER_ID:
         raise HTTPException(403, "Недоступно")
     db = request.state.db
     total = await db.fetchval("SELECT COUNT(*) FROM users")
