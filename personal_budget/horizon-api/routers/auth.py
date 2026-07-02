@@ -53,6 +53,10 @@ async def auth_yandex():
         "redirect_uri": f"{BASE_URL}/api/auth/yandex/callback",
         "response_type": "code",
         "state": state,
+        # Всегда показываем экран подтверждения с аккаунтом (иначе Яндекс молча
+        # логинит активной сессией). На нём есть «Войти под другим аккаунтом» —
+        # так пользователь с несколькими почтами Яндекса выбирает нужную.
+        "force_confirm": "yes",
     })
     url = f"https://oauth.yandex.ru/authorize?{params}"
     from fastapi.responses import RedirectResponse
