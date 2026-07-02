@@ -3159,7 +3159,9 @@ function setQmType(type) {
     toSel.innerHTML   = '<option value="Расход">Расход</option>';
   } else if (type === 'obligation') {
     fromSel.innerHTML = makeOpts(realAccs);
-    toSel.innerHTML   = '<option value="Обязательства">Обязательства</option>';
+    // Погашение — в КОНКРЕТНОЕ обязательство (счёт-Пассив). Fallback — старый пул.
+    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив');
+    toSel.innerHTML   = liabs.length ? makeOpts(liabs) : '<option value="Обязательства">Обязательства</option>';
   } else {
     fromSel.innerHTML = makeOpts(allAccs);
     toSel.innerHTML   = makeOpts(allAccs);
