@@ -39,6 +39,7 @@ class LoanCreate(BaseModel):
     color: Optional[str] = "#e24b4a"
     account_from: Optional[str] = None  # счёт списания платежа; по умолч. — первый актив
     kind: Optional[str] = "credit"      # 'credit' (график) | 'debt' (без графика)
+    account_name: Optional[str] = None  # связанный счёт-Пассив (обязательство)
 
 class ScheduleRow(BaseModel):
     month_num: int
@@ -104,11 +105,12 @@ async def create_loan(data: LoanCreate, request: Request):
     account_from = data.account_from or await _first_asset(db, user_id)
     row = await db.fetchrow("""
         INSERT INTO loans
-          (user_id, name, initial_amount, current_balance, rate, monthly_payment, total_payments, next_payment_date, color, account_from, kind)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
+          (user_id, name, initial_amount, current_balance, rate, monthly_payment, total_payments, next_payment_date, color, account_from, kind, account_name)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *
     """, user_id, data.name, data.initial_amount, data.current_balance,
         data.rate, data.monthly_payment, data.total_payments,
-        data.next_payment_date, data.color, account_from, data.kind or "credit")
+        data.next_payment_date, data.color, account_from, data.kind or "credit",
+        data.account_name or data.name)
     return dict(row)
 
 

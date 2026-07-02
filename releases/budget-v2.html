@@ -4221,6 +4221,25 @@ function openAddDebt() {
 </div>`;
 }
 
+// Создаёт счёт-Пассив обязательства. С зачислением на карту → счёт стартует с 0,
+// а операция «обязательство → карта» ставит долг и пополняет карту. Без
+// зачисления → остаток счёта = −сумма (долг уже существует / потрачен сразу).
+async function createObligationAccount(name, amount, color, disbursementAcc) {
+  const amt = Math.abs(amount);
+  const { error } = await sb.from('accounts').insert({
+    name, account_type: 'Пассив', color: color || '#C0741A',
+    initial_balance: disbursementAcc ? 0 : -amt, include_in_balance: false
+  });
+  if (error) { toast('Счёт: ' + error.message, false); return; }
+  if (disbursementAcc) {
+    const today = new Date().toISOString().split('T')[0];
+    await sb.from('transactions').insert({
+      date: today, amount: amt, account_from: name, account_to: disbursementAcc,
+      note: 'Получено на счёт: ' + name, source: 'manual', use_in_forecast: true
+    });
+  }
+}
+
 async function saveDebt() {
   const name = document.getElementById('dName').value.trim();
   const amount = parseFloat(document.getElementById('dAmount').value);
@@ -4229,17 +4248,10 @@ async function saveDebt() {
   if (!name || isNaN(amount) || amount <= 0) { toast('Заполни название и сумму', false); return; }
   const { error } = await sb.from('loans').insert({
     name, initial_amount: amount, current_balance: amount,
-    rate: 0, monthly_payment: 0, total_payments: 0, color, kind: 'debt'
+    rate: 0, monthly_payment: 0, total_payments: 0, color, kind: 'debt', account_name: name
   });
   if (error) { toast('Ошибка: ' + error.message, false); return; }
-  // founding-операция «деньги пришли на счёт» (опционально): Обязательства → счёт
-  if (acc) {
-    const today = new Date().toISOString().split('T')[0];
-    await sb.from('transactions').insert({
-      date: today, amount, account_from: 'Обязательства', account_to: acc,
-      note: 'Взял в долг: ' + name, source: 'manual', use_in_forecast: true
-    });
-  }
+  await createObligationAccount(name, amount, color, acc);
   toast('✓ Долг добавлен');
   loadLoans();
 }
@@ -4370,12 +4382,16 @@ function openAddLoan() {
     <div class="field"><div class="field-label">Первый платёж в графике №</div><input class="field-input" type="number" id="lPayNum" placeholder="1"></div>
     <div class="field"><div class="field-label">Всего платежей</div><input class="field-input" type="number" id="lTotalPay" placeholder="48"></div>
   </div>
-  <div class="field" style="margin-bottom:16px">
+  <div class="field" style="margin-bottom:12px">
     <div class="field-label">Дата следующего платежа</div>
     <input class="field-input" type="date" id="lNextDate">
   </div>
+  <div class="field" style="margin-bottom:8px">
+    <div class="field-label">Деньги зачислены на счёт</div>
+    <select class="field-input" id="lAccount">${'<option value="">— не зачислять на счёт —</option>' + (accounts_cache||[]).filter(a => a.account_type === 'Актив' && a.is_active !== false).map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('')}</select>
+  </div>
   <div style="font-size:11px;color:var(--text3);margin-bottom:16px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);border:0.5px solid var(--border)">
-    После добавления кредита заполни реальный график платежей из банка — это обеспечит точные даты и суммы.
+    Выберешь счёт → создастся операция «Кредит → счёт» (деньги придут на счёт, долг встанет). Если деньги ушли сразу на покупку (напр. авто) — оставь пусто, долг встанет на полную сумму. Комиссию/страховку внеси отдельным Расходом. После — заполни реальный график из банка.
   </div>
   <div style="display:flex;gap:10px">
     <button class="btn-ghost" onclick="loadLoans()">Отмена</button>
@@ -4400,13 +4416,17 @@ async function saveLoan() {
   if (!name || isNaN(initial) || isNaN(rate) || isNaN(payment) || isNaN(totalPay)) {
     toast('Заполни все обязательные поля', false); return;
   }
+  const disbAcc = document.getElementById('lAccount') ? document.getElementById('lAccount').value : '';
   const { error } = await sb.from('loans').insert({
     name, initial_amount: initial, current_balance: initial,
     rate, monthly_payment: payment, payment_number: payNum,
     total_payments: totalPay, next_payment_date: nextDate||null,
-    color, is_active: true
+    color, is_active: true, kind: 'credit', account_name: name
   });
   if (error) { toast('Ошибка: ' + error.message, false); return; }
+
+  // Счёт-Пассив обязательства (+ зачисление на карту, если выбрано)
+  await createObligationAccount(name, initial, color, disbAcc);
 
   // Pre-fill schedule with dates and payment amounts
   const { data: newLoan } = await sb.from('loans').select('id').order('id', {ascending:false}).limit(1).single();
