@@ -2464,9 +2464,6 @@ async function loadReferences() {
     main.innerHTML = `
       <div class="topbar">
         <div><div class="page-title">Справочники</div></div>
-        <div class="quick-btns">
-          <button class="qbtn qbtn-transfer" onclick="openAddAccount()">+ Счёт</button>
-        </div>
       </div>
 
       <div class="g2">
@@ -2485,10 +2482,10 @@ async function loadReferences() {
             <thead><tr>
               <th style="width:24px"></th>
               <th class="sortable" onclick="sortAccTable(1)">Счёт</th>
-              <th class="sortable" onclick="sortAccTable(2)">Тип</th>
               <th class="sortable" style="text-align:right" onclick="sortAccTable(3)">Нач. остаток</th>
               <th style="text-align:center">В балансе</th>
               <th style="text-align:center">Резерв</th>
+              <th style="text-align:center" title="Виден в «откуда» при Расходе">Оплата</th>
               <th></th>
             </tr></thead>
             <tbody id="accBody">${renderAccRows(accs||[])}</tbody>
@@ -2553,14 +2550,23 @@ async function loadReferences() {
 
 function renderAccRows(rows) {
   if (!rows.length) return '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
-  return rows.map((a, idx) => `<tr class="draggable-row" draggable="true" data-id="${a.id}"
+  // Группировка по типу (стабильная сортировка сохраняет ручной порядок внутри типа).
+  const TORD = { 'Актив': 0, 'Пассив': 1, 'Поток': 2 };
+  const TLBL = { 'Актив': 'Активы', 'Пассив': 'Пассивы', 'Поток': 'Потоки' };
+  const sorted = [...rows].sort((a, b) => (TORD[a.account_type] ?? 9) - (TORD[b.account_type] ?? 9));
+  let out = '', lastType = null;
+  sorted.forEach((a, idx) => {
+    if (a.account_type !== lastType) {
+      lastType = a.account_type;
+      out += `<tr><td colspan="7" style="padding:14px 8px 5px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);border:none">${TLBL[a.account_type] || a.account_type}</td></tr>`;
+    }
+    out += `<tr class="draggable-row" draggable="true" data-id="${a.id}"
     ondragstart="onAccDragStart(event,${a.id})"
     ondragover="onAccDragOver(event)"
     ondragleave="onAccDragLeave(event)"
     ondrop="onAccDrop(event,${a.id})">
     <td style="width:24px;padding:0 4px"><span class="drag-handle" title="Перетащи для сортировки">⠿</span></td>
     <td><span class="color-dot" style="background:${a.color||'#888'}"></span>${a.name}</td>
-    <td><span class="tag">${a.account_type}</span></td>
     <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.initial_balance)}</td>
     <td style="text-align:center">
       <label class="toggle" title="Включать в оперативный баланс">
@@ -2574,12 +2580,26 @@ function renderAccRows(rows) {
         <span class="toggle-slider"></span>
       </label>` : '—'}
     </td>
+    <td style="text-align:center">
+      ${a.account_type !== 'Поток' ? `<label class="toggle" title="Используется для оплаты — виден в «откуда» при Расходе">
+        <input type="checkbox" ${a.used_for_payment !== false ? 'checked' : ''} onchange="togglePayment(${a.id},this.checked)">
+        <span class="toggle-slider"></span>
+      </label>` : '—'}
+    </td>
     <td style="white-space:nowrap;text-align:right">
-      <button class="edit-btn" onclick="moveAcc(${idx},-1)" style="padding:2px 5px" ${idx===0?'disabled':''}>↑</button>
-      <button class="edit-btn" onclick="moveAcc(${idx},1)"  style="padding:2px 5px" ${idx===rows.length-1?'disabled':''}>↓</button>
       <button class="bgt-dots" title="Действия" onclick="event.stopPropagation();accMenu(this,${a.id})">⋮</button>
     </td>
-  </tr>`).join('');
+  </tr>`;
+  });
+  return out;
+}
+
+async function togglePayment(id, val) {
+  const { error } = await sb.from('accounts').update({ used_for_payment: val }).eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message, false); return; }
+  const acc = accounts_cache.find(a => a.id === id);
+  if (acc) acc.used_for_payment = val;
+  toast(val ? '✓ Используется для оплаты' : '✓ Скрыт из «откуда»');
 }
 
 function renderCatRows(rows) {
@@ -2707,9 +2727,8 @@ function openAddAccount() {
     <div class="field"><div class="field-label">Название</div><input class="field-input" id="accName" placeholder="Карта Сбер"/></div>
     <div class="field"><div class="field-label">Тип</div>
       <select class="field-select" id="accType">
-        <option value="Актив">Актив</option>
-        <option value="Пассив">Пассив</option>
-        <option value="Поток">Поток</option>
+        <option value="Актив">Актив (деньги)</option>
+        <option value="Пассив">Пассив (долг)</option>
       </select>
     </div>
     <div class="field"><div class="field-label">Начальный остаток</div><input class="field-input" type="number" id="accBal" value="0"/></div>
@@ -3160,7 +3179,9 @@ function setQmType(type) {
     fromSel.innerHTML = '<option value="Доход">Доход</option>';
     toSel.innerHTML   = makeOpts(realAccs);
   } else if (type === 'expense') {
-    const expFromAccs = accounts_cache.filter(a => (a.account_type === 'Актив' || a.account_type === 'Пассив') && a.is_active !== false);
+    // Только платёжные инструменты (used_for_payment): карты, наличные, резервы,
+    // кредитки. Кредиты/займы скрыты. Управляется тумблером «Оплата» в Справочниках.
+    const expFromAccs = accounts_cache.filter(a => (a.account_type === 'Актив' || a.account_type === 'Пассив') && a.is_active !== false && a.used_for_payment !== false);
     fromSel.innerHTML = makeOpts(expFromAccs);
     toSel.innerHTML   = '<option value="Расход">Расход</option>';
   } else if (type === 'obligation') {
@@ -8561,12 +8582,17 @@ function _buildOpsForm(type) {
     fromOpts = `<option value="Доход">Доход</option>`;
     toOpts   = realAccs.map(a => `<option>${a.name}</option>`).join('');
   } else if (type === 'expense') {
-    // allAccs включает кредитные счета (Обязательства) — покупка с кредитки увеличивает долг
-    fromOpts = allAccs.map(a => `<option>${a.name}</option>`).join('');
+    // Только платёжные инструменты (used_for_payment): карты/наличные/резервы/кредитки.
+    const payAccs = accounts_cache.filter(a => a.account_type !== 'Поток' && a.is_active !== false && a.used_for_payment !== false);
+    fromOpts = payAccs.map(a => `<option>${a.name}</option>`).join('');
     toOpts   = `<option value="Расход">Расход</option>`;
   } else if (type === 'debt') {
-    fromOpts = `<option value="Обязательства">Обязательства</option>${realAccs.map(a => `<option>${a.name}</option>`).join('')}`;
-    toOpts   = `<option value="Обязательства">Обязательства</option><option value="Расход">Расход</option>${realAccs.map(a => `<option>${a.name}</option>`).join('')}`;
+    // Каждое обязательство — свой счёт-Пассив. Взял: обяз→карта/расход; погасил: карта→обяз.
+    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
+    const liabOpts = liabs.map(a => `<option>${a.name}</option>`).join('');
+    const assetOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    fromOpts = liabOpts + assetOpts;
+    toOpts   = liabOpts + `<option value="Расход">Расход</option>` + assetOpts;
   } else {
     fromOpts = allAccs.map(a => `<option>${a.name}</option>`).join('');
     toOpts   = allAccs.map(a => `<option>${a.name}</option>`).join('');
