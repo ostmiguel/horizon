@@ -6,7 +6,7 @@ import secrets
 import asyncpg
 from urllib.parse import urlencode
 
-from seed_user import seed_user_categories
+from seed_user import seed_user_categories, seed_user_accounts
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -222,8 +222,10 @@ async def _get_or_create_user(db, provider: str, provider_id: str, email: str, n
     """, email, name, provider, provider_id)
     is_new = bool(row["_is_new"])
     user = {k: v for k, v in dict(row).items() if k != "_is_new"}
-    # Посев дефолтных категорий новому пользователю (идемпотентно — только если их нет).
+    # Посев дефолтных категорий и системного счёта «Обязательства» новому
+    # пользователю (идемпотентно — только если их ещё нет).
     await seed_user_categories(db, user["id"])
+    await seed_user_accounts(db, user["id"])
     if is_new:
         total = await db.fetchval("SELECT COUNT(*) FROM users")
         await notify_new_user(user.get("name"), user.get("email"), provider, total)
