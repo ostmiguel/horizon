@@ -923,7 +923,12 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
       <div class="qm-type active-exp" id="qmt-expense"  onclick="setQmType('expense')">Расход</div>
       <div class="qm-type"            id="qmt-income"   onclick="setQmType('income')">Доход</div>
       <div class="qm-type"            id="qmt-transfer" onclick="setQmType('transfer')">Перевод</div>
-      <div class="qm-type"            id="qmt-obligation" onclick="setQmType('obligation')">Обязательство</div>
+      <div class="qm-type"            id="qmt-obligation" onclick="setQmType('obligation')">Долг</div>
+    </div>
+    <div class="qm-types" id="qmDirRow" style="display:none;margin-top:-4px">
+      <div class="qm-type active-obl" id="qmd-pay"  onclick="setQmDebtDir('pay')">Погасил</div>
+      <div class="qm-type"            id="qmd-take" onclick="setQmDebtDir('take')">Взял</div>
+      <div style="flex:1"></div>
     </div>
     <div class="qm-row">
       <div class="field" style="margin:0">
@@ -3115,6 +3120,7 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
 
 // ── QUICK ADD MODAL ──
 let _qmType = 'expense';
+let _qmDebtDir = 'pay';   // направление типа «Долг»: 'pay' (погасил) | 'take' (взял)
 
 async function openQuickModal(type, tx) {
   window._qmEditId = tx ? tx.id : null;
@@ -3160,12 +3166,41 @@ function closeQuickModal() {
   document.getElementById('quickModal').classList.remove('open');
 }
 
+// Селекты для типа «Долг» по направлению: погасил (Карта→обязательство) / взял (обязательство→Карта).
+function qmObligationSelects() {
+  const fromSel = document.getElementById('qmFrom');
+  const toSel   = document.getElementById('qmTo');
+  if (!fromSel || !toSel) return;
+  const mk = list => list.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+  const assets = accounts_cache.filter(a => a.account_type === 'Актив' && a.is_active !== false);
+  const liabs  = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
+  const liabOpts = liabs.length ? mk(liabs) : '<option value="Обязательства">Обязательства</option>';
+  if (_qmDebtDir === 'take') {   // взял: обязательство → карта (долг +, кэш +)
+    fromSel.innerHTML = liabOpts;
+    toSel.innerHTML   = mk(assets);
+  } else {                        // погасил: карта → обязательство (кэш −, долг −)
+    fromSel.innerHTML = mk(assets);
+    toSel.innerHTML   = liabOpts;
+  }
+}
+
+function setQmDebtDir(dir) {
+  _qmDebtDir = dir;
+  const p = document.getElementById('qmd-pay'), t = document.getElementById('qmd-take');
+  if (p) p.className = 'qm-type' + (dir === 'pay'  ? ' active-obl' : '');
+  if (t) t.className = 'qm-type' + (dir === 'take' ? ' active-obl' : '');
+  qmObligationSelects();
+}
+
 function setQmType(type) {
   _qmType = type;
   ['expense','income','transfer','obligation'].forEach(t => {
     const el = document.getElementById('qmt-' + t);
     if (el) el.className = 'qm-type' + (t === type ? ` active-${t === 'obligation' ? 'obl' : t === 'transfer' ? 'tr' : t === 'income' ? 'inc' : 'exp'}` : '');
   });
+  // Переключатель направления показываем только для «Долг».
+  const qmDirRow = document.getElementById('qmDirRow');
+  if (qmDirRow) qmDirRow.style.display = (type === 'obligation') ? '' : 'none';
 
   // Update account selects
   const realAccs  = accounts_cache.filter(a => a.account_type === 'Актив');
@@ -3185,10 +3220,7 @@ function setQmType(type) {
     fromSel.innerHTML = makeOpts(expFromAccs);
     toSel.innerHTML   = '<option value="Расход">Расход</option>';
   } else if (type === 'obligation') {
-    fromSel.innerHTML = makeOpts(realAccs);
-    // Погашение — в КОНКРЕТНОЕ обязательство (счёт-Пассив). Fallback — старый пул.
-    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
-    toSel.innerHTML   = liabs.length ? makeOpts(liabs) : '<option value="Обязательства">Обязательства</option>';
+    setQmDebtDir(_qmDebtDir);   // синхронизирует кнопки направления + селекты
   } else {
     fromSel.innerHTML = makeOpts(allAccs);
     toSel.innerHTML   = makeOpts(allAccs);
