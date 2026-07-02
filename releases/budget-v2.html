@@ -4125,10 +4125,10 @@ function renderDebtsSection() {
   const rows = _debtsData.map(d => `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)">
       <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
-      <div style="flex:1;min-width:0;cursor:pointer" onclick="openEditDebt(${d.id})"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов · изменить</div></div>
+      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов</div></div>
       <div style="font-family:Sora;font-weight:600;font-size:15px;color:#C0741A;font-variant-numeric:tabular-nums">${fmt(+d.current_balance)}</div>
       <button class="btn-ghost" style="font-size:11px;padding:5px 10px" onclick="repayDebt(${d.id})">Погасил</button>
-      <button class="bgt-dots" title="Удалить долг" onclick="deleteDebt(${d.id})">✕</button>
+      <button class="bgt-dots" title="Действия" onclick="debtMenu(this,${d.id})">⋮</button>
     </div>`).join('');
   return `<div class="card" style="margin-bottom:18px">
     <div class="card-head"><span class="card-title">Долги · без процентов</span></div>
@@ -4206,6 +4206,13 @@ async function saveDebt() {
   }
   toast('✓ Долг добавлен');
   loadLoans();
+}
+
+function debtMenu(btn, id) {
+  bgtMenu(btn, [
+    { label: 'Редактировать', fn: () => openEditDebt(id) },
+    { label: 'Удалить', danger: true, fn: () => deleteDebt(id) },
+  ]);
 }
 
 function openEditDebt(id) {
