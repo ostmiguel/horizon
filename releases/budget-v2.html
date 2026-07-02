@@ -3301,6 +3301,12 @@ async function loadLoans() {
   _loansData = allLoans.filter(l => (l.kind || 'credit') !== 'debt');
   _debtsData = allLoans.filter(l => (l.kind || 'credit') === 'debt');
 
+  // Баланс счёта «Обязательства» из операций (для сверки).
+  const { data: accs } = await sb.from('accounts').select('*');
+  if (accs) accounts_cache = accs;
+  const obl = (accs || []).find(a => a.name === 'Обязательства');
+  window._oblLedgerOwed = obl ? Math.abs(+obl.current_balance || 0) : null;
+
   // Load schedule summary — только для кредитов
   for (const loan of _loansData) {
     const { data: sched } = await sb.from('loan_schedule')
@@ -3488,6 +3494,27 @@ function renderLoansPage() {
   const interestPaid = calcInterestPaid(loans);
   window._loanInterestVals = { remaining: interestRemaining, paid: interestPaid };
 
+  // ── Сверка: смоделированная сумма (кредиты+долги) vs баланс счёта из операций ──
+  const debtsTotal = _debtsData.reduce((s, d) => s + (+d.current_balance || 0), 0);
+  const modeledOwed = totalDebt + debtsTotal;
+  const ledgerOwed = window._oblLedgerOwed;
+  let recoHtml = '';
+  if (ledgerOwed != null) {
+    const diff = Math.round(modeledOwed - ledgerOwed);
+    const ok = Math.abs(diff) <= 1;
+    recoHtml = `<div style="background:var(--bg2);border:1px solid ${ok ? 'rgba(31,164,151,.3)' : 'rgba(224,123,57,.4)'};border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12.5px;font-weight:600;color:var(--text)">Сверка обязательств</div>
+        <div style="font-size:11.5px;font-weight:700;color:${ok ? '#1F7D73' : '#A85218'}">${ok ? '✓ сходится' : '⚠ расхождение ' + fmt(Math.abs(diff))}</div>
+      </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text2)">
+        <span>Смоделировано (кредиты + долги): <b style="color:var(--text)">${fmt(modeledOwed)}</b></span>
+        <span>По операциям (счёт «Обязательства»): <b style="color:var(--text)">${fmt(ledgerOwed)}</b></span>
+      </div>
+      ${ok ? '' : '<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">Операции — источник истины. Расхождение обычно значит: не внесён платёж/страховка/проценты или founding-операция при заведении обязательства. Сверь и добавь недостающее.</div>'}
+    </div>`;
+  }
+
   // Sort by strategy
   const sorted = [...loans];
   if (_loanStrategy === 'snowball') sorted.sort((a,b) => +a.current_balance - +b.current_balance);
@@ -3554,6 +3581,8 @@ function renderLoansPage() {
   <div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;line-height:1.5">
     Здесь все ваши <b>обязательства</b>: <b>кредиты</b> с процентами и графиком платежей, и <b>долги</b> без процентов (займы у физлиц, рассрочки). Остаток по обязательствам считается из ваших операций.
   </div>
+
+  ${recoHtml}
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">
     <div class="kpi"><div class="kpi-label">Общий долг</div><div class="kpi-val">${fmt(totalDebt)}</div></div>
