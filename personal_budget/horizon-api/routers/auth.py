@@ -108,6 +108,10 @@ async def auth_mailru():
         "response_type": "code",
         "scope": "userinfo",
         "state": state,
+        # Просим VK ID показать выбор аккаунта (иначе молча логинит активной
+        # сессией). Стандартный OIDC-параметр; для классического Mail.ru может
+        # игнорироваться — проверяем на практике.
+        "prompt": "select_account",
     })
     url = f"https://oauth.mail.ru/login?{params}"
     from fastapi.responses import RedirectResponse
