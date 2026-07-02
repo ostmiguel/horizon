@@ -43,6 +43,7 @@ async def get_metrics(request: Request):
     r_var = m["r_var"]; sigma_day = m["sigma_day"]
     V_remain = m["V_remain"]; sigma_remain = m["sigma_remain"]
     plan_rows = m["plan_rows"]; reserve_names = m["reserve_names"]
+    liability_names = m["liability_names"]   # имена всех счетов-Пассивов (обязательства)
     I_remain = m["I_remain"]; F_remain = m["F_remain"]; R_topup = m["R_topup"]
     F_before = m["F_before"]; V_to_income = m["V_to_income"]; R_before = m["R_before"]
     next_income_date = m["next_income_date"]; days_to_income = m["days_to_income"]
@@ -147,7 +148,7 @@ async def get_metrics(request: Request):
     """, user_id, year, month)
     plan_fixed_month = sum(
         float(r["total"]) for r in plan_month_all
-        if r["account_to"] == "Обязательства"
+        if r["account_to"] in liability_names
         or r["cat_expense_type"] == "fixed"
         or r["cat_character"] == "Эпизодический"
     )
@@ -184,7 +185,9 @@ async def get_metrics(request: Request):
         WHERE user_id=$1
           AND EXTRACT(YEAR  FROM date)=$2
           AND EXTRACT(MONTH FROM date)=$3
-          AND account_to IN ('Расход', 'Обязательства')
+          AND (account_to = 'Расход'
+               OR account_to IN (SELECT name FROM accounts
+                                 WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
     """, user_id, year, month))
 
     savings_rate = max((cur_income - cur_expenses) / max(cur_income, 1), 0)
@@ -236,7 +239,9 @@ async def get_metrics(request: Request):
         WHERE t.user_id=$1
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
-          AND t.account_to IN ('Расход', 'Обязательства')
+          AND (t.account_to = 'Расход'
+               OR t.account_to IN (SELECT name FROM accounts
+                                   WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
         GROUP BY c.category, c.character, c.expense_type
         ORDER BY total DESC
     """, user_id, year, month)
@@ -273,7 +278,9 @@ async def get_metrics(request: Request):
               AND EXTRACT(YEAR  FROM p.date)=$2
               AND EXTRACT(MONTH FROM p.date)=$3
               AND c.category=$4 AND c.character=$5
-              AND p.account_to IN ('Расход', 'Обязательства')
+              AND (p.account_to = 'Расход'
+                   OR p.account_to IN (SELECT name FROM accounts
+                                       WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
         """, user_id, year, month, r["category"], r["cat_char"]) or 0)
 
         if is_variable_everyday and d_left > 0:
@@ -336,7 +343,9 @@ async def get_metrics(request: Request):
         WHERE p.user_id=$1
           AND EXTRACT(YEAR  FROM p.date)=$2
           AND EXTRACT(MONTH FROM p.date)=$3
-          AND p.account_to IN ('Расход', 'Обязательства')
+          AND (p.account_to = 'Расход'
+               OR p.account_to IN (SELECT name FROM accounts
+                                   WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
         GROUP BY c.category, c.character, c.expense_type
     """, user_id, year, month)
     for r in plan_extra_cats:
@@ -402,8 +411,8 @@ async def get_metrics(request: Request):
             kind = "episodic" if r.get("cat_character") in EPISODIC_CHARS else "fixed"
             key  = (cat, kind)
             fixed_by_cat[key] = fixed_by_cat.get(key, 0) + float(r["amount"])
-        elif r.get("account_to") == "Обязательства":
-            cat = r.get("cat_category") or "Обязательства"
+        elif r.get("account_to") in liability_names:
+            cat = r.get("cat_category") or r.get("account_to") or "Обязательства"
             key = (cat, "fixed")
             fixed_by_cat[key] = fixed_by_cat.get(key, 0) + float(r["amount"])
     fixed_items = [{"category": k[0], "type": k[1], "amount": round(v)}
@@ -542,7 +551,7 @@ async def get_metrics(request: Request):
 
 # ── /api/metrics/forecast — balance trajectory for chart ─────────────────────
 
-async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names):
+async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liability_names):
     """Годовой прогноз — РЕАЛЬНАЯ траектория день-в-день на 365 дней.
 
     Источники (всё, что пользователь уже задал):
@@ -581,7 +590,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names):
             amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
             if af == "Доход":
                 add(d, amt)
-            elif at in ("Расход", "Обязательства"):
+            elif at == "Расход" or at in liability_names:
                 is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
                 if not is_var:
                     add(d, -amt)
@@ -603,7 +612,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names):
         amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
         if af == "Доход":
             add(r["date"], amt)
-        elif at in ("Расход", "Обязательства"):
+        elif at == "Расход" or at in liability_names:
             is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
             if not is_var:
                 add(r["date"], -amt)
@@ -673,6 +682,7 @@ async def get_forecast(request: Request, range: str = "30"):
     accs = await account_balances(db, user_id)
     op_names      = [a["name"] for a in accs.values() if _is_op(a)]
     reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
+    liability_names = {name for name, a in accs.items() if a["account_type"] == "Пассив"}
     B0_now  = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
     cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
 
@@ -682,7 +692,7 @@ async def get_forecast(request: Request, range: str = "30"):
 
     # ── Горизонт «Год»: помесячный тренд по run-rate ───────────────────────────
     if range == "year":
-        return await _forecast_year(db, user_id, today, B0_now, r_var, reserve_names)
+        return await _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liability_names)
 
     # ── Следующий доход (план; может быть в следующем месяце) ──────────────────
     fut = await plan_window(db, user_id, today, today + timedelta(days=75))
@@ -729,7 +739,7 @@ async def get_forecast(request: Request, range: str = "30"):
         is_var = (at == "Расход" and cat_et == "variable" and cat_ch not in EPISODIC_CHARS)
         if af == "Доход":
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
-        elif at in ("Расход", "Обязательства"):
+        elif at == "Расход" or at in liability_names:
             if not is_var:
                 plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
                 if d < next_income_date:

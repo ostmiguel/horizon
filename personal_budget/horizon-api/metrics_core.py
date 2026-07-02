@@ -150,12 +150,15 @@ async def monthly_fixed_income_sum(db, user_id: str, year: int, month: int) -> f
 
 
 async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
+    # Расход + тело долга (платёж в любой счёт-Пассив = погашение обязательства).
     val = await db.fetchval("""
         SELECT COALESCE(SUM(amount), 0) FROM transactions
         WHERE user_id=$1
           AND EXTRACT(YEAR  FROM date)=$2
           AND EXTRACT(MONTH FROM date)=$3
-          AND account_to IN ('Расход', 'Обязательства')
+          AND (account_to = 'Расход'
+               OR account_to IN (SELECT name FROM accounts
+                                 WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
     """, user_id, year, month)
     return float(val)
 
@@ -231,7 +234,10 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
             or r.get("cat_character") in EPISODIC_CHARS
         )
     )
-    F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") == "Обязательства")
+    # Тело долга = плановый платёж в ЛЮБОЙ счёт-Пассив (каждое обязательство —
+    # свой счёт). Раньше был жёстко один пул 'Обязательства'.
+    liability_names = {name for name, a in accs.items() if a["account_type"] == "Пассив"}
+    F_remain += sum(float(r["amount"]) for r in plan_rows if r.get("account_to") in liability_names)
 
     reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
     R_topup = sum(
@@ -259,7 +265,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
             or r.get("cat_character") in EPISODIC_CHARS
         )
     )
-    F_before += sum(float(r["amount"]) for r in win if r.get("account_to") == "Обязательства")
+    F_before += sum(float(r["amount"]) for r in win if r.get("account_to") in liability_names)
     R_before = sum(float(r["amount"]) for r in win if r.get("account_to") in reserve_names)
     # Низшая точка = КОНЕЦ дня ПЕРЕД доходом (в день зарплаты деньги приходят —
     # не считаем ещё один день трат до поступления). Поэтому дней спада = N−1.
@@ -289,6 +295,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
         "r_var": r_var, "sigma_day": sigma_day,
         "V_remain": V_remain, "sigma_remain": sigma_remain,
         "plan_rows": plan_rows, "reserve_names": reserve_names,
+        "liability_names": liability_names,
         "I_remain": I_remain, "F_remain": F_remain, "R_topup": R_topup,
         # trough «до следующего дохода»
         "next_income_date": next_income_date, "days_to_income": days_to_income,
