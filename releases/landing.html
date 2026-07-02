@@ -101,7 +101,7 @@
               <div class="tnum" id="heroSum" style="font-family:Sora,sans-serif;font-size:clamp(32px,4vw,44px);font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:6px">142 800 <span style="font-size:22px;color:#5E7088;font-weight:500">₽</span></div>
             </div>
             <div id="heroBadge" style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:6px 11px;border-radius:999px;white-space:nowrap;color:#A85218;background:rgba(224,123,57,.12)">
-              <span id="heroBadgeDot" style="width:6px;height:6px;border-radius:50%;background:#E07B39"></span><span id="heroBadgeTxt">Узкое место 3-го</span>
+              <span id="heroBadgeDot" style="width:6px;height:6px;border-radius:50%;background:#E07B39"></span><span id="heroBadgeTxt">На грани 3-го</span>
             </div>
           </div>
 
@@ -293,7 +293,7 @@
       <div style="padding:24px">
         <div style="font-size:13px;color:#5E7088;font-weight:500">Свободно до следующего дохода</div>
         <div class="tnum" style="font-family:Sora,sans-serif;font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:6px;color:#A85218">8 200 <span style="font-size:20px;color:#B26A41;font-weight:500">₽</span></div>
-        <div style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#7A3E17;background:rgba(224,123,57,.13);padding:5px 11px;border-radius:999px;margin-top:12px"><span style="width:6px;height:6px;border-radius:50%;background:#E07B39"></span>Туго, но под контролем</div>
+        <div style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#7A3E17;background:rgba(224,123,57,.13);padding:5px 11px;border-radius:999px;margin-top:12px"><span style="width:6px;height:6px;border-radius:50%;background:#E07B39"></span>На грани</div>
         <div style="font-size:12.5px;color:#93A1B5;margin-top:12px;line-height:1.5">Без новых трат дотянете до дохода с запасом 2 дня.</div>
         <div style="margin-top:20px;font-size:12.5px;font-weight:600;color:#5E7088;margin-bottom:12px">Шаги, которые восстановят запас</div>
         <div style="display:flex;flex-direction:column;gap:10px">
@@ -553,7 +553,7 @@ function renderHero() {
   } else {
     badge.style.color = '#A85218'; badge.style.background = 'rgba(224,123,57,.12)';
     document.getElementById('heroBadgeDot').style.background = '#E07B39';
-    text('heroBadgeTxt', year ? 'В графике' : 'Узкое место 3-го');
+    text('heroBadgeTxt', year ? 'В графике' : 'На грани 3-го');
     sumEl.innerHTML = '142 800 <span style="font-size:22px;color:#5E7088;font-weight:500">₽</span>';
     if (year) { badge.style.color = '#0A1A10'; badge.style.background = 'linear-gradient(135deg,#C6F25A,#9FD630)'; document.getElementById('heroBadgeDot').style.background = '#0A1A10'; }
   }
