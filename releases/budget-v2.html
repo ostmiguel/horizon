@@ -3505,6 +3505,12 @@ function renderLoansPage() {
   const debtsOwed   = _debtsData.reduce((s, d) => s + (oblOwed(d.name) ?? (+d.current_balance || 0)), 0);
   const totalOwed   = creditsOwed + debtsOwed;
 
+  // Закрытые обязательства (остаток ~0) прячем, показываем по тумблеру.
+  const isClosedObl = name => { const o = oblOwed(name); return o != null && o < 1; };
+  const closedCount = _loansData.filter(l => isClosedObl(l.name)).length + _debtsData.filter(d => isClosedObl(d.name)).length;
+  const showClosed = !!window._showClosedObl;
+  const closedToggle = closedCount ? `<div style="margin:0 0 16px"><button onclick="toggleClosedObl()" style="font-size:12px;padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">${showClosed ? 'Скрыть закрытые' : `Показать закрытые · ${closedCount}`}</button></div>` : '';
+
   // Sort by strategy
   const sorted = [...loans];
   if (_loanStrategy === 'snowball') sorted.sort((a,b) => +a.current_balance - +b.current_balance);
@@ -3592,10 +3598,12 @@ function renderLoansPage() {
   ${renderWhatIfBlock(loans, sorted)}
 
   <div class="loans-grid" id="loansGrid">
-    ${sorted.map((loan, idx) => renderLoanCard(loan, idx)).join('')}
+    ${sorted.filter(l => showClosed || !isClosedObl(l.name)).map((loan, idx) => renderLoanCard(loan, idx)).join('')}
   </div>
 
-  ${renderDebtsSection()}
+  ${renderDebtsSection(showClosed)}
+
+  ${closedToggle}
 
   <div class="card">
     <div class="card-head"><span class="card-title">Динамика снижения долга</span></div>
@@ -4137,10 +4145,16 @@ async function schedRecalcConfirm() {
 }
 
 // ── Add/Edit Loan ──
+function toggleClosedObl() {
+  window._showClosedObl = !window._showClosedObl;
+  renderLoansPage();
+}
+
 // ── Долги (обязательства без процентов) ──────────────────────────────────────
-function renderDebtsSection() {
-  if (!_debtsData.length) return '';
-  const rows = _debtsData.map(d => `
+function renderDebtsSection(showClosed) {
+  const list = _debtsData.filter(d => { const o = oblOwed(d.name); return showClosed || o == null || o >= 1; });
+  if (!list.length) return '';
+  const rows = list.map(d => `
     <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border)">
       <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
       <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:var(--text3)">заём без процентов</div></div>
