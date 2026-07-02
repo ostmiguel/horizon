@@ -45,7 +45,7 @@ async def generate_loan_plan(conn, user_id, year, month) -> int:
     """, user_id)
 
     loan_rows = await conn.fetch("""
-        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.account_from
+        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.account_from, l.account_name
         FROM loan_schedule ls
         JOIN loans l ON ls.loan_id = l.id
         WHERE l.user_id = $1
@@ -67,11 +67,12 @@ async def generate_loan_plan(conn, user_id, year, month) -> int:
     created = 0
     for lr in loan_rows:
         acc = lr["account_from"] or fallback_acc
+        liab_acc = lr["account_name"] or "Обязательства"   # тело → счёт кредита (fallback: пул)
         if cat_principal and lr["principal"] and float(lr["principal"]) > 0:
             await conn.execute("""
                 INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                VALUES ($1,$2,$3,$4,'Обязательства',$5,'loan_schedule')
-            """, user_id, lr["date"], float(lr["principal"]), acc, cat_principal)
+                VALUES ($1,$2,$3,$4,$5,$6,'loan_schedule')
+            """, user_id, lr["date"], float(lr["principal"]), acc, liab_acc, cat_principal)
             created += 1
         if cat_interest and lr["interest"] and float(lr["interest"]) > 0:
             await conn.execute("""

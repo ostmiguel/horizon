@@ -190,7 +190,7 @@ async def generate_plan_from_loans(
     fallback_acc = await _first_asset(db, user_id)
 
     rows = await db.fetch("""
-        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.name, l.account_from
+        SELECT ls.loan_id, ls.date, ls.principal, ls.interest, l.name, l.account_from, l.account_name
         FROM loan_schedule ls
         JOIN loans l ON ls.loan_id = l.id
         WHERE l.user_id = $1
@@ -213,11 +213,12 @@ async def generate_plan_from_loans(
         for r in rows:
             pay_date = r["date"]
             acc = r["account_from"] or fallback_acc
+            liab_acc = r["account_name"] or "Обязательства"   # тело → счёт кредита (fallback: старый пул)
             if cat_principal and r["principal"] and float(r["principal"]) > 0:
                 await db.execute("""
                     INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                    VALUES ($1,$2,$3,$4,'Обязательства',$5,'loan_schedule')
-                """, user_id, pay_date, float(r["principal"]), acc, cat_principal)
+                    VALUES ($1,$2,$3,$4,$5,$6,'loan_schedule')
+                """, user_id, pay_date, float(r["principal"]), acc, liab_acc, cat_principal)
                 created += 1
             if cat_interest and r["interest"] and float(r["interest"]) > 0:
                 await db.execute("""
