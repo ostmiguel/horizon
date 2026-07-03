@@ -3499,7 +3499,7 @@ function renderWhatIfBlock(loans, sorted) {
   const CAP = 'font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#93A1B5';
   return `<div style="background:#fff;border-radius:18px;padding:22px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 10px 26px -14px rgba(15,36,60,.16)">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
-    <div style="font-family:Sora;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C">Досрочное закрытие</div>
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C">Досрочное закрытие</div>
     ${result ? '<span style="font-size:11px;font-weight:600;color:#4C7A1B;background:rgba(94,155,30,.12);padding:4px 10px;border-radius:999px">✓ Виден потенциал</span>' : ''}
   </div>
 
@@ -3512,8 +3512,8 @@ function renderWhatIfBlock(loans, sorted) {
       <input type="number" min="0" max="50000" step="500" value="${extra}"
         id="loanExtraVal" inputmode="numeric"
         oninput="syncLoanExtra(this.value)" onchange="onLoanExtraChange(this.value)"
-        style="width:76px;border:0;background:transparent;font-family:Sora;font-weight:700;font-size:16px;color:#0F243C;text-align:right;outline:none;-moz-appearance:textfield">
-      <span style="font-family:Sora;font-weight:700;font-size:16px;color:#93A1B5">₽</span>
+        style="width:76px;border:0;background:transparent;font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#0F243C;text-align:right;outline:none;-moz-appearance:textfield">
+      <span style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#93A1B5">₽</span>
     </div>
     ${_loanStrategy !== 'none' ? '<span style="font-size:11px;color:#93A1B5;white-space:nowrap">Стратегия: ' + stratName + '</span>' : ''}
   </div>
@@ -3522,12 +3522,12 @@ function renderWhatIfBlock(loans, sorted) {
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
     <div style="background:#F5F8FB;border-radius:13px;padding:14px 15px">
       <div style="${CAP}">Без доп. платежа</div>
-      <div style="font-family:Sora;font-weight:600;font-size:16px;color:#0F243C;margin-top:9px;text-transform:capitalize">${result.withoutDate ? result.withoutDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#0F243C;margin-top:9px;text-transform:capitalize">${result.withoutDate ? result.withoutDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div>
       <div style="font-size:11px;color:#93A1B5;margin-top:4px">переплата ${fmt(calcInterestRemaining(loans))}</div>
     </div>
     <div style="background:rgba(94,155,30,.08);border-radius:13px;padding:14px 15px;border:1px solid rgba(94,155,30,.22)">
       <div style="${CAP};color:#5E9B1E">С доп. платежом ${fmt(extra)}</div>
-      <div style="font-family:Sora;font-weight:600;font-size:16px;color:#4C7A1B;margin-top:9px;text-transform:capitalize">${result.withDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#4C7A1B;margin-top:9px;text-transform:capitalize">${result.withDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</div>
       <div style="font-size:11px;color:#4C7A1B;margin-top:4px">экономия ${fmt(result.savedInterest)} · ${result.savedMonths} мес.</div>
     </div>
   </div>
@@ -3538,13 +3538,13 @@ function renderWhatIfBlock(loans, sorted) {
     <div style="display:flex;gap:11px;margin-bottom:${i<result.instrSteps.length-1?'14px':'0'};padding-bottom:${i<result.instrSteps.length-1?'14px':'0'};border-bottom:${i<result.instrSteps.length-1?'1px solid rgba(15,36,60,.07)':'none'}">
       <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#C6F25A,#9FD630);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#0A1A10;font-weight:700">${i+1}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-family:Sora;font-weight:600;font-size:13px;color:#0F243C;margin-bottom:3px">${esc(step.loan.name)}</div>
+        <div style="font-family:Sora,sans-serif;font-weight:600;font-size:13px;color:#0F243C;margin-bottom:3px">${esc(step.loan.name)}</div>
         <div style="font-size:12px;color:#5A6B82;line-height:1.55">
           Добавляй <b style="color:#0F243C">${fmt(step.extra)}</b> в колонку «Доп. платёж» начиная со следующего платежа.<br>
           Закрытие: <b style="color:#0F243C">${step.closeDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</b>
           ${i < result.instrSteps.length-1 ? '<br>После закрытия направь <b style="color:#0F243C">' + fmt(step.nextExtra) + '</b> на следующий кредит' : ''}
         </div>
-        <button onclick="openScheduleModal(${step.loan.id})" style="margin-top:8px;padding:5px 12px;font:500 11px Inter;background:#fff;border:1px solid rgba(15,36,60,.12);border-radius:9px;color:#0F243C;cursor:pointer">Открыть график</button>
+        <button onclick="openScheduleModal(${step.loan.id})" style="margin-top:8px;padding:5px 12px;font:500 11px Inter,sans-serif;background:#fff;border:1px solid rgba(15,36,60,.12);border-radius:9px;color:#0F243C;cursor:pointer">Открыть график</button>
       </div>
     </div>`).join('')}
   </div>` : `
@@ -3595,11 +3595,11 @@ function renderLoansPage() {
 
   const mc = document.getElementById('mainContent');
   mc.innerHTML = `
-<div style="padding:26px 30px 56px"><div style="width:100%;max-width:1040px;margin:0 auto;display:flex;flex-direction:column;gap:18px">
+<div style="padding:20px 24px;display:flex;flex-direction:column;gap:18px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
     <div>
-      <h1 style="font-family:Sora;font-size:26px;font-weight:600;letter-spacing:-.02em;color:#0F243C">Кредиты</h1>
-      <div style="color:#5A6B82;font-size:13.5px;margin-top:4px">${loans.length} кредит${loans.length===1?'':'а'}${_debtsData.length?` · ${_debtsData.length} долг${_debtsData.length===1?'':(_debtsData.length<5?'а':'ов')}`:''} · общий долг ${fmt(totalOwed)}</div>
+      <div class="page-title">Кредиты</div>
+      <div style="color:var(--text3);font-size:12px;margin-top:2px">${loans.length} кредит${loans.length===1?'':'а'}${_debtsData.length?` · ${_debtsData.length} долг${_debtsData.length===1?'':(_debtsData.length<5?'а':'ов')}`:''} · общий долг ${fmt(totalOwed)}</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <div style="position:relative" id="stratWrap">
@@ -3645,25 +3645,25 @@ function renderLoansPage() {
   <div class="loans-kpis">
     <div style="${PCARD}">
       <div style="${CAP}">Общий долг</div>
-      <div style="font-family:Sora;font-weight:700;font-size:29px;letter-spacing:-.02em;color:#C05F3B;margin-top:10px;line-height:1">${fmt(totalOwed)}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:700;font-size:29px;letter-spacing:-.02em;color:#C05F3B;margin-top:10px;line-height:1">${fmt(totalOwed)}</div>
       ${(creditsOwed>0||debtsOwed>0)?`<div style="font-size:12px;color:#93A1B5;margin-top:10px">кредиты ${fmt(creditsOwed)} · долги ${fmt(debtsOwed)}</div>`:''}
     </div>
     <div style="${PCARD}">
       <div style="${CAP}">Платежей в месяц</div>
-      <div style="font-family:Sora;font-weight:700;font-size:29px;letter-spacing:-.02em;color:#0F243C;margin-top:10px;line-height:1">${fmt(totalPayment)}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:700;font-size:29px;letter-spacing:-.02em;color:#0F243C;margin-top:10px;line-height:1">${fmt(totalPayment)}</div>
       <div style="font-size:12px;color:#93A1B5;margin-top:10px">обязательные минимальные</div>
     </div>
     <div style="${PCARD}">
       <div style="${CAP}">Закрытие всех</div>
-      <div style="font-family:Sora;font-weight:600;font-size:22px;letter-spacing:-.01em;color:#0F243C;margin-top:12px;line-height:1.1;text-transform:capitalize">${latestClose ? latestClose.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:22px;letter-spacing:-.01em;color:#0F243C;margin-top:12px;line-height:1.1;text-transform:capitalize">${latestClose ? latestClose.toLocaleDateString('ru-RU',{month:'long',year:'numeric'}) : '—'}</div>
       <div style="font-size:12px;color:#93A1B5;margin-top:11px">по текущему графику</div>
     </div>
     <div style="${PCARD}">
       <div style="${CAP}">Переплата ${intMode==='left'?'осталась':'выплачена'}</div>
-      <div style="font-family:Sora;font-weight:700;font-size:29px;letter-spacing:-.02em;color:${intMode==='left'?'#C05F3B':'#5E9B1E'};margin-top:10px;line-height:1">${fmt(intMode==='left'?interestRemaining:interestPaid)||'—'}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:700;font-size:29px;letter-spacing:-.02em;color:${intMode==='left'?'#C05F3B':'#5E9B1E'};margin-top:10px;line-height:1">${fmt(intMode==='left'?interestRemaining:interestPaid)||'—'}</div>
       <div style="display:inline-flex;gap:3px;background:#EEF2F7;border-radius:999px;padding:3px;margin-top:12px">
-        <button onclick="setLoanIntMode('left')" style="border:0;cursor:pointer;font:600 11px Inter;padding:5px 12px;border-radius:999px;${intMode==='left'?segOn:segOff}">осталась</button>
-        <button onclick="setLoanIntMode('paid')" style="border:0;cursor:pointer;font:600 11px Inter;padding:5px 12px;border-radius:999px;${intMode==='paid'?segOn:segOff}">выплачена</button>
+        <button onclick="setLoanIntMode('left')" style="border:0;cursor:pointer;font:600 11px Inter,sans-serif;padding:5px 12px;border-radius:999px;${intMode==='left'?segOn:segOff}">осталась</button>
+        <button onclick="setLoanIntMode('paid')" style="border:0;cursor:pointer;font:600 11px Inter,sans-serif;padding:5px 12px;border-radius:999px;${intMode==='paid'?segOn:segOff}">выплачена</button>
       </div>
     </div>
   </div>
@@ -3679,10 +3679,10 @@ function renderLoansPage() {
   ${closedToggle}
 
   <div style="${PCARD};padding:22px">
-    <div style="font-family:Sora;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C;margin-bottom:16px">Динамика снижения долга</div>
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C;margin-bottom:16px">Динамика снижения долга</div>
     <div style="height:220px"><canvas id="chartLoans" role="img" aria-label="График снижения долга по кредитам">Снижение долга по кредитам</canvas></div>
   </div>
-</div></div>`;
+</div>`;
 
   renderLoansChart(loans);
 }
@@ -3712,7 +3712,7 @@ function renderLoanCard(loan, idx) {
   return `<div style="background:#fff;border-radius:18px;padding:22px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 10px 26px -14px rgba(15,36,60,.16);display:flex;flex-direction:column;gap:18px">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
       <div style="min-width:0">
-        <div style="font-family:Sora;font-weight:600;font-size:18px;letter-spacing:-.01em;color:#0F243C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(loan.name)}</div>
+        <div style="font-family:Sora,sans-serif;font-weight:600;font-size:18px;letter-spacing:-.01em;color:#0F243C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(loan.name)}</div>
         <div style="font-size:12px;color:#93A1B5;margin-top:3px">${rateStr} · ${paidCount} из ${totalPay} платежей</div>
       </div>
       ${stratLabel ? `<span style="flex:none;font-size:11px;font-weight:600;color:#0A1A10;background:linear-gradient(135deg,#C6F25A,#9FD630);padding:5px 11px;border-radius:999px">${stratLabel}</span>` : ''}
@@ -3720,41 +3720,41 @@ function renderLoanCard(loan, idx) {
 
     <div>
       <div style="${CAP}">Остаток · из ${fmt(+loan.initial_amount)}</div>
-      <div style="font-family:Sora;font-weight:700;font-size:34px;letter-spacing:-.03em;line-height:1;margin-top:8px;color:#0F243C">${fmt(displayBalance)}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:700;font-size:34px;letter-spacing:-.03em;line-height:1;margin-top:8px;color:#0F243C">${fmt(displayBalance)}</div>
     </div>
 
     <div>
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5A6B82;margin-bottom:8px"><span>Погашено ${paidCount} из ${totalPay}</span><b style="font-family:Sora;font-weight:600;color:#0F243C">${paidPct}%</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:#5A6B82;margin-bottom:8px"><span>Погашено ${paidCount} из ${totalPay}</span><b style="font-family:Sora,sans-serif;font-weight:600;color:#0F243C">${paidPct}%</b></div>
       <div style="height:8px;border-radius:99px;background:rgba(15,36,60,.08);overflow:hidden"><i style="display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#22B0A0,#B4DE3C);width:${paidPct}%"></i></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div style="${TILE}">
         <div style="${CAP}">Переплата</div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px"><span style="font-size:12px;color:#5A6B82">выплачено</span><b style="font-family:Sora;font-weight:600;font-size:14px;color:#5E9B1E">${loanIntPaid>0?fmt(loanIntPaid):'—'}</b></div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px"><span style="font-size:12px;color:#5A6B82">осталось</span><b style="font-family:Sora;font-weight:600;font-size:14px;color:#C05F3B">${loanIntRemaining>0?fmt(loanIntRemaining):'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px"><span style="font-size:12px;color:#5A6B82">выплачено</span><b style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#5E9B1E">${loanIntPaid>0?fmt(loanIntPaid):'—'}</b></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:6px"><span style="font-size:12px;color:#5A6B82">осталось</span><b style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#C05F3B">${loanIntRemaining>0?fmt(loanIntRemaining):'—'}</b></div>
       </div>
       <div style="${TILE}">
         <div style="${CAP}">Следующий платёж</div>
         ${schedFilled && nextRow ? `
-        <div style="font-family:Sora;font-weight:700;font-size:18px;letter-spacing:-.01em;margin-top:8px;color:#0F243C">${fmt(+nextRow.payment)}</div>
+        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;letter-spacing:-.01em;margin-top:8px;color:#0F243C">${fmt(+nextRow.payment)}</div>
         <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:600;color:#4C7A1B;background:rgba(94,155,30,.12);padding:3px 8px;border-radius:7px">тело ${fmt(+nextRow.principal)}</span>
           <span style="font-size:11px;font-weight:600;color:#A85E78;background:rgba(193,124,149,.16);padding:3px 8px;border-radius:7px">% ${fmt(+nextRow.interest)}</span>
         </div>` : `
-        <div style="font-family:Sora;font-weight:700;font-size:18px;margin-top:8px;color:#0F243C">${fmt(+loan.monthly_payment)}</div>
+        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;margin-top:8px;color:#0F243C">${fmt(+loan.monthly_payment)}</div>
         <div style="font-size:11px;color:#2AA7CC;margin-top:6px">Заполни график для точных данных</div>`}
       </div>
     </div>
 
     <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(15,36,60,.07);padding-top:14px;font-size:12px">
-      <div><span style="color:#93A1B5">Ближайший платёж</span><br><b style="font-family:Sora;font-weight:600;color:#0F243C">${nextDate}</b></div>
-      <div style="text-align:right"><span style="color:#93A1B5">Дата закрытия</span><br><b style="font-family:Sora;font-weight:600;color:#0F243C">${closeDate}</b></div>
+      <div><span style="color:#93A1B5">Ближайший платёж</span><br><b style="font-family:Sora,sans-serif;font-weight:600;color:#0F243C">${nextDate}</b></div>
+      <div style="text-align:right"><span style="color:#93A1B5">Дата закрытия</span><br><b style="font-family:Sora,sans-serif;font-weight:600;color:#0F243C">${closeDate}</b></div>
     </div>
 
     <div style="display:flex;gap:10px">
-      <button onclick="openScheduleModal(${loan.id})" style="flex:1;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:11px;padding:10px;font:500 13px Inter;color:#0F243C;cursor:pointer">${schedFilled ? 'График платежей' : 'Заполнить график'}</button>
-      <button onclick="openEditLoan(${loan.id})" style="flex:1;background:#fff;border:1px solid rgba(15,36,60,.12);border-radius:11px;padding:10px;font:500 13px Inter;color:#5A6B82;cursor:pointer">Редактировать</button>
+      <button onclick="openScheduleModal(${loan.id})" style="flex:1;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:11px;padding:10px;font:500 13px Inter,sans-serif;color:#0F243C;cursor:pointer">${schedFilled ? 'График платежей' : 'Заполнить график'}</button>
+      <button onclick="openEditLoan(${loan.id})" style="flex:1;background:#fff;border:1px solid rgba(15,36,60,.12);border-radius:11px;padding:10px;font:500 13px Inter,sans-serif;color:#5A6B82;cursor:pointer">Редактировать</button>
     </div>
   </div>`;
 }
@@ -4244,13 +4244,13 @@ function renderDebtsSection(showClosed) {
   const rows = list.map((d,i) => `
     <div style="display:flex;align-items:center;gap:13px;padding:14px 0;${i>0?'border-top:1px solid rgba(15,36,60,.07)':''}">
       <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
-      <div style="flex:1;min-width:0"><div style="font-family:Sora;font-weight:600;font-size:14.5px;color:#0F243C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:#93A1B5;margin-top:1px">заём без процентов</div></div>
-      <div style="font-family:Sora;font-weight:600;font-size:16px;color:#C05F3B;font-variant-numeric:tabular-nums">${fmt(oblOwed(d.name) ?? (+d.current_balance))}</div>
-      <button onclick="repayDebt(${d.id})" style="font:500 12px Inter;padding:6px 13px;background:#F5F8FB;border:1px solid rgba(15,36,60,.1);border-radius:9px;color:#0F243C;cursor:pointer">Погасил</button>
+      <div style="flex:1;min-width:0"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:14.5px;color:#0F243C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:#93A1B5;margin-top:1px">заём без процентов</div></div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#C05F3B;font-variant-numeric:tabular-nums">${fmt(oblOwed(d.name) ?? (+d.current_balance))}</div>
+      <button onclick="repayDebt(${d.id})" style="font:500 12px Inter,sans-serif;padding:6px 13px;background:#F5F8FB;border:1px solid rgba(15,36,60,.1);border-radius:9px;color:#0F243C;cursor:pointer">Погасил</button>
       <button title="Действия" onclick="debtMenu(this,${d.id})" style="border:0;background:transparent;color:#93A1B5;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1">⋮</button>
     </div>`).join('');
   return `<div style="background:#fff;border-radius:18px;padding:20px 22px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 10px 26px -14px rgba(15,36,60,.16)">
-    <div style="font-family:Sora;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C;margin-bottom:6px">Долги · без процентов</div>
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C;margin-bottom:6px">Долги · без процентов</div>
     ${rows}
   </div>`;
 }
@@ -5334,9 +5334,9 @@ function ownerStatsCardHtml(s){
     <div class="card-head"><span class="card-title">Пользователи (владелец)</span></div>
     <div class="card-body" style="padding:0">
       <div style="display:flex;border-bottom:1px solid var(--border)">
-        <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--border)"><div style="font-family:Sora;font-weight:700;font-size:26px;color:var(--text)">${s.total}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">всего</div></div>
-        <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--border)"><div style="font-family:Sora;font-weight:700;font-size:26px;color:#1FA497">+${s.last_7_days}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">за 7 дней</div></div>
-        <div style="flex:1;padding:14px 12px;text-align:center"><div style="font-family:Sora;font-weight:700;font-size:26px;color:#7FA81E">${s.free_forever}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">free forever</div></div>
+        <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--border)"><div style="font-family:Sora,sans-serif;font-weight:700;font-size:26px;color:var(--text)">${s.total}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">всего</div></div>
+        <div style="flex:1;padding:14px 12px;text-align:center;border-right:1px solid var(--border)"><div style="font-family:Sora,sans-serif;font-weight:700;font-size:26px;color:#1FA497">+${s.last_7_days}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">за 7 дней</div></div>
+        <div style="flex:1;padding:14px 12px;text-align:center"><div style="font-family:Sora,sans-serif;font-weight:700;font-size:26px;color:#7FA81E">${s.free_forever}</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px">free forever</div></div>
       </div>
       ${rows || '<div style="padding:14px 16px;font-size:12px;color:var(--text3)">Пока никого</div>'}
     </div>
@@ -7954,7 +7954,7 @@ function mobileBudgetSections(d) {
   const fixed  = d.rules.filter(r => r.account_to === 'Расход' || isLiabilityAcc(r.account_to));
   const ruleRow = (r, sign, color) => `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
     <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.name)}</div><div style="font-size:11.5px;color:var(--text2)">${r.day_of_month ? r.day_of_month + '-го числа' : 'ежемесячно'}</div></div>
-    <div style="font-family:Sora;font-weight:600;font-size:14px;color:${color};font-variant-numeric:tabular-nums">${sign}${f(ruleEff(r))}</div></div>`;
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:${color};font-variant-numeric:tabular-nums">${sign}${f(ruleEff(r))}</div></div>`;
   // Кредиты — плановые строки графика (source='loan_schedule'), тело+процент; как в Бюджете.
   const loanPlan = (d.plan || []).filter(p => p.source === 'loan_schedule').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const loanRowM = p => {
@@ -7963,7 +7963,7 @@ function mobileBudgetSections(d) {
       || (isLiabilityAcc(p.account_to) ? 'Кредит — тело' : 'Кредит — процент');
     return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
       <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div><div style="font-size:11.5px;color:var(--text2)">${d} · из графика кредита</div></div>
-      <div style="font-family:Sora;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums">−${f(p.amount)}</div></div>`;
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums">−${f(p.amount)}</div></div>`;
   };
   const rulesInner = income.map(r => ruleRow(r, '+', '#5E9B1E')).join('') + fixed.map(r => ruleRow(r, '−', '#bf7419')).join('') + loanPlan.map(loanRowM).join('');
   const rulesHtml = (income.length || fixed.length || loanPlan.length) ? card(noFirstBorder(rulesInner)) : '';
@@ -7980,7 +7980,7 @@ function mobileBudgetSections(d) {
     const over = budget > 0 && spent > budget;
     const bar = over ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#2AA7CC,#1FA497)';
     return `<div style="padding:11px 0;border-top:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:13.5px;font-weight:600;color:var(--text)">${esc(cat)}</div><div style="font-family:Sora;font-weight:600;font-size:13.5px;color:${over ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${f(spent)} <span style="color:${over ? '#C98A3A' : 'var(--text3)'};font-weight:500">/ ${f(budget)}</span></div></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font-size:13.5px;font-weight:600;color:var(--text)">${esc(cat)}</div><div style="font-family:Sora,sans-serif;font-weight:600;font-size:13.5px;color:${over ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${f(spent)} <span style="color:${over ? '#C98A3A' : 'var(--text3)'};font-weight:500">/ ${f(budget)}</span></div></div>
       <div style="height:6px;border-radius:99px;background:rgba(15,36,60,.07);margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;border-radius:99px;background:${bar}"></div></div></div>`;
   };
   const envInner = d.budgets.map(b => envRow(b.category, factByCat[b.category] || 0, +b.budget || 0)).join('');
@@ -8001,7 +8001,7 @@ function mobileBudgetSections(d) {
     return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--border)">
       <div style="width:32px;height:32px;border-radius:9px;background:rgba(143,190,30,.18);display:grid;place-items:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E7A12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18"/><path d="M8 2.5v4"/><path d="M16 2.5v4"/></svg></div>
       <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</div><div style="font-size:11.5px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">${dd} ${badge}</div></div>
-      <div style="font-family:Sora;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums;flex:none">−${f(p.amount)}</div></div>`;
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#bf7419;font-variant-numeric:tabular-nums;flex:none">−${f(p.amount)}</div></div>`;
   };
   const episHtml = events.length ? card(noFirstBorder(events.map(evRow).join(''))) : '';
 
@@ -8033,7 +8033,7 @@ async function mobileHome() {
   } catch (e) { main.innerHTML = '<div class="error-box" style="margin:20px">Ошибка загрузки</div>'; return; }
 
   const budgetBlock = `
-    <div style="display:flex;align-items:center;gap:10px;margin:20px 2px 2px"><div style="font-family:Sora;font-weight:600;font-size:16px;color:var(--text)">Бюджет на ${MONTHS[mo].toLowerCase()}</div><div style="flex:1;height:1px;background:var(--border)"></div></div>
+    <div style="display:flex;align-items:center;gap:10px;margin:20px 2px 2px"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:var(--text)">Бюджет на ${MONTHS[mo].toLowerCase()}</div><div style="flex:1;height:1px;background:var(--border)"></div></div>
     <div style="font-size:12px;color:var(--text3);margin:6px 2px 0;line-height:1.4">Сначала правила (что точно случится), затем повседневные (конверты).</div>
     ${mobileBudgetSections(bd)}
     <div style="text-align:center;font-size:11.5px;color:#B0BCC9;margin-top:18px">horizonapp.ru</div>`;
@@ -8066,13 +8066,13 @@ async function mobileHome() {
 
   const CARD = 'flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 12px;min-height:90px;display:flex;flex-direction:column';
   const LBL  = 'font-size:10.5px;font-weight:600;color:var(--text2);line-height:1.25;min-height:26px';
-  const VAL  = c => `font-family:Sora;font-weight:600;font-size:18px;color:${c};letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums;white-space:nowrap`;
+  const VAL  = c => `font-family:Sora,sans-serif;font-weight:600;font-size:18px;color:${c};letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums;white-space:nowrap`;
   // Чистый капитал — без прогресс-бара (непонятно «прогресс от чего»); вместо него — динамика за месяц.
   const ncCard = `<div style="${CARD}"><div style="${LBL}">Чистый капитал</div><div style="${VAL(ncNeg ? '#A8472F' : 'var(--text)')}">${ncDisp}</div>${ncD === null ? '' : `<div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${ncD >= 0 ? '#5E9B1E' : '#A8472F'}">${ncD >= 0 ? '▲' : '▼'} ${Math.abs(ncD).toFixed(0)}% за месяц</div>`}</div>`;
   const dsrCard = `<div style="${CARD}"><div style="${LBL}">Кредитная нагрузка</div><div style="${VAL(dsrV > 30 ? '#A8472F' : 'var(--text)')}">${dsrV} %</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:auto;overflow:hidden"><div style="height:100%;width:${Math.min(dsrV, 100)}%;border-radius:99px;background:${dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)'}"></div></div></div>`;
   const resLbl = resV >= 7 ? 'Высокая' : resV >= 4 ? 'Средняя' : 'Низкая';
   const resLblCol = resV >= 7 ? '#5E9B1E' : resV >= 4 ? '#C98A3A' : '#B4472E';
-  const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-top:7px"><div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:38px;height:38px;border-radius:50%;margin-top:-6px;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:28px;height:28px;border-radius:50%;background:var(--bg2)"></div></div></div><div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${resLblCol}">${resLbl}</div></div>`;
+  const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-top:7px"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:18px;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:38px;height:38px;border-radius:50%;margin-top:-6px;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:28px;height:28px;border-radius:50%;background:var(--bg2)"></div></div></div><div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${resLblCol}">${resLbl}</div></div>`;
 
   // График прогноза баланса — тот же renderBalanceChart, что на десктопе (SVG
   // адаптивный). Внутри карточки героя, под пояснением.
@@ -8103,13 +8103,13 @@ async function mobileHome() {
 
   main.innerHTML = `<div class="mfeed">
     <div id="mobMiniHero" style="position:fixed;top:0;left:0;right:0;z-index:150;background:rgba(255,255,255,.93);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:calc(env(safe-area-inset-top) + 8px) 16px 8px;display:flex;align-items:center;justify-content:space-between;transform:translateY(-110%);opacity:0;transition:transform .22s ease,opacity .22s ease">
-      <div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:12px;color:var(--text2);font-weight:600">Свободно</span><span style="font-family:Sora;font-weight:700;font-size:15px;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${neg ? '−' : ''}${f(v)} ₽</span></div>
+      <div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:12px;color:var(--text2);font-weight:600">Свободно</span><span style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums">${neg ? '−' : ''}${f(v)} ₽</span></div>
       <span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:${pill.col};background:${pill.bg};border:1px solid ${pill.bd};padding:3px 9px;border-radius:999px"><span style="width:5px;height:5px;border-radius:50%;background:${pill.dot}"></span>${pill.txt}</span>
     </div>
     ${mobileTopHeader()}
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow)">
       <div style="font-size:12px;color:var(--text2);font-weight:500"><span style="color:var(--text);font-weight:600">Свободно</span> · до следующего дохода</div>
-      <div style="font-family:Sora;font-weight:700;font-size:46px;letter-spacing:-.03em;line-height:1;margin:8px 0 0;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums;white-space:nowrap">${neg ? '−' : ''}${f(v)} <span style="font-size:22px;color:${neg ? '#A8472F' : 'var(--text2)'};font-weight:500${neg ? ';opacity:.65' : ''}">₽</span></div>
+      <div style="font-family:Sora,sans-serif;font-weight:700;font-size:46px;letter-spacing:-.03em;line-height:1;margin:8px 0 0;color:${neg ? '#A8472F' : 'var(--text)'};font-variant-numeric:tabular-nums;white-space:nowrap">${neg ? '−' : ''}${f(v)} <span style="font-size:22px;color:${neg ? '#A8472F' : 'var(--text2)'};font-weight:500${neg ? ';opacity:.65' : ''}">₽</span></div>
       <div style="display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:${pill.col};background:${pill.bg};border:1px solid ${pill.bd};padding:6px 12px;border-radius:999px;margin-top:13px"><span style="width:6px;height:6px;border-radius:50%;background:${pill.dot}"></span>${pill.txt}</div>
       <div style="margin-top:12px;font-size:12.5px;color:var(--text2);line-height:1.45">${heroLine}</div>
       ${chartBlock}
@@ -8141,7 +8141,7 @@ async function mobileBudget() {
   catch (e) { main.innerHTML = '<div class="error-box" style="margin:20px">Ошибка загрузки</div>'; return; }
   main.innerHTML = `<div class="mfeed">
     ${mobileTopHeader()}
-    <div style="font-family:Sora;font-weight:600;font-size:18px;color:var(--text);margin:4px 2px 0">Бюджет на ${MONTHS[mo].toLowerCase()}</div>
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:18px;color:var(--text);margin:4px 2px 0">Бюджет на ${MONTHS[mo].toLowerCase()}</div>
     <div style="font-size:12px;color:var(--text3);margin:6px 2px 0;line-height:1.4">Сначала правила (что точно случится), затем повседневные (конверты).</div>
     ${mobileBudgetSections(bd)}
     <div style="text-align:center;font-size:11.5px;color:#B0BCC9;margin-top:18px">horizonapp.ru</div>
