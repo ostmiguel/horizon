@@ -643,6 +643,14 @@ body {
 
 
 /* ── LOANS PAGE ── */
+/* Ползунок доп. платежа — трек как у прогресс-баров: незаполнено серое, заполнено teal→lime.
+   Заполнение webkit задаётся inline-градиентом (обновляется JS), FF — ::-moz-range-progress. */
+.hz-range { -webkit-appearance:none; appearance:none; height:8px; border-radius:99px; outline:none; cursor:pointer; }
+.hz-range::-webkit-slider-runnable-track { height:8px; border-radius:99px; background:transparent; }
+.hz-range::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:18px; height:18px; margin-top:-5px; border-radius:50%; background:#fff; border:2px solid #1FA497; box-shadow:0 1px 3px rgba(15,36,60,.28); cursor:pointer; }
+.hz-range::-moz-range-track { height:8px; border-radius:99px; background:rgba(15,36,60,.08); }
+.hz-range::-moz-range-progress { height:8px; border-radius:99px; background:#22B0A0; }
+.hz-range::-moz-range-thumb { width:16px; height:16px; border:2px solid #1FA497; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(15,36,60,.28); cursor:pointer; }
 .loans-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:18px; }
 .loans-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; }
 .loan-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
@@ -3509,8 +3517,8 @@ function renderWhatIfBlock(loans, sorted) {
   <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:${result?'18px':'0'}">
     <span style="font-size:13px;color:#5A6B82;white-space:nowrap">Доп. платёж в месяц</span>
     <input type="range" min="0" max="50000" step="500" value="${extra}"
-      id="loanExtraSlider" oninput="onLoanExtraChange(this.value)"
-      style="flex:1;min-width:180px;accent-color:#22B0A0">
+      id="loanExtraSlider" class="hz-range" oninput="onLoanExtraChange(this.value)"
+      style="flex:1;min-width:180px;background:linear-gradient(90deg,#22B0A0,#B4DE3C) left/${(extra/50000*100).toFixed(1)}% 100% no-repeat, rgba(15,36,60,.08)">
     <div style="display:flex;align-items:center;gap:5px;background:#F5F8FB;border:1px solid rgba(15,36,60,.1);border-radius:11px;padding:6px 12px">
       <input type="number" min="0" max="50000" step="500" value="${extra}"
         id="loanExtraVal" inputmode="numeric"
@@ -3917,10 +3925,17 @@ document.addEventListener('click', e => {
   }
 });
 
+// Красит заполненную часть ползунка (webkit-трек через inline-градиент).
+function paintLoanRange(n) {
+  const sl = document.getElementById('loanExtraSlider');
+  if (sl) sl.style.background = `linear-gradient(90deg,#22B0A0,#B4DE3C) left/${(n/50000*100).toFixed(1)}% 100% no-repeat, rgba(15,36,60,.08)`;
+}
+
 function onLoanExtraChange(val) {
   window._loanExtra = Math.max(0, Math.min(50000, parseInt(val) || 0));
   const inp = document.getElementById('loanExtraVal');
   if (inp && document.activeElement !== inp) inp.value = window._loanExtra;
+  paintLoanRange(window._loanExtra);
   clearTimeout(window._loanExtraTimer);
   window._loanExtraTimer = setTimeout(() => renderLoansPage(), 350);
 }
@@ -3931,6 +3946,7 @@ function syncLoanExtra(val) {
   window._loanExtra = n;
   const sl = document.getElementById('loanExtraSlider');
   if (sl) sl.value = n;
+  paintLoanRange(n);
 }
 
 // ── Schedule Modal ──
