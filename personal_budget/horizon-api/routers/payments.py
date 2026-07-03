@@ -37,7 +37,7 @@ async def pending(request: Request):
     user_id = request.state.user_id
     db = request.state.db
     today = date.today()
-    cutoff = today - timedelta(days=WINDOW_DAYS)
+    yy, mm = today.year, today.month   # только текущий месяц, дата ≤ сегодня
 
     plan_rows = await db.fetch("""
         SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.category_id,
@@ -50,7 +50,9 @@ async def pending(request: Request):
         LEFT JOIN categories c  ON p.category_id = c.id
         LEFT JOIN accounts   a  ON a.user_id = p.user_id AND a.name = p.account_to
         WHERE p.user_id = $1
-          AND p.date <= $2 AND p.date > $3
+          AND p.date <= $2
+          AND EXTRACT(YEAR  FROM p.date)::int = $3
+          AND EXTRACT(MONTH FROM p.date)::int = $4
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
           AND p.account_from <> 'Доход'
           AND NOT EXISTS (
@@ -58,11 +60,18 @@ async def pending(request: Request):
             WHERE pc.user_id = p.user_id
               AND ( (pc.kind = 'rule' AND pc.ref_id = p.source_rule_id)
                  OR (pc.kind = 'plan' AND pc.ref_id = p.id) )
-              AND pc.year  = EXTRACT(YEAR  FROM p.date)::int
-              AND pc.month = EXTRACT(MONTH FROM p.date)::int
-          )
+              AND pc.year = $3 AND pc.month = $4 )
+          AND NOT EXISTS (
+            -- уже есть реальная операция в этом месяце по той же категории/счёту → оплачено
+            SELECT 1 FROM transactions t
+            WHERE t.user_id = p.user_id
+              AND EXTRACT(YEAR  FROM t.date)::int = $3
+              AND EXTRACT(MONTH FROM t.date)::int = $4
+              AND t.account_to = p.account_to
+              AND ( (p.category_id IS NOT NULL AND t.category_id = p.category_id)
+                 OR (p.category_id IS NULL AND t.account_from = p.account_from) ) )
         ORDER BY p.date
-    """, user_id, today, cutoff)
+    """, user_id, today, yy, mm)
 
     loan_rows = await db.fetch("""
         SELECT l.id AS loan_id, l.name AS loan_name, l.account_name,
@@ -72,9 +81,11 @@ async def pending(request: Request):
         WHERE l.user_id = $1 AND l.is_active = true
           AND ls.is_paid = false
           AND ls.date IS NOT NULL
-          AND ls.date <= $2 AND ls.date > $3
+          AND ls.date <= $2
+          AND EXTRACT(YEAR  FROM ls.date)::int = $3
+          AND EXTRACT(MONTH FROM ls.date)::int = $4
         ORDER BY ls.date
-    """, user_id, today, cutoff)
+    """, user_id, today, yy, mm)
 
     items = []
     for r in plan_rows:
@@ -123,7 +134,16 @@ async def status(request: Request, year: int, month: int):
     plan_rows = await db.fetch("""
         SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.source_rule_id,
                p.note, pr.name AS rule_name, c.subcategory, c.category AS cat_cat,
-               COALESCE(a.is_reserve, false) AS to_reserve
+               COALESCE(a.is_reserve, false) AS to_reserve,
+               EXISTS (
+                 SELECT 1 FROM transactions t
+                 WHERE t.user_id = p.user_id
+                   AND EXTRACT(YEAR  FROM t.date)::int = $2
+                   AND EXTRACT(MONTH FROM t.date)::int = $3
+                   AND t.account_to = p.account_to
+                   AND ( (p.category_id IS NOT NULL AND t.category_id = p.category_id)
+                      OR (p.category_id IS NULL AND t.account_from = p.account_from) )
+               ) AS has_tx
         FROM plan p
         LEFT JOIN plan_rules pr ON p.source_rule_id = pr.id
         LEFT JOIN categories c  ON p.category_id = c.id
@@ -143,10 +163,11 @@ async def status(request: Request, year: int, month: int):
     """, user_id, year, month)
     for r in plan_rows:
         d = dict(r)
+        st = "paid" if d["has_tx"] else ("pending" if d["date"] <= today else "upcoming")
         out.append({
             "title": _title(d), "amount": float(d["amount"]),
             "date": d["date"].isoformat(),
-            "status": "pending" if d["date"] <= today else "upcoming",
+            "status": st,
             "is_reserve": bool(d["to_reserve"]),
         })
 
