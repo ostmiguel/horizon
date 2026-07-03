@@ -90,7 +90,19 @@ async def seed_user_categories(db, user_id) -> int:
 
 
 async def seed_user_accounts(db, user_id) -> int:
-    """Больше НЕ сеет общий пул «Обязательства» — в новой модели каждое
-    обязательство создаётся как отдельный счёт-Пассив при добавлении кредита/
-    долга. Оставлено no-op для обратной совместимости вызова из auth.py."""
-    return 0
+    """Системный скелет счетов нового пользователя. Пул «Обязательства» больше НЕ
+    сеем (каждое обязательство — свой счёт-Пассив). Но сеем «Дебиторка» (Актив,
+    «мне должны») — общий системный счёт, чтобы скелет был одинаков у всех и
+    работал сценарий «дал в долг». Идемпотентно. Доход/Расход остаются
+    магическими строками, счетами не заводятся."""
+    n = await db.fetchval(
+        "SELECT count(*) FROM accounts WHERE user_id=$1 AND name='Дебиторка'", user_id)
+    if n and int(n) > 0:
+        return 0
+    await db.execute("""
+        INSERT INTO accounts
+          (user_id, name, account_type, color, initial_balance, include_in_balance,
+           is_reserve, is_cushion, used_for_payment)
+        VALUES ($1, 'Дебиторка', 'Актив', '#2AA7CC', 0, false, false, false, false)
+    """, user_id)
+    return 1

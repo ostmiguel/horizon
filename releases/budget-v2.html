@@ -1434,7 +1434,7 @@ function isLiabilityAcc(name) {
 function getFlowType(from, to) {
   if (from === 'Доход') return 'income';
   if (to === 'Расход')  return 'expense';
-  if (isLiabilityAcc(to) || isLiabilityAcc(from)) return 'obligation';
+  if (isLiabilityAcc(to) || isLiabilityAcc(from) || to === 'Дебиторка' || from === 'Дебиторка') return 'obligation';
   return 'transfer';
 }
 
