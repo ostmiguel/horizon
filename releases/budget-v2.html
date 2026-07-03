@@ -4804,7 +4804,7 @@ async function loadHelp() {
     ['budget',     '06', 'Бюджет'],
     ['forecast',   '07', 'Прогноз и кассовый разрыв'],
     ['loans',      '08', 'Кредиты и долги'],
-    ['ask',        '09', 'Спросить о платеже'],
+    ['ask',        '09', 'Платежи к подтверждению'],
     ['metrics',    '10', 'Метрики и формулы'],
     ['funds',      '11', 'Фонды и резервы'],
     ['scenarios',  '12', 'Сценарии'],
@@ -4856,15 +4856,15 @@ async function loadHelp() {
   const metricRows = [
     ['Свободно', 'Остаток на счетах − Платежи до дохода − Повседневные до дохода − Пополнение резерва', 'Минимум, который останется к кануну следующего дохода. Коридор ± показывает разброс (уверенность 80%).'],
     ['Чистый капитал', 'Активы − Обязательства', 'Реальное положение: сколько останется, если закрыть все долги.'],
-    ['Кредитная нагрузка (DSR)', 'Платежи по долгам за месяц ÷ Доход', 'Доля дохода на обслуживание долгов. Норма — ниже 30%.'],
-    ['Запас прочности', 'Ликвидные деньги ÷ Средние траты в месяц', 'На сколько месяцев хватит денег при текущем ритме трат.'],
-    ['Финансовая устойчивость', 'Сводный балл 0–5', 'Из пяти факторов: запас прочности, резерв, долговая нагрузка, норма сбережений, стабильность дохода.'],
+    ['Кредитная нагрузка (DSR)', 'Платежи по долгам за месяц ÷ Гарантированный доход', 'Доля дохода на обслуживание долгов. В знаменателе — только гарантированный (фиксированный) доход: зарплата. Разовые поступления (подарки, кэшбек, подработки) не учитываются. Норма — ниже 30%.'],
+    ['Запас прочности', 'Ликвидные деньги ÷ Средние траты в месяц', 'На сколько месяцев хватит денег при текущем ритме трат, если доход прекратится сегодня.'],
+    ['Финансовая устойчивость', '10 × (0,30·запас + 0,20·резерв + 0,20·долг + 0,15·сбережения + 0,15·доход)', 'Сводный балл 0–10 из пяти взвешенных факторов: запас прочности (30%), резервный фонд (20%), долговая нагрузка (20%), норма сбережений (15%), стабильность дохода (15%). Каждый фактор — от 0 до 1.'],
   ].map(m => `<div style="padding:14px 0;border-top:1px solid rgba(15,36,60,.07)"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap"><span style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#0F243C">${m[0]}</span><code style="font-size:12px;color:#1D7E97;background:rgba(42,167,204,.08);padding:3px 8px;border-radius:6px">${m[1]}</code></div><div style="${P};font-size:12.5px;margin-top:6px">${m[2]}</div></div>`).join('');
 
   // ── Сценарии ──
   const scen = [
     ['Купил продукты', 'Карта', 'Продукты', '#1D7E97', '#5E7A12', ['Операция «Расход» на сумму чека.', 'Со счёта «Карта», категория «Продукты».']],
-    ['Погасил кредит', 'Карта', 'Кредит', '#1D7E97', '#C24D3E', ['На Обзоре подтверди платёж в «Спросить о платеже» — операции создадутся сами.', 'Или вручную: тип «Долг» → «Погасил», карта → счёт кредита.']],
+    ['Погасил кредит', 'Карта', 'Кредит', '#1D7E97', '#C24D3E', ['На Обзоре подтверди платёж в «Платежи к подтверждению» — операции создадутся сами.', 'Или вручную: тип «Долг» → «Погасил», карта → счёт кредита.']],
     ['Отложил в резерв', 'Карта', 'Резерв', '#1D7E97', '#5E7A12', ['Операция «Перевод».', 'Из «Карты» в резервный счёт — баланс не меняется, это сбережение.']],
     ['Получил зарплату', 'Доход', 'Карта', '#5E7A12', '#1D7E97', ['Операция «Доход».', 'На счёт «Карта» — прогноз и «Свободно» пересчитаются.']],
   ].map(s => `<div style="${CARD};padding:18px;display:flex;flex-direction:column;gap:12px">
@@ -4955,7 +4955,7 @@ async function loadHelp() {
 
       <section id="h-forecast" style="scroll-margin-top:20px">
         ${hd('07', 'Прогноз и кассовый разрыв')}
-        <p style="${P};margin-bottom:14px">График баланса живёт на ${b('Обзоре')}: сплошная линия — факт, пунктир — прогноз. Окно — до следующего дохода с небольшим запасом; переключатель ${b('30 дней / Год')} меняет горизонт. Низшая точка — день перед зарплатой.</p>
+        <p style="${P};margin-bottom:14px">График баланса живёт на ${b('Обзоре')}: голубая сплошная линия — факт, лаймовый пунктир — прогноз. Окно — до следующего дохода с небольшим запасом; переключатель ${b('30 дней / Год')} меняет горизонт. Низшая точка — день перед зарплатой.</p>
         ${note('#C24D3E', `Если линия опускается ниже нуля — это ${b('кассовый разрыв')}: момент, когда денег не хватит на обязательный платёж. Перенеси необязательный платёж ближе к доходу или пополни счёт из резерва.`)}
       </section>
 
@@ -4964,16 +4964,16 @@ async function loadHelp() {
         <p style="${P};margin-bottom:14px">Каждое обязательство — отдельный счёт. ${b('Кредит')} — с процентами и графиком: заполни график из банка (тело и проценты по строкам), тогда учёт точный. ${b('Долг')} — без процентов (займ у физлица, беспроцентная рассрочка). Заводишь в разделе <span onclick="loadPage('loans')" style="${chip}">Кредиты → + Обязательство ›</span></p>
         <div style="${CARD}">
           <div style="${CAP}">Как отметить платёж по кредиту</div>
-          <div style="${P};font-size:13px;margin-top:10px">Проще всего — на Обзоре в ${b('«Спросить о платеже»')} подтвердить факт: создадутся операции (тело → счёт кредита, проценты → расход), отметится строка графика и обновится долг. Либо вручную: тип операции ${b('«Долг» → «Погасил»')}. А галочка ${b('«Оплачено»')} прямо в графике отмечает платёж на странице Кредиты.</div>
+          <div style="${P};font-size:13px;margin-top:10px">Проще всего — на Обзоре в ${b('«Платежи к подтверждению»')} подтвердить факт: создадутся операции (тело → счёт кредита, проценты → расход), отметится строка графика и обновится долг. Либо вручную: тип операции ${b('«Долг» → «Погасил»')}. А галочка ${b('«Оплачено»')} прямо в графике отмечает платёж на странице Кредиты.</div>
           <div style="${P};font-size:13px;margin-top:10px">Каждый платёж делится на ${b('тело')} и ${b('проценты')}. Досрочное закрытие уменьшает тело — а значит, и все будущие проценты. Блок ${b('«Досрочное закрытие»')} и стратегии («снежный ком» / «лавина») покажут, как быстрее закрыть долги и сколько сэкономить.</div>
         </div>
       </section>
 
       <section id="h-ask" style="scroll-margin-top:20px">
-        ${hd('09', 'Спросить о платеже')}
-        <p style="${P};margin-bottom:14px">На Обзоре карточка ${b('«Платежи к подтверждению»')} собирает плановые платежи текущего месяца, чей срок наступил. Подтверждаешь факт — создаётся реальная операция, и «Свободно» становится точным.</p>
+        ${hd('09', 'Платежи к подтверждению')}
+        <p style="${P};margin-bottom:14px">На Обзоре карточка ${b('«Платежи к подтверждению»')} собирает плановые платежи текущего месяца, чей срок наступил. Подтверждаешь факт — создаётся реальная операция, и «Свободно» корректируется.</p>
         <div style="${CARD};display:flex;flex-direction:column;gap:10px">
-          <div style="${P};font-size:13px"><b style="color:#0F243C">Оплатил</b> — создаёт операцию (для кредита — тело + проценты, отметка в графике, обновление долга).</div>
+          <div style="${P};font-size:13px"><b style="color:#0F243C">Оплатил</b> — создаёт операцию: для кредита это тело + проценты, отметка в графике и обновление долга; для аренды, подписки или другого фиксированного платежа — обычная операция расхода.</div>
           <div style="${P};font-size:13px"><b style="color:#0F243C">Уже внесено вручную</b> — если операцию ты уже записал сам: отмечает без создания дубля.</div>
           <div style="${P};font-size:13px"><b style="color:#0F243C">Перенести дату</b> — платёж ещё не случился: сдвигает его на другую дату, без операции.</div>
           <div style="${P};font-size:13px"><b style="color:#0F243C">Не в этом месяце</b> — пропускает платёж на текущий месяц.</div>
@@ -6648,13 +6648,13 @@ function fcChartHtml(fc, range){
   const nf = n => new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(+n||0)));
   const legend = range==='year'
     ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:8px 14px;padding:6px 8px 0;font-size:11px;color:var(--text2)">
-         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз на 12 мес</span>
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;border-top:3px dashed #8FBE1E;display:inline-block"></span>Прогноз на 12 мес</span>
          ${fc.trough_value!=null?`<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:2.5px solid #C0561A;display:inline-block"></span>Низшая точка года</span>`:''}
          <span style="color:${(+fc.monthly_net||0)>=0?'#5E9B1E':'#A8472F'};font-weight:600">${(+fc.monthly_net||0)>=0?'▲':'▼'} ${nf(fc.monthly_net)} ₽/мес в среднем</span>
        </div>`
     : `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:14px;padding:4px 8px 0;font-size:11px;color:var(--text2)">
          <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#2AA7CC;border-radius:2px;display:inline-block"></span>Факт</span>
-         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;height:3px;background:#1FA497;border-radius:2px;display:inline-block"></span>Прогноз</span>
+         <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;border-top:3px dashed #8FBE1E;display:inline-block"></span>Прогноз</span>
          <span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#fff;border:2.5px solid #C0561A;display:inline-block"></span>Низшая точка</span>
          <span style="display:flex;align-items:center;gap:5px"><span style="width:14px;border-top:1.5px dashed #8FA0B3;display:inline-block"></span>Зарплата</span>
        </div>`;
@@ -6791,7 +6791,7 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
 
   const factLine = factPts.length ? `<path d="${seg(factPts, 'fact')}" fill="none" stroke="#2AA7CC" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
   const planLine = planPts.length ? `<path d="${seg(planPts, 'plan')}" fill="none" stroke="#8FBE1E" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
-  const fcstLine = fcstPts.length ? `<path d="${seg(fcstPts, 'forecast')}" fill="none" stroke="#1FA497" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+  const fcstLine = fcstPts.length ? `<path d="${seg(fcstPts, 'forecast')}" fill="none" stroke="#8FBE1E" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
 
   // End-point dots and value labels
   let dots = '';
@@ -6804,8 +6804,8 @@ function renderForecastChart(pts, todayDay, daysInMonth, ariaLabel) {
   if (fcstPts.length) {
     const lp = fcstPts[fcstPts.length - 1];
     const px = dX(lp.day), py = vY(lp.forecast);
-    dots += `<circle cx="${px}" cy="${py}" r="4" fill="#1FA497" stroke="var(--bg2)" stroke-width="1.5"/>`;
-    dots += `<text x="${+px + 8}" y="${(+py + 16).toFixed(0)}" fill="#1FA497" font-size="12" font-weight="600">${fmt(lp.forecast)}</text>`;
+    dots += `<circle cx="${px}" cy="${py}" r="4" fill="#8FBE1E" stroke="var(--bg2)" stroke-width="1.5"/>`;
+    dots += `<text x="${+px + 8}" y="${(+py + 16).toFixed(0)}" fill="#5E9B1E" font-size="12" font-weight="600">${fmt(lp.forecast)}</text>`;
   }
   if (factPts.length) {
     const lp = factPts[factPts.length - 1];
@@ -7214,11 +7214,11 @@ async function loadDashboardNew() {
           </div>
           <div class="card-body">
             <div class="run">
-              <div class="run-row"><span class="rv">Плановый runway</span><b>${run.planned_months} мес</b></div>
+              <div class="run-row"><span class="rv">Плановый запас</span><b>${run.planned_months} мес</b></div>
               <div class="bar"><i style="width:${runPlan}%;background:linear-gradient(90deg,#2AA7CC,#1FA497)"></i></div>
             </div>
             <div class="run">
-              <div class="run-row"><span class="rv">Поведенческий runway</span><b>${run.behavioral_months} мес</b></div>
+              <div class="run-row"><span class="rv">Поведенческий запас</span><b>${run.behavioral_months} мес</b></div>
               <div class="bar"><i style="width:${runBeh}%;background:${run.status === 'green' ? 'linear-gradient(90deg,#1FA497,#9FC22A)' : run.status === 'yellow' ? 'linear-gradient(90deg,#D97706,#C0741A)' : 'linear-gradient(90deg,#C0741A,#B0492A)'}"></i></div>
             </div>
             ${stepHtml}
@@ -8436,7 +8436,7 @@ function openLabModalEpis(planCur) {
 }
 
 // ── ОПЕРАЦИИ (Фаза 3) ─────────────────────────────────────────────────────────
-let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense', _editingOpsTxId = null;
+let _opsYear = null, _opsMonth = null, _opsFilter = 'all', _opsFormType = 'expense', _editingOpsTxId = null, _opsDebtDir = 'pay';
 let _opsCat = 'all', _opsSub = 'all', _opsChar = 'all', _opsSearch = '';
 let _opsData = null;
 const MONTHS_GEN = ['','января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
@@ -8669,12 +8669,15 @@ function opsDateLabel(dateStr, todayStr) {
   return `${d.getDate()} ${MONTHS_GEN[d.getMonth() + 1]}`;
 }
 
-function opsTypeBadge(type, reserve) {
+function opsTypeBadge(type, reserve, debtDir) {
   const S = 'font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap';
   if (reserve)              return `<span style="${S};color:#167F73;background:rgba(31,164,151,.14)">Пополн. резерва</span>`;
   if (type === 'income')    return `<span style="${S};color:#4E7D14;background:rgba(180,222,60,.20)">Доход</span>`;
   if (type === 'expense')   return `<span style="${S};color:#46586E;background:rgba(15,36,60,.06)">Расход</span>`;
-  if (type === 'debt' || type === 'obligation') return `<span style="${S};color:#9A6B12;background:rgba(231,178,62,.20)">Долг</span>`;
+  if (type === 'debt' || type === 'obligation') {
+    const lbl = debtDir === 'received' ? 'Взял' : debtDir === 'paid' ? 'Погасил' : 'Долг';
+    return `<span style="${S};color:#9A6B12;background:rgba(231,178,62,.20)">${lbl}</span>`;
+  }
   return `<span style="${S};color:#1D7E97;background:rgba(42,167,204,.14)">Перевод</span>`;
 }
 
@@ -8771,7 +8774,7 @@ function renderOpsRows() {
           <div style="font-size:13px;font-weight:500;color:var(--text);line-height:1.3">${esc(r.name)}</div>
           <div style="font-size:11px;color:var(--text3);line-height:1.3">${esc(r.sub)}${noteStr}</div>
         </td>
-        <td style="padding:0 14px;white-space:nowrap;vertical-align:middle">${opsTypeBadge(r.type, r.reserve)}</td>
+        <td style="padding:0 14px;white-space:nowrap;vertical-align:middle">${opsTypeBadge(r.type, r.reserve, r.debtDir)}</td>
         <td style="padding:0 14px;white-space:nowrap;vertical-align:middle" class="ops-hide">${opsCharBadge(r.charKey)}</td>
         ${amtCell(r)}
         <td style="padding:0 10px;text-align:right;vertical-align:middle;white-space:nowrap">
@@ -8846,12 +8849,19 @@ function _buildOpsForm(type) {
     fromOpts = payAccs.map(a => `<option>${a.name}</option>`).join('');
     toOpts   = `<option value="Расход">Расход</option>`;
   } else if (type === 'debt') {
-    // Каждое обязательство — свой счёт-Пассив. Взял: обяз→карта/расход; погасил: карта→обяз.
+    // Каждое обязательство — свой счёт-Пассив. Направление задаёт переключатель:
+    // Погасил — карта → обязательство; Взял — обязательство → карта / расход.
     const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
-    const liabOpts = liabs.map(a => `<option>${a.name}</option>`).join('');
-    const assetOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
-    fromOpts = liabOpts + assetOpts;
-    toOpts   = liabOpts + `<option value="Расход">Расход</option>` + assetOpts;
+    const liabOpts = liabs.map(a => `<option>${a.name}</option>`).join('') || '<option value="Обязательства">Обязательства</option>';
+    const payAccs = accounts_cache.filter(a => a.account_type === 'Актив' && a.is_active !== false && a.used_for_payment !== false);
+    const assetOpts = payAccs.map(a => `<option>${a.name}</option>`).join('');
+    if (_opsDebtDir === 'take') {   // взял: обязательство → карта / расход (долг +)
+      fromOpts = liabOpts;
+      toOpts   = assetOpts + `<option value="Расход">Расход</option>`;
+    } else {                         // погасил: карта → обязательство (долг −)
+      fromOpts = assetOpts;
+      toOpts   = liabOpts;
+    }
   } else {
     fromOpts = allAccs.map(a => `<option>${a.name}</option>`).join('');
     toOpts   = allAccs.map(a => `<option>${a.name}</option>`).join('');
@@ -8862,7 +8872,11 @@ function _buildOpsForm(type) {
     {k:'debt',label:'Долг',cls:'active-obl'},{k:'transfer',label:'Перевод',cls:'active-tr'},
   ].map(t => `<button class="type-btn ${t.k===type?t.cls:''}" onclick="_renderOpsForm('${t.k}')">${t.label}</button>`).join('');
 
-  return `<div class="type-grid" style="margin-bottom:14px">${typeBtns}</div>
+  return `<div class="type-grid" style="margin-bottom:${type === 'debt' ? '8px' : '14px'}">${typeBtns}</div>
+    ${type === 'debt' ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+      <button class="type-btn ${_opsDebtDir === 'pay' ? 'active-obl' : ''}" onclick="setOpsDebtDir('pay')">Погасил</button>
+      <button class="type-btn ${_opsDebtDir === 'take' ? 'active-obl' : ''}" onclick="setOpsDebtDir('take')">Взял</button>
+    </div>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="field" style="margin-bottom:8px"><div class="field-label">Сумма, ₽</div>
         <input class="field-input" type="text" inputmode="decimal" id="opsFAmount" placeholder="напр. 250 или 100+50" autocomplete="off"
@@ -8885,6 +8899,11 @@ function _buildOpsForm(type) {
       <button class="save-btn" style="flex:1" id="opsSubmitBtn" onclick="saveOpsTx()">Сохранить</button>
       <button class="btn-ghost" onclick="closeOpsModal()">Отмена</button>
     </div>`;
+}
+
+function setOpsDebtDir(dir) {
+  _opsDebtDir = dir === 'take' ? 'take' : 'pay';
+  _renderOpsForm('debt');
 }
 
 function _renderOpsForm(type) {
@@ -8910,7 +8929,10 @@ async function openOpsModal(tx) {
   if (!overlay) return;
   title.textContent = tx ? 'Редактировать операцию' : 'Новая операция';
   if (!tx) _opsFormType = 'expense';   // новая операция всегда стартует с «Расход»
-  const type = tx ? getFlowType(tx.account_from, tx.account_to) : _opsFormType;
+  let type = tx ? getFlowType(tx.account_from, tx.account_to) : _opsFormType;
+  if (type === 'obligation') type = 'debt';   // ops-форма оперирует ключом 'debt'
+  // при правке долга — выводим направление из счёта-источника
+  if (tx && type === 'debt') _opsDebtDir = isDebtAcc(tx.account_from) ? 'take' : 'pay';
   // Свежая история для умной сортировки подкатегорий (как в Транзакциях)
   try {
     const { data: recent } = await sb.from('transactions')
