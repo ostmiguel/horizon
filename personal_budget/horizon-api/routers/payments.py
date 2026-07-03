@@ -33,7 +33,10 @@ def _title(row) -> str:
 
 @router.get("/pending")
 async def pending(request: Request):
-    """Due и неподтверждённые плановые платежи (дата ≤ сегодня, в окне WINDOW_DAYS)."""
+    """Плановые платежи текущего месяца с датой ≤ сегодня, ещё не разрешённые.
+    Матчинг с операциями НЕ делаем — сверку факта пользователь проводит вручную
+    (это и есть защита от ошибок). Кредиты сюда не входят — они живут на странице
+    Кредиты (тоггл графика), пока не связываем."""
     user_id = request.state.user_id
     db = request.state.db
     today = date.today()
@@ -61,30 +64,7 @@ async def pending(request: Request):
               AND ( (pc.kind = 'rule' AND pc.ref_id = p.source_rule_id)
                  OR (pc.kind = 'plan' AND pc.ref_id = p.id) )
               AND pc.year = $3 AND pc.month = $4 )
-          AND NOT EXISTS (
-            -- уже есть реальная операция в этом месяце по той же категории/счёту → оплачено
-            SELECT 1 FROM transactions t
-            WHERE t.user_id = p.user_id
-              AND EXTRACT(YEAR  FROM t.date)::int = $3
-              AND EXTRACT(MONTH FROM t.date)::int = $4
-              AND t.account_to = p.account_to
-              AND ( (p.category_id IS NOT NULL AND t.category_id = p.category_id)
-                 OR (p.category_id IS NULL AND t.account_from = p.account_from) ) )
         ORDER BY p.date
-    """, user_id, today, yy, mm)
-
-    loan_rows = await db.fetch("""
-        SELECT l.id AS loan_id, l.name AS loan_name, l.account_name,
-               ls.month_num, ls.date, ls.payment, ls.principal, ls.interest
-        FROM loan_schedule ls
-        JOIN loans l ON ls.loan_id = l.id
-        WHERE l.user_id = $1 AND l.is_active = true
-          AND ls.is_paid = false
-          AND ls.date IS NOT NULL
-          AND ls.date <= $2
-          AND EXTRACT(YEAR  FROM ls.date)::int = $3
-          AND EXTRACT(MONTH FROM ls.date)::int = $4
-        ORDER BY ls.date
     """, user_id, today, yy, mm)
 
     items = []
@@ -100,20 +80,6 @@ async def pending(request: Request):
             "account_to": d["account_to"],
             "category_id": d["category_id"],
             "is_reserve": bool(d["to_reserve"]),
-        })
-    for r in loan_rows:
-        d = dict(r)
-        items.append({
-            "kind": "loan",
-            "ref_id": int(d["loan_id"]),
-            "month_num": int(d["month_num"]),
-            "title": d["loan_name"],
-            "amount": float(d["payment"] or 0),
-            "principal": float(d["principal"] or 0),
-            "interest": float(d["interest"] or 0),
-            "date": d["date"].isoformat(),
-            "account_to": d["account_name"],
-            "is_reserve": False,
         })
 
     items.sort(key=lambda x: x["date"])
@@ -134,16 +100,7 @@ async def status(request: Request, year: int, month: int):
     plan_rows = await db.fetch("""
         SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.source_rule_id,
                p.note, pr.name AS rule_name, c.subcategory, c.category AS cat_cat,
-               COALESCE(a.is_reserve, false) AS to_reserve,
-               EXISTS (
-                 SELECT 1 FROM transactions t
-                 WHERE t.user_id = p.user_id
-                   AND EXTRACT(YEAR  FROM t.date)::int = $2
-                   AND EXTRACT(MONTH FROM t.date)::int = $3
-                   AND t.account_to = p.account_to
-                   AND ( (p.category_id IS NOT NULL AND t.category_id = p.category_id)
-                      OR (p.category_id IS NULL AND t.account_from = p.account_from) )
-               ) AS has_tx
+               COALESCE(a.is_reserve, false) AS to_reserve
         FROM plan p
         LEFT JOIN plan_rules pr ON p.source_rule_id = pr.id
         LEFT JOIN categories c  ON p.category_id = c.id
@@ -163,7 +120,7 @@ async def status(request: Request, year: int, month: int):
     """, user_id, year, month)
     for r in plan_rows:
         d = dict(r)
-        st = "paid" if d["has_tx"] else ("pending" if d["date"] <= today else "upcoming")
+        st = "pending" if d["date"] <= today else "upcoming"
         out.append({
             "title": _title(d), "amount": float(d["amount"]),
             "date": d["date"].isoformat(),
@@ -188,24 +145,8 @@ async def status(request: Request, year: int, month: int):
             "is_reserve": False,
         })
 
-    # Кредиты месяца
-    loans = await db.fetch("""
-        SELECT l.name AS loan_name, ls.date, ls.payment, ls.is_paid
-        FROM loan_schedule ls
-        JOIN loans l ON ls.loan_id = l.id
-        WHERE l.user_id = $1 AND l.is_active = true
-          AND ls.date IS NOT NULL
-          AND EXTRACT(YEAR  FROM ls.date)::int = $2
-          AND EXTRACT(MONTH FROM ls.date)::int = $3
-        ORDER BY ls.date
-    """, user_id, year, month)
-    for r in loans:
-        d = dict(r)
-        st = "paid" if d["is_paid"] else ("pending" if d["date"] <= today else "upcoming")
-        out.append({
-            "title": d["loan_name"], "amount": float(d["payment"] or 0),
-            "date": d["date"].isoformat(), "status": st, "is_reserve": False,
-        })
+    # Кредиты в «Спросить» пока не участвуют — статус платежей по кредиту виден
+    # на странице Кредиты (график/тоггл). Здесь только правила/события/резерв.
 
     out.sort(key=lambda x: (x["date"] or ""))
     return {"items": out}
