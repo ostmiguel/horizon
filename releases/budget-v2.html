@@ -3429,7 +3429,7 @@ function calcWhatIf(loans, sorted, extraMonthly) {
 
   const simLoans = sorted.map(l => ({
     id: l.id, name: l.name, color: l.color||'#888',
-    bal: +l.current_balance, rate: +l.rate/12,
+    bal: oblRemaining(l), rate: +l.rate/12,
     pmt: +(l._nextRow?.payment || l.monthly_payment),
     done: false, monthsDone: 0
   }));
@@ -3438,6 +3438,8 @@ function calcWhatIf(loans, sorted, extraMonthly) {
   let targetIdx = simLoans.findIndex(l => !l.done);
   let totalInterestWith = 0;
   let month = 0;
+  // Помесячная суммарная траектория остатка (для графика). [0] = сейчас.
+  const series = [ simLoans.reduce((s,l) => s + l.bal, 0) ];
 
   while (simLoans.some(l => !l.done) && month < 600) {
     month++;
@@ -3460,6 +3462,7 @@ function calcWhatIf(loans, sorted, extraMonthly) {
         }
       }
     });
+    series.push(simLoans.reduce((s,l) => s + (l.done ? 0 : l.bal), 0));
   }
 
   const withDate = new Date();
@@ -3487,7 +3490,7 @@ function calcWhatIf(loans, sorted, extraMonthly) {
     runningExtra += +(loan._nextRow?.payment || loan.monthly_payment);
   });
 
-  return { withDate, withoutDate, savedMonths, savedInterest, instrSteps };
+  return { withDate, withoutDate, savedMonths, savedInterest, instrSteps, series };
 }
 
 function renderWhatIfBlock(loans, sorted) {
@@ -3562,20 +3565,20 @@ function renderLoansPage() {
   const interestPaid = calcInterestPaid(loans);
   window._loanInterestVals = { remaining: interestRemaining, paid: interestPaid };
 
-  // Итоги долга из ledger (счета-Пассивы обязательств); fallback — остаток записи.
-  const creditsOwed = _loansData.reduce((s, l) => s + (oblOwed(l.name) ?? (+l.current_balance || 0)), 0);
-  const debtsOwed   = _debtsData.reduce((s, d) => s + (oblOwed(d.name) ?? (+d.current_balance || 0)), 0);
+  // Итоги долга — единый источник остатка (кредиты из графика, долги из ledger).
+  const creditsOwed = _loansData.reduce((s, l) => s + oblRemaining(l), 0);
+  const debtsOwed   = _debtsData.reduce((s, d) => s + oblRemaining(d), 0);
   const totalOwed   = creditsOwed + debtsOwed;
 
   // Закрытые обязательства (остаток ~0) прячем, показываем по тумблеру.
-  const isClosedObl = name => { const o = oblOwed(name); return o != null && o < 1; };
-  const closedCount = _loansData.filter(l => isClosedObl(l.name)).length + _debtsData.filter(d => isClosedObl(d.name)).length;
+  const isClosedObl = o => { const r = oblRemaining(o); return r != null && r < 1; };
+  const closedCount = _loansData.filter(isClosedObl).length + _debtsData.filter(isClosedObl).length;
   const showClosed = !!window._showClosedObl;
   const closedToggle = closedCount ? `<div style="margin:0 0 16px"><button onclick="toggleClosedObl()" style="font-size:12px;padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">${showClosed ? 'Скрыть закрытые' : `Показать закрытые · ${closedCount}`}</button></div>` : '';
 
-  // Sort by strategy
+  // Sort by strategy (по актуальному остатку)
   const sorted = [...loans];
-  if (_loanStrategy === 'snowball') sorted.sort((a,b) => +a.current_balance - +b.current_balance);
+  if (_loanStrategy === 'snowball') sorted.sort((a,b) => oblRemaining(a) - oblRemaining(b));
   else if (_loanStrategy === 'avalanche') sorted.sort((a,b) => +b.rate - +a.rate);
 
   // Latest close date from schedules
@@ -3671,7 +3674,7 @@ function renderLoansPage() {
   ${renderWhatIfBlock(loans, sorted)}
 
   <div class="loans-grid" id="loansGrid">
-    ${sorted.filter(l => showClosed || !isClosedObl(l.name)).map((loan, idx) => renderLoanCard(loan, idx)).join('')}
+    ${sorted.filter(l => showClosed || !isClosedObl(l)).map((loan, idx) => renderLoanCard(loan, idx)).join('')}
   </div>
 
   ${renderDebtsSection(showClosed)}
@@ -3679,12 +3682,15 @@ function renderLoansPage() {
   ${closedToggle}
 
   <div style="${PCARD};padding:22px">
-    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C;margin-bottom:16px">Динамика снижения долга</div>
-    <div style="height:220px"><canvas id="chartLoans" role="img" aria-label="График снижения долга по кредитам">Снижение долга по кредитам</canvas></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;letter-spacing:-.01em;color:#0F243C">Путь к погашению кредитов</div>
+      <div id="loanChartCap" style="font-size:12px;color:#93A1B5"></div>
+    </div>
+    <div style="height:220px"><canvas id="chartLoans" role="img" aria-label="График пути к погашению кредитов">Путь к погашению кредитов</canvas></div>
   </div>
 </div>`;
 
-  renderLoansChart(loans);
+  renderLoansChart(loans, sorted);
 }
 
 function renderLoanCard(loan, idx) {
@@ -3699,8 +3705,8 @@ function renderLoanCard(loan, idx) {
   const loanIntRemaining = (loan._schedule||[]).filter(r => !r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
   // Balance from last paid row, fallback to current_balance if no paid rows
   const lastPaidRow = (loan._schedule||[]).filter(r => r.is_paid && r.balance).slice(-1)[0];
-  // После миграции остаток берём из счёта-Пассива (ledger); иначе — из графика/записи.
-  const displayBalance = oblOwed(loan.name) ?? (lastPaidRow ? +lastPaidRow.balance : (nextRow?.balance ? +nextRow.balance : +loan.current_balance));
+  // Единый источник остатка (для кредита — позиция на графике на сегодня).
+  const displayBalance = oblRemaining(loan);
   const closeDate = lastRow?.date ? new Date(lastRow.date).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : '—';
   const nextDate  = nextRow?.date  ? new Date(nextRow.date).toLocaleDateString('ru-RU')  : (loan.next_payment_date ? new Date(loan.next_payment_date).toLocaleDateString('ru-RU') : '—');
   const schedFilled = totalRows > 0;
@@ -3740,7 +3746,7 @@ function renderLoanCard(loan, idx) {
         <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;letter-spacing:-.01em;margin-top:8px;color:#0F243C">${fmt(+nextRow.payment)}</div>
         <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:600;color:#4C7A1B;background:rgba(94,155,30,.12);padding:3px 8px;border-radius:7px">тело ${fmt(+nextRow.principal)}</span>
-          <span style="font-size:11px;font-weight:600;color:#A85E78;background:rgba(193,124,149,.16);padding:3px 8px;border-radius:7px">% ${fmt(+nextRow.interest)}</span>
+          <span style="font-size:11px;font-weight:600;color:#C05F3B;background:rgba(192,95,59,.12);padding:3px 8px;border-radius:7px">% ${fmt(+nextRow.interest)}</span>
         </div>` : `
         <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;margin-top:8px;color:#0F243C">${fmt(+loan.monthly_payment)}</div>
         <div style="font-size:11px;color:#2AA7CC;margin-top:6px">Заполни график для точных данных</div>`}
@@ -3759,55 +3765,119 @@ function renderLoanCard(loan, idx) {
   </div>`;
 }
 
-function renderLoansChart(loans) {
-  const ctxL = document.getElementById('chartLoans')?.getContext('2d');
-  if (!ctxL || !loans.length) return;
+// Путь к погашению КРЕДИТОВ (у долгов нет срока → в кривую к нулю не входят).
+// Суммарный остаток по датам графика: факт (до сегодня) сплошной, план — пунктир.
+// При доп. платеже накладывается вторая траектория «с досрочным» (тот же движок,
+// что в блоке «Досрочное закрытие»), видно зазор и более раннюю дату свободы.
+function renderLoansChart(loans, sorted) {
+  const canvas = document.getElementById('chartLoans');
+  const ctx = canvas?.getContext('2d');
+  if (!ctx) return;
+  if (window._loansChart) { try { window._loansChart.destroy(); } catch(e){} window._loansChart = null; }
+  const cap = document.getElementById('loanChartCap');
 
-  const datasets = [];
-  const allDates = new Set();
-
-  // Collect all dates from schedules
-  loans.forEach(l => (l._schedule||[]).forEach(r => allDates.add(r.date)));
-  const labels = [...allDates].sort();
-
-  // Dataset per loan from schedule balance column
-  loans.forEach(loan => {
-    const balByDate = {};
-    (loan._schedule||[]).forEach(r => { balByDate[r.date] = +r.balance; });
-    const data = labels.map(d => balByDate[d] !== undefined ? balByDate[d] : null);
-    datasets.push({
-      label: loan.name,
-      data,
-      borderColor: loan.color||'#888',
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0.3,
-      spanGaps: true,
-    });
-  });
-
-  // Fallback if no schedule data
-  if (labels.length === 0) {
-    const mc = document.getElementById('chartLoans');
-    if (mc) mc.parentElement.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Заполни график платежей чтобы увидеть динамику</div>';
+  const credits = (loans || []).filter(l => (l._schedule || []).length);
+  if (!credits.length) {
+    if (canvas.parentElement) canvas.parentElement.innerHTML =
+      '<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;color:#93A1B5;font-size:12px;line-height:1.6;padding:16px">Заполни график платежей хотя бы по одному кредиту —<br>покажем путь к погашению и эффект досрочных платежей</div>';
+    if (cap) cap.textContent = '';
     return;
   }
 
-  new Chart(ctxL, {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const monthYr = d => new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' });
+  const monthYrLong = d => new Date(d).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+
+  // Остаток кредита на дату d: строка графика с макс. датой ≤ d; после закрытия — 0.
+  const balAt = (loan, d) => {
+    let best = null;
+    for (const r of loan._schedule) {
+      if (r.date && r.date <= d && r.balance != null && (!best || r.date > best.date)) best = r;
+    }
+    if (loan._lastRow?.date && d > loan._lastRow.date) return 0;
+    return best ? +best.balance : (+loan.initial_amount || 0);
+  };
+
+  // Ось X: все даты графиков + сегодня.
+  const dset = new Set([todayStr]);
+  credits.forEach(l => l._schedule.forEach(r => { if (r.date) dset.add(r.date); }));
+  const dates = [...dset].sort();
+  const todayIdx = dates.indexOf(todayStr);
+
+  const baseTotal = dates.map(d => credits.reduce((s, l) => s + balAt(l, d), 0));
+  const actual = baseTotal.map((v, i) => i <= todayIdx ? v : null);   // факт (сплошная)
+  const plan   = baseTotal.map((v, i) => i >= todayIdx ? v : null);   // план (пунктир)
+
+  // Досрочное погашение: помесячная серия из того же движка.
+  const extra = window._loanExtra || 0;
+  let whatif = null, wi = null;
+  if (extra > 0) {
+    wi = calcWhatIf(_loansData, sorted || credits, extra);
+    if (wi && wi.series && wi.series.length) {
+      const t0 = new Date(todayStr + 'T00:00:00');
+      // Серия помесячная → раскладываем по датам оси через число прошедших месяцев
+      // (у кредитов разные дни платежа, поэтому индекс ≠ месяц).
+      whatif = dates.map((d, i) => {
+        if (i < todayIdx) return null;
+        const mo = Math.round((new Date(d + 'T00:00:00') - t0) / (1000*60*60*24*30.44));
+        return wi.series[Math.min(Math.max(mo, 0), wi.series.length - 1)];
+      });
+    }
+  }
+
+  // Дата «свободен от кредитов».
+  const freeBase = credits.reduce((mx, l) => (l._lastRow?.date && (!mx || l._lastRow.date > mx) ? l._lastRow.date : mx), null);
+  if (cap) {
+    let t = freeBase ? `Свободен от кредитов: <b style="color:#0F243C;font-weight:600">${monthYrLong(freeBase)}</b>` : '';
+    if (wi && wi.withDate) t += ` → <b style="color:#4C7A1B;font-weight:600">${wi.withDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</b>`;
+    cap.innerHTML = t;
+  }
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0, 'rgba(31,164,151,.22)');
+  grad.addColorStop(1, 'rgba(31,164,151,0)');
+
+  const datasets = [
+    { label: 'Факт', data: actual, borderColor: '#1FA497', backgroundColor: grad,
+      borderWidth: 2.5, pointRadius: 0, tension: .25, fill: true, spanGaps: false },
+    { label: 'Текущий план', data: plan, borderColor: '#93A1B5', backgroundColor: 'transparent',
+      borderWidth: 2, borderDash: [5,4], pointRadius: 0, tension: .25, fill: false, spanGaps: false },
+  ];
+  if (whatif) datasets.push({
+    label: 'С доп. платежом', data: whatif, borderColor: '#7AB317', backgroundColor: 'transparent',
+    borderWidth: 2.5, pointRadius: 0, tension: .25, fill: false, spanGaps: true,
+  });
+  // Маркер «сегодня».
+  datasets.push({
+    label: '__today', data: dates.map((d,i) => i === todayIdx ? baseTotal[i] : null),
+    borderColor: '#0F243C', backgroundColor: '#fff', pointRadius: 4, pointBorderWidth: 2,
+    showLine: false, spanGaps: false,
+  });
+
+  window._loansChart = new Chart(ctx, {
     type: 'line',
-    data: { labels: labels.map(d => new Date(d).toLocaleDateString('ru-RU',{month:'short',year:'2-digit'})), datasets },
+    data: { labels: dates.map(monthYr), datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: datasets.length > 1, labels: { color:'#6B7280', font:{size:10}, boxWidth:8 }},
-        tooltip: { callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + fmt(ctx.raw) }}
+        legend: { display: true, labels: {
+          color: '#5A6B82', font: { family: 'Sora, sans-serif', size: 11 }, boxWidth: 10, boxHeight: 10, usePointStyle: true,
+          filter: item => item.text !== '__today',
+        }},
+        tooltip: {
+          backgroundColor: '#fff', titleColor: '#0F243C', bodyColor: '#5A6B82',
+          borderColor: 'rgba(15,36,60,.1)', borderWidth: 1, padding: 10, cornerRadius: 10,
+          titleFont: { family: 'Sora, sans-serif', size: 12 }, bodyFont: { family: 'Inter, sans-serif', size: 12 },
+          filter: item => item.dataset.label !== '__today',
+          callbacks: { label: c => ' ' + c.dataset.label + ': ' + fmt(c.raw) },
+        },
       },
       scales: {
-        x: { ticks:{ color:'#9CA3AF', font:{size:9}, maxTicksLimit:12, maxRotation:0 }, grid:{display:false} },
-        y: { ticks:{ color:'#9CA3AF', font:{size:9}, callback: v=>(v/1000).toFixed(0)+'к' }, grid:{color:'rgba(0,0,0,0.04)'} }
-      }
-    }
+        x: { ticks: { color: '#93A1B5', font: { family: 'Sora, sans-serif', size: 10 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#93A1B5', font: { family: 'Sora, sans-serif', size: 10 }, callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'к' : v }, grid: { color: 'rgba(15,36,60,.05)' } },
+      },
+    },
   });
 }
 
@@ -4239,13 +4309,13 @@ function toggleClosedObl() {
 
 // ── Долги (обязательства без процентов) ──────────────────────────────────────
 function renderDebtsSection(showClosed) {
-  const list = _debtsData.filter(d => { const o = oblOwed(d.name); return showClosed || o == null || o >= 1; });
+  const list = _debtsData.filter(d => { const o = oblRemaining(d); return showClosed || o == null || o >= 1; });
   if (!list.length) return '';
   const rows = list.map((d,i) => `
     <div style="display:flex;align-items:center;gap:13px;padding:14px 0;${i>0?'border-top:1px solid rgba(15,36,60,.07)':''}">
       <span style="width:10px;height:10px;border-radius:3px;background:${d.color||'#C0741A'};flex:none"></span>
       <div style="flex:1;min-width:0"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:14.5px;color:#0F243C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.name)}</div><div style="font-size:11.5px;color:#93A1B5;margin-top:1px">заём без процентов</div></div>
-      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#C05F3B;font-variant-numeric:tabular-nums">${fmt(oblOwed(d.name) ?? (+d.current_balance))}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#C05F3B;font-variant-numeric:tabular-nums">${fmt(oblRemaining(d))}</div>
       <button onclick="repayDebt(${d.id})" style="font:500 12px Inter,sans-serif;padding:6px 13px;background:#F5F8FB;border:1px solid rgba(15,36,60,.1);border-radius:9px;color:#0F243C;cursor:pointer">Погасил</button>
       <button title="Действия" onclick="debtMenu(this,${d.id})" style="border:0;background:transparent;color:#93A1B5;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1">⋮</button>
     </div>`).join('');
@@ -4350,6 +4420,23 @@ function debtMenu(btn, id) {
 function oblOwed(name) {
   const a = (accounts_cache || []).find(x => x.name === name && x.account_type === 'Пассив');
   return a ? Math.abs(+a.current_balance || 0) : null;
+}
+
+// Единый «текущий остаток» обязательства — им живут карточка, KPI, симуляция
+// досрочного погашения и график, чтобы цифры сходились. Для кредита с графиком —
+// позиция на кривой погашения на сегодня (последняя строка с датой ≤ сегодня;
+// тело в ledger не пишется, поэтому график, а не счёт). Для долга без графика —
+// остаток из ledger (счёт-Пассив), иначе — из записи.
+function oblRemaining(o) {
+  const sched = (o && o._schedule) || [];
+  if (sched.length) {
+    const today = new Date().toISOString().slice(0, 10);
+    const past = sched.filter(r => r.date && r.date <= today && r.balance != null);
+    if (past.length) return +past.reduce((mx, r) => (r.date > mx.date ? r : mx)).balance;
+    return +o.initial_amount || 0;
+  }
+  const led = oblOwed(o.name);
+  return led != null ? led : (+o.current_balance || 0);
 }
 
 async function migrateObligations() {
