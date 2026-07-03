@@ -50,9 +50,20 @@ async def materialize_rules(db, user_id, year: int, month: int) -> int:
             SELECT rule_id FROM plan_rule_skips WHERE user_id=$1 AND year=$2 AND month=$3
         """, user_id, year, month)}
 
+        # правила, подтверждённые/пропущенные через «Спросить о платеже» — не
+        # пере-материализуем (реальная операция уже представляет этот платёж).
+        conf_ids = set()
+        try:
+            conf_ids = {row["ref_id"] for row in await db.fetch("""
+                SELECT ref_id FROM plan_confirmations
+                WHERE user_id=$1 AND kind='rule' AND year=$2 AND month=$3
+            """, user_id, year, month)}
+        except Exception:
+            pass   # таблицы может не быть до миграции — безопасно игнорируем
+
         created = 0
         for r in rules:
-            if r["id"] in pinned_ids or r["id"] in skip_ids:
+            if r["id"] in pinned_ids or r["id"] in skip_ids or r["id"] in conf_ids:
                 continue
             dom = int(r["day_of_month"]) if r["day_of_month"] else 1
             day = max(1, min(dom, days_in_month))   # клампим (напр. 31 в феврале → 28/29)

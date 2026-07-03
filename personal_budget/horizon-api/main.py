@@ -9,7 +9,7 @@ import asyncpg
 import os
 
 from middleware import AuthMiddleware
-from routers import accounts, transactions, categories, loans, auth, metrics, goals, plan_rules, category_budgets, subscription
+from routers import accounts, transactions, categories, loans, auth, metrics, goals, plan_rules, category_budgets, subscription, payments
 
 DB_URL = os.getenv("DATABASE_URL")
 
@@ -35,6 +35,7 @@ app.include_router(goals.router)
 app.include_router(plan_rules.router)
 app.include_router(category_budgets.router)
 app.include_router(subscription.router)
+app.include_router(payments.router)
 
 @app.get("/health")
 async def health():
