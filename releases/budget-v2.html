@@ -7342,7 +7342,6 @@ async function renderPendingPayments() {
   }
 
   const payAccs = (accounts_cache || []).filter(a => a.account_type === 'Актив' && a.used_for_payment !== false && a.is_active !== false);
-  const accOpts = payAccs.map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
 
   const rows = items.map((it, i) => {
     const rsv = it.is_reserve;
@@ -7350,7 +7349,10 @@ async function renderPendingPayments() {
     const sub = it.kind === 'loan'
       ? `тело ${fmtP(it.principal)} · % ${fmtP(it.interest)}`
       : (rsv ? 'пополнение резерва' : (it.account_from || ''));
-    const needCard = it.kind === 'loan';
+    // счёт по умолчанию: кредит — первая платёжная карта, иначе — счёт из правила/события
+    const defAcc = it.kind === 'loan' ? ((payAccs[0] && payAccs[0].name) || '') : (it.account_from || '');
+    let optsSel = payAccs.map(a => `<option${a.name === defAcc ? ' selected' : ''} value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
+    if (defAcc && !payAccs.some(a => a.name === defAcc)) optsSel = `<option selected value="${esc(defAcc)}">${esc(defAcc)}</option>` + optsSel;
     return `<div style="padding:14px 0;${i > 0 ? 'border-top:1px solid rgba(15,36,60,.07)' : ''}">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="flex:1;min-width:0">
@@ -7366,9 +7368,10 @@ async function renderPendingPayments() {
           <label style="font-size:11px;color:#5A6B82">Сумма<input id="payAmt-${i}" type="number" value="${Math.round(it.amount)}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit"></label>
           <label style="font-size:11px;color:#5A6B82">Дата<input id="payDate-${i}" type="date" value="${it.date}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit"></label>
         </div>
-        ${needCard ? `<label style="font-size:11px;color:#5A6B82;display:block;margin-bottom:8px">С какого счёта<select id="payAcc-${i}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit">${accOpts}</select></label>` : ''}
+        <label style="font-size:11px;color:#5A6B82;display:block;margin-bottom:8px">${it.kind === 'loan' ? 'С какого счёта' : 'Счёт'}<select id="payAcc-${i}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit">${optsSel}</select></label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="payConfirm(${i},true)" style="font:600 12px Inter,sans-serif;padding:7px 12px;background:#0F243C;border:0;border-radius:8px;color:#fff;cursor:pointer">Подтвердить с правками</button>
+          ${it.kind !== 'loan' ? `<button onclick="payReschedule(${i})" style="font:500 12px Inter,sans-serif;padding:7px 12px;background:#fff;border:1px solid rgba(15,36,60,.14);border-radius:8px;color:#0F243C;cursor:pointer">Перенести дату</button>` : ''}
           <button onclick="payManual(${i})" style="font:500 12px Inter,sans-serif;padding:7px 12px;background:#fff;border:1px solid rgba(15,36,60,.14);border-radius:8px;color:#0F243C;cursor:pointer">Уже внесено вручную</button>
           <button onclick="paySkip(${i})" style="font:500 12px Inter,sans-serif;padding:7px 12px;background:#fff;border:1px solid rgba(15,36,60,.14);border-radius:8px;color:#93A1B5;cursor:pointer">Не в этом месяце</button>
         </div>
@@ -7418,13 +7421,26 @@ function _payBody(i, withEdits) {
     const a = document.getElementById('payAmt-' + i);  if (a && a.value) body.amount = parseFloat(a.value);
     const d = document.getElementById('payDate-' + i); if (d && d.value) body.date = d.value;
   }
-  if (it.kind === 'loan') {
-    const s = document.getElementById('payAcc-' + i);
+  // счёт оплаты — из селекта (для всех типов; переопределяет счёт правила, если платил с другой карты)
+  const s = document.getElementById('payAcc-' + i);
+  if (s && s.value) body.account_from = s.value;
+  if (it.kind === 'loan' && !body.account_from) {
     const payAccs = (accounts_cache || []).filter(x => x.account_type === 'Актив' && x.used_for_payment !== false && x.is_active !== false);
-    body.account_from = (s && s.value) || (payAccs[0] && payAccs[0].name) || null;
+    body.account_from = (payAccs[0] && payAccs[0].name) || null;
     if (!body.account_from) { toast('Нет счёта для оплаты', false); return null; }
   }
   return body;
+}
+
+async function payReschedule(i) {
+  const it = (window._payItems || [])[i];
+  if (!it) return;
+  const d = document.getElementById('payDate-' + i);
+  const nd = d && d.value;
+  if (!nd) { toast('Укажи новую дату', false); return; }
+  if (nd === it.date) { toast('Дата не изменилась', false); return; }
+  const body = { kind: it.kind, ref_id: it.ref_id, occ_date: it.date, new_date: nd };
+  if (await _payPost('/api/payments/reschedule', body)) { toast('✓ Перенесено'); loadDashboardNew(); }
 }
 
 async function _payPost(url, body) {

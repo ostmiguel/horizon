@@ -35,8 +35,8 @@ def _title(row) -> str:
 async def pending(request: Request):
     """Плановые платежи текущего месяца с датой ≤ сегодня, ещё не разрешённые.
     Матчинг с операциями НЕ делаем — сверку факта пользователь проводит вручную
-    (это и есть защита от ошибок). Кредиты сюда не входят — они живут на странице
-    Кредиты (тоггл графика), пока не связываем."""
+    (это и есть защита от ошибок). Кредиты входят: подтверждение создаёт операции
+    (тело→счёт-Пассив + %→Расход), ставит is_paid и обновляет долг."""
     user_id = request.state.user_id
     db = request.state.db
     today = date.today()
@@ -67,6 +67,20 @@ async def pending(request: Request):
         ORDER BY p.date
     """, user_id, today, yy, mm)
 
+    loan_rows = await db.fetch("""
+        SELECT l.id AS loan_id, l.name AS loan_name, l.account_name,
+               ls.month_num, ls.date, ls.payment, ls.principal, ls.interest
+        FROM loan_schedule ls
+        JOIN loans l ON ls.loan_id = l.id
+        WHERE l.user_id = $1 AND l.is_active = true
+          AND ls.is_paid = false
+          AND ls.date IS NOT NULL
+          AND ls.date <= $2
+          AND EXTRACT(YEAR  FROM ls.date)::int = $3
+          AND EXTRACT(MONTH FROM ls.date)::int = $4
+        ORDER BY ls.date
+    """, user_id, today, yy, mm)
+
     items = []
     for r in plan_rows:
         d = dict(r)
@@ -80,6 +94,20 @@ async def pending(request: Request):
             "account_to": d["account_to"],
             "category_id": d["category_id"],
             "is_reserve": bool(d["to_reserve"]),
+        })
+    for r in loan_rows:
+        d = dict(r)
+        items.append({
+            "kind": "loan",
+            "ref_id": int(d["loan_id"]),
+            "month_num": int(d["month_num"]),
+            "title": d["loan_name"],
+            "amount": float(d["payment"] or 0),
+            "principal": float(d["principal"] or 0),
+            "interest": float(d["interest"] or 0),
+            "date": d["date"].isoformat(),
+            "account_to": d["account_name"],
+            "is_reserve": False,
         })
 
     items.sort(key=lambda x: x["date"])
@@ -145,8 +173,24 @@ async def status(request: Request, year: int, month: int):
             "is_reserve": False,
         })
 
-    # Кредиты в «Спросить» пока не участвуют — статус платежей по кредиту виден
-    # на странице Кредиты (график/тоггл). Здесь только правила/события/резерв.
+    # Кредиты месяца (статус из is_paid)
+    loans = await db.fetch("""
+        SELECT l.name AS loan_name, ls.date, ls.payment, ls.is_paid
+        FROM loan_schedule ls
+        JOIN loans l ON ls.loan_id = l.id
+        WHERE l.user_id = $1 AND l.is_active = true
+          AND ls.date IS NOT NULL
+          AND EXTRACT(YEAR  FROM ls.date)::int = $2
+          AND EXTRACT(MONTH FROM ls.date)::int = $3
+        ORDER BY ls.date
+    """, user_id, year, month)
+    for r in loans:
+        d = dict(r)
+        st = "paid" if d["is_paid"] else ("pending" if d["date"] <= today else "upcoming")
+        out.append({
+            "title": d["loan_name"], "amount": float(d["payment"] or 0),
+            "date": d["date"].isoformat(), "status": st, "is_reserve": False,
+        })
 
     out.sort(key=lambda x: (x["date"] or ""))
     return {"items": out}
@@ -320,3 +364,51 @@ async def skip(body: SkipBody, request: Request):
     else:
         await db.execute("DELETE FROM plan WHERE user_id=$1 AND id=$2", user_id, body.ref_id)
     return {"ok": True}
+
+
+class RescheduleBody(BaseModel):
+    kind: str                        # 'rule' | 'plan' (кредиты — даты из графика)
+    ref_id: int
+    occ_date: Optional[date] = None  # исходная дата occurrence (месяц для rule)
+    new_date: date
+
+
+@router.post("/reschedule")
+async def reschedule(body: RescheduleBody, request: Request):
+    """«Перенести» — сдвигает дату плановой occurrence, операцию НЕ создаёт.
+    Событие (kind='plan') — двигаем саму строку plan; правило (kind='rule') —
+    ставим pinned-строку на новую дату (перештамповка её не тронет). После
+    переноса платёж уходит из очереди и вернётся, когда наступит новая дата."""
+    user_id = request.state.user_id
+    db = request.state.db
+
+    if body.kind == "plan":
+        res = await db.execute(
+            "UPDATE plan SET date=$1 WHERE user_id=$2 AND id=$3",
+            body.new_date, user_id, body.ref_id)
+        if res.endswith("0"):
+            raise HTTPException(404, "plan row not found")
+        return {"ok": True}
+
+    if body.kind == "rule":
+        occ = body.occ_date or body.new_date
+        rule = await db.fetchrow("""
+            SELECT amount, account_from, account_to, category_id
+            FROM plan_rules WHERE id=$1 AND user_id=$2
+        """, body.ref_id, user_id)
+        if not rule:
+            raise HTTPException(404, "rule not found")
+        async with db.transaction():
+            await db.execute("""
+                DELETE FROM plan WHERE user_id=$1 AND source_rule_id=$2
+                  AND EXTRACT(YEAR FROM date)::int=$3 AND EXTRACT(MONTH FROM date)::int=$4
+            """, user_id, body.ref_id, occ.year, occ.month)
+            await db.execute("""
+                INSERT INTO plan
+                  (user_id, date, amount, account_from, account_to, category_id, source, source_rule_id, pinned)
+                VALUES ($1,$2,$3,$4,$5,$6,'plan_rule',$7,true)
+            """, user_id, body.new_date, rule["amount"], rule["account_from"],
+                 rule["account_to"], rule["category_id"], body.ref_id)
+        return {"ok": True}
+
+    raise HTTPException(400, "reschedule not supported for this kind")
