@@ -5178,22 +5178,22 @@ async function loadSummary() {
   const projNote = (isCurrent && elapsed < daysInMonth) ? 'прогноз к концу месяца' : 'за месяц';
   const barList = (rows, top, tot, ramp, ym) => rows.length ? rows.map(([name, v], i) => `<div onclick="anDrillM('${esc(name)}','${ym}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer"><span style="width:9px;height:9px;border-radius:2px;background:${ramp[i%ramp.length]};flex:none"></span><span style="flex:1;font-size:12.5px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><div style="width:120px;height:6px;background:#F5F8FB;border-radius:99px"><i style="display:block;height:100%;width:${Math.round(v/top*100)}%;background:${ramp[i%ramp.length]};border-radius:99px"></i></div><span style="width:96px;text-align:right;font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(v)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(v/(tot||1)*100)}%</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5">Нет данных за месяц.</div>';
 
-  // Пончик со структурой: сегмент приподнимается при наведении, сумма категории — в центре бублика.
+  // Пончик со структурой: при наведении — подсветка сегмента (без сдвига) и сумма категории в центре.
   const donut = (rows, total, ramp, centerLbl, ym) => {
     if (!rows.length || total <= 0) return '<div style="font-size:12.5px;color:#93A1B5;padding:24px 0;text-align:center">Нет данных за месяц.</div>';
     const id = 'dn' + Math.random().toString(36).slice(2, 7);
-    const cx = 110, cy = 110, R = 95, r = 58, TAU = Math.PI * 2;
+    const cx = 110, cy = 110, R = 95, r = 66, TAU = Math.PI * 2;
     const gap = rows.length > 1 ? 0.018 : 0;
     const pol = (rad, a) => [(cx + rad * Math.sin(a)).toFixed(2), (cy - rad * Math.cos(a)).toFixed(2)];
     let a0 = 0, segs = ''; const meta = [];
     rows.forEach(([name, val], i) => {
-      const frac = val / total, a1 = a0 + frac * TAU, sa = a0 + gap / 2, ea = Math.max(sa, a1 - gap / 2), color = ramp[i % ramp.length], mid = (sa + ea) / 2;
+      const frac = val / total, a1 = a0 + frac * TAU, sa = a0 + gap / 2, ea = Math.max(sa, a1 - gap / 2), color = ramp[i % ramp.length];
       if (frac >= 0.9999) {
-        segs += `<circle id="${id}-s${i}" cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${color}" stroke-width="${R - r}" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="cursor:pointer"/>`;
+        segs += `<circle id="${id}-s${i}" cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${color}" stroke-width="${R - r}" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="cursor:pointer;transition:opacity .1s"/>`;
       } else {
         const [xo0, yo0] = pol(R, sa), [xo1, yo1] = pol(R, ea), [xi1, yi1] = pol(r, ea), [xi0, yi0] = pol(r, sa), large = (ea - sa) > Math.PI ? 1 : 0;
         const d = `M${xo0} ${yo0} A${R} ${R} 0 ${large} 1 ${xo1} ${yo1} L${xi1} ${yi1} A${r} ${r} 0 ${large} 0 ${xi0} ${yi0} Z`;
-        segs += `<path id="${id}-s${i}" d="${d}" fill="${color}" data-dx="${(Math.sin(mid) * 6).toFixed(2)}" data-dy="${(-Math.cos(mid) * 6).toFixed(2)}" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="cursor:pointer;transition:transform .1s"/>`;
+        segs += `<path id="${id}-s${i}" d="${d}" fill="${color}" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="cursor:pointer;transition:opacity .1s"/>`;
       }
       meta.push({ name: esc(name), val: Math.round(val), pct: Math.round(frac * 100), color });
       a0 = a1;
@@ -5203,9 +5203,9 @@ async function loadSummary() {
     return `<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
       <div style="position:relative;width:176px;height:176px;flex:none;margin:0 auto">
         <svg viewBox="0 0 220 220" style="width:100%;height:100%;display:block">${segs}</svg>
-        <div id="${id}-c" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 24px">
+        <div id="${id}-c" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 12px">
           <div style="${CAP}">${centerLbl}</div>
-          <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(total)}</div>
+          <div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(total)}</div>
         </div>
       </div>
       <div style="flex:1;min-width:170px">${legend}</div>
@@ -5275,9 +5275,10 @@ async function loadSummary() {
     <div>
       <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Прогноз месяца</h2>
       <div style="${CARD};padding:18px 20px 12px">
-        ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:8px">
-          <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
-          <div style="color:#5A6B82;font-size:12px;line-height:1.5;flex:1;min-width:200px">${overPace?`Идёшь с опережением — по темпу ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким.`:`В рамках плана: по темпу ${fmt(projEnd)} против плана ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
+        ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 22px;align-items:baseline;margin-bottom:8px">
+          <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'прогноз к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums;color:#B27C72;margin-top:2px">${fmt(projEnd)}</div></div>
+          <div><span style="${CAP}">план месяца</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;font-variant-numeric:tabular-nums;color:#B7822F;margin-top:2px">${fmt(plannedExp)}</div></div>
+          <div style="color:#5A6B82;font-size:12px;line-height:1.5;flex:1;min-width:180px">${overPace?`Опережение: по темпу ожидается <b style="color:#B5564A">+${fmt(projEnd-plannedExp)}</b> сверх плана. Сбавь по гибким.`:`В рамках плана. Запас <b style="color:#4E7D3A">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
         </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи правила и конверты в Бюджете.</div>`}
         ${burndown()}
         <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:#93A1B5;margin-top:6px">
@@ -5291,7 +5292,7 @@ async function loadSummary() {
     ${(catRows.length && plannedExp>0) ? `<div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт${(isCurrent&&elapsed<daysInMonth)?' vs прогноз':''} · категории</h2><span style="font-size:11px;color:#93A1B5">факт / план${(isCurrent&&elapsed<daysInMonth)?' · прогноз' :''} · наведи на маркер · клик — операции</span></div>
       <div style="${CARD};padding:8px 20px 14px">
-        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const isC=isCurrent&&elapsed<daysInMonth&&elapsed>0;const projCat=isC?fv/elapsed*daysInMonth:fv;const over=plv&&fv>plv;const projOver=!over&&plv&&projCat>plv*1.03;const col=over?'#B27C72':(projOver?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;const paceP=Math.round(elapsed/daysInMonth*100);const projP=plv?Math.min(projCat/plv*100,100):100;const status=over?' · <span style="color:#B5564A">перерасход</span>':(projOver?' · <span style="color:#B7822F">прогноз выше плана</span>':'');const projTxt=(isC&&plv)?` · прогноз <b style="color:${projOver?'#B7822F':'#0F243C'}">${fmtN(projCat)}</b>`:'';return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${projTxt}${status}</span></div><div title="факт ${fmtN(fv)}${plv?' · план '+fmtN(plv):''}" style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span title="ровный темп — прошло ${paceP}% месяца" style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${paceP}% - 1px)"></span>`:''}${(isC&&plv)?`<span title="прогноз к концу месяца: ${fmtN(projCat)} ₽" style="position:absolute;top:-4px;height:14px;width:2.5px;border-radius:2px;background:${projOver?'#B7822F':'#2A8C82'};left:calc(${projP}% - 1px)"></span>`:''}</div></div>`;}).join('')}
+        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const isC=isCurrent&&elapsed<daysInMonth&&elapsed>0;const projCat=isC?fv/elapsed*daysInMonth:fv;const over=plv&&fv>plv;const projOver=!over&&plv&&projCat>plv*1.03;const col=over?'#B27C72':(projOver?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;const paceP=Math.round(elapsed/daysInMonth*100);const projP=plv?Math.min(projCat/plv*100,100):100;const status=over?' · <span style="color:#B5564A">перерасход</span>':'';const projTxt=(isC&&plv)?` · прогноз <b style="color:${projOver?'#B7822F':'#0F243C'}">${fmtN(projCat)}</b>`:'';return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${projTxt}${status}</span></div><div title="факт ${fmtN(fv)}${plv?' · план '+fmtN(plv):''}" style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span title="ровный темп — прошло ${paceP}% месяца" style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${paceP}% - 1px)"></span>`:''}${(isC&&plv)?`<span title="прогноз к концу месяца: ${fmtN(projCat)} ₽" style="position:absolute;top:-4px;height:14px;width:2.5px;border-radius:2px;background:${projOver?'#B7822F':'#2A8C82'};left:calc(${projP}% - 1px)"></span>`:''}</div></div>`;}).join('')}
       </div>
     </div>` : ''}
   </section>
@@ -7051,15 +7052,15 @@ window.anDonutHover = function(id, i) {
   const meta = (window._anDonut || {})[id]; if (!meta) return;
   const seg = meta.rows[i]; if (!seg) return;
   const c = document.getElementById(id + '-c');
-  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:${seg.color};max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${seg.name}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#0F243C;font-variant-numeric:tabular-nums">${seg.val.toLocaleString('ru-RU')}</div><div style="font-size:11px;color:#93A1B5">${seg.pct}%</div>`;
-  const el = document.getElementById(id + '-s' + i);
-  if (el && el.dataset && el.dataset.dx != null) el.setAttribute('transform', `translate(${el.dataset.dx} ${el.dataset.dy})`);
+  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:${seg.color};line-height:1.2;max-width:98px;word-break:break-word">${seg.name}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#0F243C;font-variant-numeric:tabular-nums;margin-top:1px">${seg.val.toLocaleString('ru-RU')}</div><div style="font-size:11px;color:#93A1B5">${seg.pct}%</div>`;
+  // Подсветка без сдвига: наведённый сегмент яркий, остальные приглушены (не двигаем геометрию → нет мигания на границе).
+  (meta.rows || []).forEach((_, j) => { const el = document.getElementById(id + '-s' + j); if (el) el.style.opacity = j === i ? '1' : '.4'; });
 };
 window.anDonutLeave = function(id) {
   const meta = (window._anDonut || {})[id]; if (!meta) return;
   const c = document.getElementById(id + '-c');
-  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${meta.label}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#0F243C;font-variant-numeric:tabular-nums">${meta.total.toLocaleString('ru-RU')}</div>`;
-  (meta.rows || []).forEach((_, i) => { const el = document.getElementById(id + '-s' + i); if (el) el.removeAttribute('transform'); });
+  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${meta.label}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px;color:#0F243C;font-variant-numeric:tabular-nums">${meta.total.toLocaleString('ru-RU')}</div>`;
+  (meta.rows || []).forEach((_, i) => { const el = document.getElementById(id + '-s' + i); if (el) el.style.opacity = '1'; });
 };
 
 function renderRing(pct) {
