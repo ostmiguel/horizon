@@ -7225,19 +7225,36 @@ async function loadDashboardNew() {
         catMap[c.category] = { ...c, amount_plan: c.amount_plan || 0 };
       }
     }
-    // Сортируем по плану (крупнейшие плановые статьи), затем по факту; топ-8.
-    const cats       = Object.values(catMap).sort((a, b) => (b.amount_plan || 0) - (a.amount_plan || 0) || b.amount_fact - a.amount_fact).slice(0, 8);
-    const catHtml    = cats.map((c, i) => {
-      const plan = c.amount_plan || 0;
-      const w    = plan > 0 ? Math.min(Math.round(c.amount_fact / plan * 100), 100) : 0;
-      const over = plan > 0 && c.amount_fact > plan;
-      const clr  = over ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#2AA7CC,#1FA497,#B4DE3C)';
-      return `<div class="cat" style="display:flex;align-items:center;gap:10px;padding:5px 0">
-        <span style="font-size:12.5px;color:#5E7088;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:110px;flex-shrink:0">${c.category}</span>
-        <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:${w}%;background:${clr};border-radius:3px"></div>
+    // «Сколько осталось» — остаток по повседневным конвертам (топливомер + порог темпа).
+    // Бар = остаток (убывает вместе с числом, без конфликта). Метка — сколько должно
+    // оставаться по ровному темпу; остаток левее метки → ⚠ «тратишь быстрее плана».
+    const _now = new Date();
+    const _dim = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
+    const _elapsedFrac = Math.min(_now.getDate(), _dim) / _dim;
+    const _expectRem = 1 - _elapsedFrac;   // доля бюджета, что должна оставаться по темпу
+    const remColor = (remPct, over) => over ? '#B0492A' : remPct > 0.35 ? '#1FA497' : remPct > 0.15 ? '#C0741A' : '#B0492A';
+    const everyday = Object.values(catMap)
+      .filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический' && (c.amount_plan || 0) > 0)
+      .map(c => {
+        const budget = c.amount_plan || 0, spent = c.amount_fact || 0, rem = budget - spent;
+        const over = rem < 0, remPct = Math.max(rem / budget, 0), usedPct = Math.min(spent / budget, 1);
+        return { name: c.category, budget, spent, rem, over, remPct, usedPct, behind: !over && remPct < _expectRem - 0.03 };
+      })
+      .sort((a, b) => b.usedPct - a.usedPct)
+      .slice(0, 8);
+    const catHtml = everyday.map((c, i) => {
+      const col = remColor(c.remPct, c.over);
+      const right = c.over
+        ? `<span style="font-size:12.5px;font-family:Sora,sans-serif;font-variant-numeric:tabular-nums;color:#B0492A;white-space:nowrap"><b>перерасход −${f(-c.rem)} ₽</b></span>`
+        : `<span style="font-size:12.5px;font-family:Sora,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap"><b style="color:${col}">${f(c.rem)} ₽</b> <span style="color:var(--text3)">осталось</span>${c.behind ? ' <span style="color:#B0492A;font-weight:700" title="тратишь быстрее плана">⚠</span>' : ''}</span>`;
+      return `<div style="padding:9px 0${i ? ';border-top:1px solid rgba(15,36,60,.05)' : ''}">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px">
+          <span style="font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</span>${right}
         </div>
-        <span style="font-size:12.5px;color:${over ? '#bf7419' : '#5E7088'};font-family:Sora,sans-serif;white-space:nowrap;font-variant-numeric:tabular-nums;width:130px;flex-shrink:0;text-align:right">${f(c.amount_fact)} <span style="color:rgba(94,112,136,.55)">→ ${plan > 0 ? f(plan) : '—'}</span></span>
+        <div style="position:relative;height:6px;background:#EDF1F6;border-radius:99px">
+          <div style="position:absolute;left:0;top:0;height:100%;width:${c.over ? 0 : (c.remPct * 100).toFixed(1)}%;background:${col};border-radius:99px"></div>
+          ${c.over ? '' : `<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#8A9BB0;left:calc(${(_expectRem * 100).toFixed(1)}% - 1px)" title="сколько должно оставаться по темпу"></span>`}
+        </div>
       </div>`;
     }).join('');
 
@@ -7329,10 +7346,10 @@ async function loadDashboardNew() {
       <div class="lower">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Расходы по категориям</span>
-            <span class="card-hint">факт → план</span>
+            <span class="card-title">Сколько осталось</span>
+            <span class="card-hint">повседневные · до конца месяца</span>
           </div>
-          <div class="card-body">${catHtml || '<span style="font-size:12px;color:var(--text3)">Нет данных</span>'}</div>
+          <div class="card-body">${catHtml || '<span style="font-size:12px;color:var(--text3)">Заведи конверты в Бюджете — появится остаток по повседневным категориям.</span>'}</div>
         </div>
         <div class="card">
           <div class="card-header">
