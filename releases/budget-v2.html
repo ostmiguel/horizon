@@ -5045,9 +5045,9 @@ async function loadSummary() {
   (txAll || []).forEach(r => {
     const c = classify(r); if (!c.ym || !c.kind) return;
     const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;   // гранулярность
-    const b = M[c.ym] || (M[c.ym] = { inc: 0, exp: 0, obl: 0, sav: 0, expCat: {}, incCat: {}, expDay: Array(32).fill(0), fixExp: 0, flexExp: 0 });
+    const b = M[c.ym] || (M[c.ym] = { inc: 0, exp: 0, obl: 0, sav: 0, expCat: {}, incCat: {}, expDay: Array(32).fill(0), povDay: Array(32).fill(0), fixExp: 0, flexExp: 0 });
     if (c.kind === 'income') { b.inc += c.amt; b.incCat[key] = (b.incCat[key] || 0) + c.amt; }
-    else if (c.kind === 'expense') { if (_anChar !== 'all' && c.char !== _anChar) return; b.exp += c.amt; b.expCat[key] = (b.expCat[key] || 0) + c.amt; if (c.day) b.expDay[c.day] += c.amt; if (c.char === 'Фиксированный') b.fixExp += c.amt; else b.flexExp += c.amt; }
+    else if (c.kind === 'expense') { if (_anChar !== 'all' && c.char !== _anChar) return; b.exp += c.amt; b.expCat[key] = (b.expCat[key] || 0) + c.amt; if (c.day) b.expDay[c.day] += c.amt; if (c.char === 'Фиксированный') b.fixExp += c.amt; else b.flexExp += c.amt; if (c.char === 'Повседневный' && c.day) b.povDay[c.day] += c.amt; }
     else if (c.kind === 'obligation') b.obl += c.amt;
     else if (c.kind === 'savings') b.sav += c.amt;
     if (c.kind === 'expense' || c.kind === 'income') { (opsAll[c.ym] = opsAll[c.ym] || {})[key] = (opsAll[c.ym][key] || []); opsAll[c.ym][key].push({ date: r.date, sub: c.sub || c.cat, note: r.note, amt: c.amt, kind: c.kind }); }
@@ -5099,8 +5099,26 @@ async function loadSummary() {
 
   const cum = [0]; let run = 0; for (let d = 1; d <= daysInMonth; d++) { run += b.expDay[d] || 0; cum[d] = run; }
   const factSoFar = cum[elapsed] || 0;
+  // Прогноз расхода к концу месяца, РАЗЛОЖЕННЫЙ по характеру: обязательное
+  // (фиксированные + эпизодические + проценты по кредиту) добираем по ПЛАНУ,
+  // а не по темпу (аренду нельзя «размазывать по дням»); темпом гоним только
+  // повседневное. povDay — дневной ряд только повседневных трат.
+  const povCum = [0]; { let pr = 0; for (let d = 1; d <= daysInMonth; d++) { pr += (b.povDay[d] || 0); povCum[d] = pr; } }
   let projEnd = factSoFar;
-  if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const w = Math.min(10, elapsed); const rate = (cum[elapsed] - (cum[elapsed - w] || 0)) / w; projEnd = factSoFar + rate * (daysInMonth - elapsed); }
+  if (isCurrent && elapsed < daysInMonth && elapsed > 0) {
+    if (_anChar === 'all') {
+      const w = Math.min(10, elapsed);
+      const povRate = (povCum[elapsed] - (povCum[elapsed - w] || 0)) / w;      // темп повседневного
+      const povRemainder = povRate * (daysInMonth - elapsed);
+      const committedFact = factSoFar - (povCum[elapsed] || 0);                 // всё непо­вседневное по факту
+      const committedRemainder = Math.max(0, (PM[sel]?.exp || 0) - committedFact); // ещё не наступившее обязательное — по плану
+      projEnd = factSoFar + committedRemainder + povRemainder;
+    } else {
+      // под фильтром характера — прежний общий темп (декомпозиция неприменима к срезу)
+      const w = Math.min(10, elapsed); const rate = (cum[elapsed] - (cum[elapsed - w] || 0)) / w;
+      projEnd = factSoFar + rate * (daysInMonth - elapsed);
+    }
+  }
   if (!isFinite(projEnd)) projEnd = factSoFar;
   const plannedExp = pExpT(sel), income = b.inc, obligation = b.obl, savings = b.sav;
   const planObl = pObl(sel);                              // плановые долги месяца (график кредитов), не факт-отток
@@ -5137,7 +5155,8 @@ async function loadSummary() {
     const maxV = Math.max(projEnd, plannedExp, factSoFar) * 1.08 || 1;
     const X = d => pL + (d - 1) * (W - pL - pR) / (daysInMonth - 1), Y = v => H - pB - v / maxV * (H - pT - pB);
     const actPts = []; for (let d = 1; d <= elapsed; d++) actPts.push(`${X(d).toFixed(1)},${Y(cum[d]).toFixed(1)}`);
-    let projPts = ''; if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const rate = (cum[elapsed] - (cum[Math.max(0, elapsed - 10)] || 0)) / Math.min(10, elapsed); projPts = `${X(elapsed).toFixed(1)},${Y(cum[elapsed]).toFixed(1)} `; for (let d = elapsed + 1; d <= daysInMonth; d++) projPts += `${X(d).toFixed(1)},${Y(cum[elapsed] + rate * (d - elapsed)).toFixed(1)} `; }
+    // Линия прогноза — прямая от «сегодня» к точке projEnd (согласована с KPI: обязательное по плану + повседневное по темпу).
+    let projPts = ''; if (isCurrent && elapsed < daysInMonth && elapsed > 0) { projPts = `${X(elapsed).toFixed(1)},${Y(cum[elapsed]).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(projEnd).toFixed(1)}`; }
     const yax = [0, .25, .5, .75, 1].map(f => { const v = maxV * f, y = Y(v); return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-pR}" y2="${y.toFixed(1)}" stroke="rgba(15,36,60,.05)"/><text x="${pL-7}" y="${(y+3).toFixed(1)}" font-size="10" fill="#93A1B5" text-anchor="end">${fmtN(v)}</text>`; }).join('');
     let planEls = '';
     if (plannedExp > 0) { const py = Y(plannedExp); planEls = `<line x1="${pL}" y1="${py.toFixed(1)}" x2="${W-pR}" y2="${py.toFixed(1)}" stroke="#A7B4C2" stroke-width="1" stroke-dasharray="2 4" opacity=".8"/><text x="${W-pR}" y="${(py-5).toFixed(1)}" font-size="10" fill="#93A1B5" text-anchor="end">план ${fmtN(plannedExp)}</text><polyline points="${X(1).toFixed(1)},${Y(plannedExp/daysInMonth).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(plannedExp).toFixed(1)}" fill="none" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="5 6"/>`; }
@@ -5148,12 +5167,11 @@ async function loadSummary() {
     const xax = ticks.map(d => `<text x="${X(d).toFixed(1)}" y="${H-9}" font-size="10" fill="#93A1B5" text-anchor="${d===1?'start':d===daysInMonth?'end':'middle'}">${d}</text>`).join('');
     // Подневные ряды для попапа при наведении (факт / прогноз по темпу / ровный темп плана).
     const factCum = [], projCum = [], planEven = [], primY = [];
-    let prate = 0;
-    if (isCurrent && elapsed < daysInMonth && elapsed > 0) prate = (cum[elapsed] - (cum[Math.max(0, elapsed - 10)] || 0)) / Math.min(10, elapsed);
+    const projActive = isCurrent && elapsed < daysInMonth && elapsed > 0;
     for (let d = 1; d <= daysInMonth; d++) {
       factCum[d] = d <= elapsed ? (cum[d] || 0) : null;
       planEven[d] = plannedExp > 0 ? plannedExp / daysInMonth * d : null;
-      projCum[d] = (isCurrent && elapsed < daysInMonth && elapsed > 0 && d >= elapsed) ? cum[elapsed] + prate * (d - elapsed) : null;
+      projCum[d] = (projActive && d >= elapsed) ? cum[elapsed] + (projEnd - cum[elapsed]) * (d - elapsed) / (daysInMonth - elapsed) : null;
       const pv = factCum[d] != null ? factCum[d] : projCum[d];
       primY[d] = pv != null ? +Y(pv).toFixed(1) : null;
     }
