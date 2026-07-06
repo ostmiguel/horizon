@@ -5005,19 +5005,22 @@ let _summaryMode = 'year'; // 'year' | 'all'
 let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Фиксированный' | 'Эпизодический'
 let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (категории)
 
-let _anMonth = null, _anMode = 'visual', _anDrill = null;
+let _anMonth = null, _anMode = 'visual';
 
 async function loadSummary() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
 
-  const [{ data: txAll }, { data: plAll }, { data: accs }] = await Promise.all([
+  const [{ data: txAll }, { data: plAll }, { data: accs }, { data: cbAll }, { data: catAll }] = await Promise.all([
     sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
     sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
     sb.from('accounts').select('name,account_type,include_in_balance'),
+    sb.from('category_budgets').select('category_id,year,month,budget').limit(100000),
+    sb.from('categories').select('id,category'),
   ]);
   const savAcc  = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
   const operAcc = new Set((accs||[]).filter(a => a.account_type === 'Актив' &&  a.include_in_balance).map(a => a.name));
+  const catName = {}; (catAll||[]).forEach(c => catName[c.id] = c.category);
 
   function classify(r) {
     const ym = (r.date || '').slice(0, 7), day = +(r.date || '').slice(8, 10);
@@ -5030,9 +5033,9 @@ async function loadSummary() {
     else if (savAcc.has(to) && operAcc.has(from)) kind = 'savings';
     else if (savAcc.has(from) && operAcc.has(to)) { kind = 'savings'; sign = -1; }
     else if (isLiabilityAcc(to)) kind = 'obligation';
-    return { ym, day, cat, char, amt: amt * sign, kind, note: r.note };
+    return { ym, day, cat, char, amt: amt * sign, kind, note: r.note, sub: r.categories?.subcategory };
   }
-  const M = {}, PM = {};
+  const M = {}, PM = {}, ENV = {}, opsAll = {};
   (txAll || []).forEach(r => {
     const c = classify(r); if (!c.ym || !c.kind) return;
     const b = M[c.ym] || (M[c.ym] = { inc: 0, exp: 0, obl: 0, sav: 0, expCat: {}, incCat: {}, expDay: Array(32).fill(0), fixExp: 0, flexExp: 0 });
@@ -5040,6 +5043,7 @@ async function loadSummary() {
     else if (c.kind === 'expense') { b.exp += c.amt; b.expCat[c.cat] = (b.expCat[c.cat] || 0) + c.amt; if (c.day) b.expDay[c.day] += c.amt; if (c.char === 'Фиксированный') b.fixExp += c.amt; else b.flexExp += c.amt; }
     else if (c.kind === 'obligation') b.obl += c.amt;
     else if (c.kind === 'savings') b.sav += c.amt;
+    if (c.kind === 'expense' || c.kind === 'income') { (opsAll[c.ym] = opsAll[c.ym] || {})[c.cat] = (opsAll[c.ym][c.cat] || []); opsAll[c.ym][c.cat].push({ date: r.date, sub: c.sub || c.cat, note: r.note, amt: c.amt, kind: c.kind }); }
   });
   (plAll || []).forEach(r => {
     const c = classify(r); if (!c.ym) return;
@@ -5047,40 +5051,48 @@ async function loadSummary() {
     if (c.kind === 'expense') { b.exp += c.amt; b.expCat[c.cat] = (b.expCat[c.cat] || 0) + c.amt; }
     else if (c.kind === 'income') { b.inc += c.amt; b.incCat[c.cat] = (b.incCat[c.cat] || 0) + c.amt; }
   });
+  // конверты (category_budgets) — план повседневных категорий, per category/month
+  (cbAll || []).forEach(cb => { const ym = cb.year + '-' + String(cb.month).padStart(2, '0'); const nm = catName[cb.category_id] || '—'; (ENV[ym] = ENV[ym] || {})[nm] = (ENV[ym][nm] || 0) + (+cb.budget || 0); });
 
+  // план по категории/месяцу = правила+события (plan) + конверт (envelope)
+  const pExpC = (ym, cat) => (PM[ym]?.expCat[cat] || 0) + (ENV[ym]?.[cat] || 0);
+  const pExpT = ym => (PM[ym]?.exp || 0) + Object.values(ENV[ym] || {}).reduce((s, v) => s + v, 0);
+  const pIncC = (ym, cat) => (PM[ym]?.incCat[cat] || 0);
+  const pIncT = ym => (PM[ym]?.inc || 0);
+
+  window._anOps = opsAll;
   const months = Object.keys(M).filter(ym => M[ym].inc || M[ym].exp).sort();
   const depth = months.length;
   const CARD = 'background:#fff;border:1px solid rgba(15,36,60,.07);border-radius:16px;box-shadow:0 1px 2px rgba(15,36,60,.04)';
   const CAP = 'font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5';
   const RAMP = ['#134E4A','#1E6E68','#2A8C82','#3AA79B','#5FBBAF','#84CCC2','#A7DBD3'];
   const RAMPI = ['#1D5B6E','#25748A','#2F93AC','#4FAAC0','#77C0D2','#A0D3DF'];
-  const fmt  = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+  const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
   const fmtN = n => Math.round(n).toLocaleString('ru-RU');
   const MNN = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const MNG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 
   if (!depth) {
-    mc.innerHTML = `<div style="padding:24px clamp(16px,4vw,34px);max-width:1040px;margin:0 auto"><div class="page-title">Аналитика</div>
-      <div style="${CARD};padding:40px 24px;text-align:center;margin-top:20px;color:#5A6B82">
-        <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#0F243C;margin-bottom:8px">Пока нет данных для аналитики</div>
-        <div style="font-size:13px">Внеси несколько операций и заведи бюджет — здесь появится темп месяца, план vs факт и структура.</div></div></div>`;
+    mc.innerHTML = `<div style="padding:24px clamp(16px,4vw,34px)"><div class="page-title">Аналитика</div>
+      <div style="${CARD};padding:40px 24px;text-align:center;margin-top:20px;color:#5A6B82"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#0F243C;margin-bottom:8px">Пока нет данных для аналитики</div><div style="font-size:13px">Внеси операции и заведи бюджет — появится темп месяца, план vs факт и структура.</div></div></div>`;
     return;
   }
 
   const sel = (_anMonth && M[_anMonth]) ? _anMonth : months[months.length - 1];
+  window._anSel = sel;
   const [sy, sm] = sel.split('-').map(Number);
   const daysInMonth = new Date(sy, sm, 0).getDate();
   const curYM = new Date().toISOString().slice(0, 7);
   const isCurrent = sel === curYM;
   const elapsed = isCurrent ? Math.min(new Date().getDate(), daysInMonth) : daysInMonth;
-  const b = M[sel], pl = PM[sel] || { exp: 0, inc: 0, expCat: {}, incCat: {} };
+  const b = M[sel];
 
   const cum = [0]; let run = 0; for (let d = 1; d <= daysInMonth; d++) { run += b.expDay[d] || 0; cum[d] = run; }
   const factSoFar = cum[elapsed] || 0;
   let projEnd = factSoFar;
   if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const w = Math.min(10, elapsed); const rate = (cum[elapsed] - (cum[elapsed - w] || 0)) / w; projEnd = factSoFar + rate * (daysInMonth - elapsed); }
   if (!isFinite(projEnd)) projEnd = factSoFar;
-  const plannedExp = pl.exp, income = b.inc, obligation = b.obl, savings = b.sav;
+  const plannedExp = pExpT(sel), income = b.inc, obligation = b.obl, savings = b.sav;
   const profit = income - projEnd - obligation;
   const norm = income > 0 ? profit / income * 100 : 0;
   const overPace = plannedExp > 0 && projEnd > plannedExp;
@@ -5100,12 +5112,12 @@ async function loadSummary() {
   }
 
   function burndown() {
-    const W = 680, H = 210, pT = 16, pB = 26, pL = 52;
+    const W = 720, H = 210, pT = 16, pB = 26, pL = 58;
     const maxV = Math.max(projEnd, plannedExp, factSoFar) * 1.08 || 1;
     const X = d => pL + (d - 1) * (W - pL - 14) / (daysInMonth - 1), Y = v => H - pB - v / maxV * (H - pT - pB);
     const actPts = []; for (let d = 1; d <= elapsed; d++) actPts.push(`${X(d).toFixed(1)},${Y(cum[d]).toFixed(1)}`);
     let projPts = ''; if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const rate = (cum[elapsed] - (cum[Math.max(0, elapsed - 10)] || 0)) / Math.min(10, elapsed); projPts = `${X(elapsed).toFixed(1)},${Y(cum[elapsed]).toFixed(1)} `; for (let d = elapsed + 1; d <= daysInMonth; d++) projPts += `${X(d).toFixed(1)},${Y(cum[elapsed] + rate * (d - elapsed)).toFixed(1)} `; }
-    const yax = [0, .5, 1].map(f => { const v = maxV * f, y = Y(v); return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-14}" y2="${y.toFixed(1)}" stroke="rgba(15,36,60,.06)"/><text x="${pL-7}" y="${(y+3).toFixed(1)}" font-size="9" fill="#93A1B5" text-anchor="end" style="font-family:Sora,sans-serif">${fmtN(v)}</text>`; }).join('');
+    const yax = [0, .5, 1].map(f => { const v = maxV * f, y = Y(v); return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-14}" y2="${y.toFixed(1)}" stroke="rgba(15,36,60,.06)"/><text x="${pL-8}" y="${(y+3).toFixed(1)}" font-size="9" fill="#93A1B5" text-anchor="end" style="font-family:Sora,sans-serif">${fmtN(v)}</text>`; }).join('');
     let planEls = '';
     if (plannedExp > 0) { const py = Y(plannedExp); planEls = `<line x1="${pL}" y1="${py.toFixed(1)}" x2="${W-14}" y2="${py.toFixed(1)}" stroke="#B7822F" stroke-width="1" stroke-dasharray="2 4" opacity=".7"/><text x="${W-16}" y="${(py-5).toFixed(1)}" font-size="9" fill="#B7822F" text-anchor="end">план ${fmtN(plannedExp)}</text><polyline points="${X(1).toFixed(1)},${Y(plannedExp/daysInMonth).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(plannedExp).toFixed(1)}" fill="none" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="5 6"/>`; }
     const centerLbl = (isCurrent && elapsed < daysInMonth) ? `<text x="${X(elapsed).toFixed(1)}" y="${H-9}" font-size="9" fill="#0F243C" text-anchor="middle" font-weight="600">${elapsed} (сегодня)</text>` : '';
@@ -5120,42 +5132,59 @@ async function loadSummary() {
   const picker = months.slice(-12).map(ym => { const on = ym === sel; const [y, m] = ym.split('-'); return `<button onclick="anPickMonth('${ym}')" style="font:inherit;font-size:12px;font-weight:${on?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${on?'#fff':'transparent'};color:${on?'#0F243C':'#5A6B82'};box-shadow:${on?'0 1px 2px rgba(15,36,60,.12)':'none'}">${MNN[+m-1].slice(0,3)} ${y.slice(2)}</button>`; }).join('');
   const modeBtn = (m, l) => `<button onclick="anSetMode('${m}')" style="font:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:9px;border:0;cursor:pointer;background:${_anMode===m?'#fff':'transparent'};color:${_anMode===m?'#0F243C':'#5A6B82'};box-shadow:${_anMode===m?'0 1px 2px rgba(15,36,60,.12)':'none'}">${l}</button>`;
   const projNote = (isCurrent && elapsed < daysInMonth) ? 'прогноз к концу месяца' : 'за месяц';
-  const barList = (rows, top, tot, ramp) => rows.length ? rows.map(([name, v], i) => `<div onclick="anDrill('${esc(name)}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer"><span style="width:9px;height:9px;border-radius:2px;background:${ramp[i%ramp.length]};flex:none"></span><span style="flex:1;font-size:12.5px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><div style="width:74px;height:6px;background:#F5F8FB;border-radius:99px"><i style="display:block;height:100%;width:${Math.round(v/top*100)}%;background:${ramp[i%ramp.length]};border-radius:99px"></i></div><span style="width:78px;text-align:right;font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(v)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(v/(tot||1)*100)}%</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5">Нет данных за месяц.</div>';
+  const barList = (rows, top, tot, ramp, ym) => rows.length ? rows.map(([name, v], i) => `<div onclick="anDrillM('${esc(name)}','${ym}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer"><span style="width:9px;height:9px;border-radius:2px;background:${ramp[i%ramp.length]};flex:none"></span><span style="flex:1;font-size:12.5px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><div style="width:120px;height:6px;background:#F5F8FB;border-radius:99px"><i style="display:block;height:100%;width:${Math.round(v/top*100)}%;background:${ramp[i%ramp.length]};border-radius:99px"></i></div><span style="width:96px;text-align:right;font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(v)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(v/(tot||1)*100)}%</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5">Нет данных за месяц.</div>';
 
-  // ── P&L table ──
+  // ── P&L: годовая матрица по месяцам ──
   function pnl() {
-    const cell = (v, r) => `<td style="padding:9px 12px;text-align:${r?'right':'left'};font-variant-numeric:tabular-nums">${v}</td>`;
-    const line = (name, plan, fact, click) => { const pct = plan ? Math.round(fact/plan*100) : null; const c = pct==null?'#93A1B5':(pct>105?'#B5564A':(pct<97?'#4E7D3A':'#5A6B82')); return `<tr ${click?`onclick="anDrill('${esc(click)}')" style="cursor:pointer"`:''}>${cell(esc(name))}${cell(plan?fmtN(plan):'—',1)}<td style="padding:9px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(fact)}</td><td style="padding:9px 12px;text-align:right;color:${c};font-variant-numeric:tabular-nums">${pct==null?'—':pct+'%'}</td></tr>`; };
-    const head = t => `<tr><td colspan="4" style="padding:14px 12px 5px;font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${t}</td></tr>`;
-    const sub = (name, plan, fact) => `<tr style="background:#F7F9FC"><td style="padding:9px 12px;font-weight:600">${name}</td>${cell(plan?fmtN(plan):'—',1)}<td style="padding:9px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${fmtN(fact)}</td><td></td></tr>`;
-    const incTot = income, incPlan = pl.inc, expT = b.exp, expPlan = pl.exp;
-    const profFact = income - expT - obligation, profPlan = incPlan - expPlan;
-    return `<div style="${CARD};overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:560px">
-        <thead><tr style="border-bottom:1px solid rgba(15,36,60,.12)"><th style="padding:11px 12px;text-align:left;${CAP}">Статья</th><th style="padding:11px 12px;text-align:right;${CAP}">План</th><th style="padding:11px 12px;text-align:right;${CAP}">Факт</th><th style="padding:11px 12px;text-align:right;${CAP}">%</th></tr></thead>
-        <tbody>
-          ${head('Доходы')}${incRows.map(([n, f]) => line(n, pl.incCat[n] || 0, f, n)).join('')}${sub('Итого доходы', incPlan, incTot)}
-          ${head('Расходы')}${catRows.map(([n, f]) => line(n, pl.expCat[n] || 0, f, n)).join('')}${sub('Итого расходы', expPlan, expT)}
-          ${obligation ? head('Обязательства') + line('Платежи по долгам', 0, obligation) : ''}
-          <tr style="border-top:2px solid rgba(15,36,60,.14)"><td style="padding:12px;font-family:Sora,sans-serif;font-weight:700">Профит</td>${cell(profPlan?fmtN(profPlan):'—',1)}<td style="padding:12px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${profFact>=0?'#4E7D3A':'#B5564A'}">${(profFact>=0?'+':'')+fmtN(profFact)}</td><td></td></tr>
-          ${savings ? `<tr><td style="padding:9px 12px;color:#93A1B5">Отложено в резервы <span style="font-size:10px">(памятка)</span></td><td></td><td style="padding:9px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savings)}</td><td></td></tr>` : ''}
-        </tbody>
-      </table></div>
-      <div style="font-size:11px;color:#93A1B5;margin-top:10px">Профит = Доходы − Расходы − Платежи по долгам. Сбережения — распределение прибыли, в профит не входят. Клик по строке категории — операции.</div>`;
+    const yr = sy, yMonths = months.filter(m => +m.slice(0, 4) === yr);
+    const mLab = yMonths.map(m => MNN[+m.slice(5) - 1].slice(0, 3));
+    const uni = maps => [...new Set([].concat(...maps))];
+    const incCats = uni(yMonths.map(m => Object.keys(M[m].incCat)).concat(yMonths.map(m => Object.keys(PM[m]?.incCat || {}))));
+    const expCats = uni(yMonths.map(m => Object.keys(M[m].expCat)).concat(yMonths.map(m => Object.keys({ ...(PM[m]?.expCat || {}), ...(ENV[m] || {}) }))));
+    const th = `<th style="padding:10px 12px;text-align:left;${CAP};position:sticky;left:0;background:#fff">Статья</th>${mLab.map(l => `<th style="padding:10px 10px;text-align:right;${CAP}">${l}</th>`).join('')}<th style="padding:10px 12px;text-align:right;${CAP}">Итого</th><th style="padding:10px 12px;text-align:right;${CAP}">План</th><th style="padding:10px 12px;text-align:right;${CAP}">%</th>`;
+    const rowFn = (name, isInc) => {
+      const facts = yMonths.map(m => (isInc ? M[m].incCat[name] : M[m].expCat[name]) || 0);
+      const tot = facts.reduce((s, v) => s + v, 0);
+      const plan = yMonths.reduce((s, m) => s + (isInc ? pIncC(m, name) : pExpC(m, name)), 0);
+      const pct = plan ? Math.round(tot / plan * 100) : null, pc = pct == null ? '#93A1B5' : (pct > 105 ? '#B5564A' : (pct < 97 ? '#4E7D3A' : '#5A6B82'));
+      return `<tr onclick="anDrillM('${esc(name)}','${sel}')" style="cursor:pointer;border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;white-space:nowrap;position:sticky;left:0;background:#fff">${esc(name)}</td>${facts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(tot)}</td><td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${plan ? fmtN(plan) : '—'}</td><td style="padding:8px 12px;text-align:right;color:${pc};font-variant-numeric:tabular-nums">${pct == null ? '—' : pct + '%'}</td></tr>`;
+    };
+    const sumRow = (name, isInc) => {
+      const facts = yMonths.map(m => (isInc ? M[m].inc : M[m].exp));
+      const tot = facts.reduce((s, v) => s + v, 0), plan = yMonths.reduce((s, m) => s + (isInc ? pIncT(m) : pExpT(m)), 0);
+      return `<tr style="background:#F7F9FC;border-top:1px solid rgba(15,36,60,.1)"><td style="padding:9px 12px;font-weight:600;position:sticky;left:0;background:#F7F9FC">${name}</td>${facts.map(v => `<td style="padding:9px 10px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(v)}</td>`).join('')}<td style="padding:9px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${fmtN(tot)}</td><td style="padding:9px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${plan ? fmtN(plan) : '—'}</td><td></td></tr>`;
+    };
+    const secHead = t => `<tr><td colspan="${mLab.length + 4}" style="padding:14px 12px 4px;font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5;position:sticky;left:0;background:#fff">${t}</td></tr>`;
+    const oblFacts = yMonths.map(m => M[m].obl);
+    const profFacts = yMonths.map(m => M[m].inc - M[m].exp - M[m].obl);
+    const profTot = profFacts.reduce((s, v) => s + v, 0);
+    const oblRow = oblFacts.some(v => v) ? `<tr style="border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;position:sticky;left:0;background:#fff">Платежи по долгам</td>${oblFacts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(oblFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
+    const savFacts = yMonths.map(m => M[m].sav);
+    const savRow = savFacts.some(v => v) ? `<tr><td style="padding:8px 12px;color:#93A1B5;position:sticky;left:0;background:#fff">Отложено в резервы <span style="font-size:10px">(памятка)</span></td>${savFacts.map(v => `<td style="padding:8px 10px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
+    const profRow = `<tr style="border-top:2px solid rgba(15,36,60,.14)"><td style="padding:11px 12px;font-family:Sora,sans-serif;font-weight:700;position:sticky;left:0;background:#fff">Профит</td>${profFacts.map(v => `<td style="padding:11px 10px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${v>=0?'#4E7D3A':'#B5564A'}">${(v>=0?'':'−')+fmtN(Math.abs(v))}</td>`).join('')}<td style="padding:11px 12px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${profTot>=0?'#4E7D3A':'#B5564A'}">${(profTot>=0?'+':'−')+fmtN(Math.abs(profTot))}</td><td></td><td></td></tr>`;
+    return `<div style="${CARD};overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid rgba(15,36,60,.12)">${th}</tr></thead><tbody>
+      ${secHead('Доходы')}${incCats.map(n => rowFn(n, true)).join('')}${sumRow('Итого доходы', true)}
+      ${secHead('Расходы')}${expCats.map(n => rowFn(n, false)).join('')}${sumRow('Итого расходы', false)}
+      ${oblRow}${profRow}${savRow}
+    </tbody></table></div>
+    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы − Платежи по долгам; сбережения — распределение прибыли (памятка). Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
   }
 
   const note = depth < 3
-    ? `Данных пока за ${depth} ${depth===1?'месяц':'месяца'} — показываем то, что полезно сразу. Тренды и сравнение с прошлым годом подключатся, когда накопится история.`
-    : `Клик по месяцу переключает период, по строке категории — операции.`;
-
+    ? `Данных пока за ${depth} ${depth===1?'месяц':'месяца'}. Показываем то, что полезно сразу; тренды и сравнение с прошлым годом — когда накопится история.`
+    : `Клик по месяцу — период, по строке категории — операции. «Таблица» — годовой P&L.`;
   const kpi = (label, val, sub) => `<div style="${CARD};padding:16px 16px 14px;display:flex;flex-direction:column;gap:6px"><span style="${CAP}">${label}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:20px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:#0F243C">${val}</div><div style="font-size:10.5px;color:#93A1B5">${sub}</div></div>`;
 
   const visual = `
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px" class="an-kpis">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:14px">
     ${kpi('Доход', fmt(income), 'поступило за месяц')}
     ${kpi('Расход', fmt(factSoFar), plannedExp>0 ? 'из '+fmtN(plannedExp)+' плана' : 'потрачено')}
+    ${obligation>0 ? kpi('Платежи по долгам', fmt(obligation), 'тело + проценты') : ''}
     ${kpi('Профит', (profit>=0?'+':'')+fmt(profit), projNote)}
     ${kpi('Норма сбережений', norm.toFixed(0)+'%', projNote+' · ≥15% ок')}
+  </div>
+  <div style="${CARD};padding:11px 16px;margin-bottom:24px;font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums">
+    Профит = Доход <b style="color:#0F243C">${fmtN(income)}</b> − Расход <b style="color:#0F243C">${fmtN(projEnd)}</b>${obligation>0?` − Долги <b style="color:#0F243C">${fmtN(obligation)}</b>`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)}</b>${(isCurrent&&elapsed<daysInMonth)?' <span style="color:#93A1B5">(расход — прогноз к концу месяца)</span>':''}
   </div>
 
   <section style="margin-bottom:24px">
@@ -5163,13 +5192,13 @@ async function loadSummary() {
     <div style="${CARD};padding:18px 20px 10px">
       ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:6px">
         <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
-        <div style="color:#5A6B82;font-size:12.5px;line-height:1.5;max-width:380px">${overPace?`Идёшь с опережением — ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким.`:`В рамках плана: ${fmt(projEnd)} против ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
-      </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи план в Бюджете, чтобы видеть темп.</div>`}
+        <div style="color:#5A6B82;font-size:12.5px;line-height:1.5;max-width:440px">${overPace?`Идёшь с опережением — по текущему темпу трат ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким.`:`В рамках плана: по темпу ${fmt(projEnd)} против плана ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
+      </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи правила и конверты в Бюджете.</div>`}
       ${burndown()}
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#93A1B5;margin-top:2px">
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#1E948A"></span>факт накопительно</span>
-        ${(isCurrent&&elapsed<daysInMonth)?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #B27C72"></span>прогноз</span>`:''}
-        ${plannedExp>0?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #CBD5E1"></span>ровный темп по плану</span>`:''}
+        ${(isCurrent&&elapsed<daysInMonth)?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #B27C72"></span>прогноз по темпу</span>`:''}
+        ${plannedExp>0?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #CBD5E1"></span>ровный темп по плану (правила + конверты)</span>`:''}
       </div>
     </div>
   </section>
@@ -5177,91 +5206,68 @@ async function loadSummary() {
   ${(catRows.length && plannedExp>0) ? `<section style="margin-bottom:24px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт · категории</h2><span style="font-size:11.5px;color:#93A1B5">пунктир — ровный темп (${Math.round(elapsed/daysInMonth*100)}% месяца) · клик — операции</span></div>
     <div style="${CARD};padding:8px 20px 14px">
-      ${catRows.map(([name,fv])=>{const plv=pl.expCat[name]||0;if(!plv&&!fv)return '';const over=plv&&fv>plv,pace=plv?fv/(plv*elapsed/daysInMonth):0,overPaceC=!over&&plv&&pace>1.05;const col=over?'#B27C72':(overPaceC?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;return `<div onclick="anDrill('${esc(name)}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):''}${over?' · <span style="color:#B5564A">перерасход</span>':(overPaceC?' · <span style="color:#B7822F">быстрее плана</span>':'')}</span></div><div style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${Math.round(elapsed/daysInMonth*100)}% - 1px)"></span>`:''}</div></div>`;}).join('')}
+      ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const over=plv&&fv>plv,pace=plv?fv/(plv*elapsed/daysInMonth):0,overPaceC=!over&&plv&&pace>1.05;const col=over?'#B27C72':(overPaceC?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${over?' · <span style="color:#B5564A">перерасход</span>':(overPaceC?' · <span style="color:#B7822F">быстрее плана</span>':'')}</span></div><div style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${Math.round(elapsed/daysInMonth*100)}% - 1px)"></span>`:''}</div></div>`;}).join('')}
     </div>
   </section>` : ''}
 
   <section class="an-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
-    <div style="${CARD};padding:18px 20px">
-      <h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Куда ушли деньги</h2>
-      ${barList(catRows, catTop, b.exp, RAMP)}
-    </div>
-    <div style="${CARD};padding:18px 20px">
-      <h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Источники дохода</h2>
-      ${barList(incRows, incTop, income, RAMPI)}
-    </div>
+    <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Куда ушли деньги</h2>${barList(catRows, catTop, b.exp, RAMP, sel)}</div>
+    <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Источники дохода</h2>${barList(incRows, incTop, income, RAMPI, sel)}</div>
   </section>
 
-  <section style="margin-bottom:24px">
-    <div style="${CARD};padding:18px 20px">
-      <h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Природа трат</h2>
-      <div style="display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:12px;max-width:520px"><div style="width:${cPct}%;background:#2A8C82"></div><div style="width:${100-cPct}%;background:#8FB84A"></div></div>
-      <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px;color:#5A6B82">
-        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2A8C82;margin-right:6px;vertical-align:middle"></span>Обязательные · <b style="color:#0F243C">${cPct}%</b> · ${fmtN(committed)}</span>
-        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#8FB84A;margin-right:6px;vertical-align:middle"></span>Гибкие · <b style="color:#0F243C">${100-cPct}%</b> · ${fmtN(flexible)}</span>
-        <span style="color:#93A1B5">рычаг: −10% гибких = ${fmtN(flexible*0.1)}/мес в сбережения</span>
-      </div>
-    </div>
-  </section>
+  <section style="margin-bottom:24px"><div style="${CARD};padding:18px 20px">
+    <h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Природа трат</h2>
+    <div style="display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:12px;max-width:640px"><div style="width:${cPct}%;background:#2A8C82"></div><div style="width:${100-cPct}%;background:#8FB84A"></div></div>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:12.5px;color:#5A6B82">
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2A8C82;margin-right:6px;vertical-align:middle"></span>Обязательные · <b style="color:#0F243C">${cPct}%</b> · ${fmtN(committed)}</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#8FB84A;margin-right:6px;vertical-align:middle"></span>Гибкие · <b style="color:#0F243C">${100-cPct}%</b> · ${fmtN(flexible)}</span>
+      <span style="color:#93A1B5">рычаг: −10% гибких = ${fmtN(flexible*0.1)}/мес в сбережения</span>
+    </div></div></section>
 
   ${mom ? `<section style="margin-bottom:24px">
     <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Что изменилось с ${mom.label}</h2>
     <div style="${CARD};padding:18px 20px">
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-        ${[['Доход',mom.incD,true],['Расход',mom.expD,false],['Профит',mom.profD,true]].map(([l,d,up])=>`<div style="flex:1;min-width:110px;background:#F7F9FC;border:1px solid rgba(15,36,60,.06);border-radius:12px;padding:11px 12px"><span style="${CAP}">${l}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;margin-top:2px;color:${((d>0)===up)?'#4E7D3A':'#B5564A'}">${d>=0?'+':'−'}${fmtN(Math.abs(d))}</div></div>`).join('')}
+        ${[['Доход',mom.incD,true],['Расход',mom.expD,false],['Профит',mom.profD,true]].map(([l,d,up])=>`<div style="flex:1;min-width:130px;background:#F7F9FC;border:1px solid rgba(15,36,60,.06);border-radius:12px;padding:11px 12px"><span style="${CAP}">${l}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;margin-top:2px;color:${((d>0)===up)?'#4E7D3A':'#B5564A'}">${d>=0?'+':'−'}${fmtN(Math.abs(d))}</div></div>`).join('')}
       </div>
-      ${mom.movers.length?`<span style="${CAP}">категории-драйверы расходов</span>${mom.movers.map(mv=>`<div style="display:flex;align-items:center;gap:12px;padding:7px 0"><span style="width:110px;font-size:13px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(mv.name)}</span><div style="flex:1;height:8px;background:#F5F8FB;border-radius:99px;position:relative"><i style="position:absolute;top:0;height:100%;width:${Math.min(Math.abs(mv.d)/mom.maxMov*100,100)}%;border-radius:99px;background:${mv.d>0?'#B27C72':'#6E9B62'};${mv.d>0?'left:0':'right:0'}"></i></div><span style="width:80px;text-align:right;font-weight:600;font-size:12.5px;color:${mv.d>0?'#B5564A':'#4E7D3A'};font-variant-numeric:tabular-nums">${mv.d>0?'+':'−'}${fmtN(Math.abs(mv.d))}</span></div>`).join('')}`:'<div style="font-size:12px;color:#93A1B5;margin-top:6px">Категории почти не изменились.</div>'}
+      ${mom.movers.length?`<span style="${CAP}">категории-драйверы расходов</span>${mom.movers.map(mv=>`<div style="display:flex;align-items:center;gap:12px;padding:7px 0"><span style="width:130px;font-size:13px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(mv.name)}</span><div style="flex:1;height:8px;background:#F5F8FB;border-radius:99px;position:relative"><i style="position:absolute;top:0;height:100%;width:${Math.min(Math.abs(mv.d)/mom.maxMov*100,100)}%;border-radius:99px;background:${mv.d>0?'#B27C72':'#6E9B62'};${mv.d>0?'left:0':'right:0'}"></i></div><span style="width:96px;text-align:right;font-weight:600;font-size:12.5px;color:${mv.d>0?'#B5564A':'#4E7D3A'};font-variant-numeric:tabular-nums">${mv.d>0?'+':'−'}${fmtN(Math.abs(mv.d))}</span></div>`).join('')}`:'<div style="font-size:12px;color:#93A1B5;margin-top:6px">Категории почти не изменились.</div>'}
     </div>
   </section>` : ''}
 
   <section>
     <div style="${CAP};margin-bottom:12px">Появится, когда накопится история</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px" class="an-teasers">
-      ${[[depth<2?'через 1 месяц':'','Сравнение с прошлым месяцем','MoM-дельты',depth>=2],['через '+Math.max(1,3-depth)+' мес','Тренды категорий','что ползёт вверх 3+ месяца',depth>=3],['через '+Math.max(1,6-depth)+' мес','Динамика года и сезонность','помесячно за год, YoY',depth>=6]].filter(t=>!t[3]).map(t=>`<div style="${CARD};padding:16px;background:#F7F9FC;border-style:dashed;opacity:.9"><div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#93A1B5" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span style="${CAP};color:#93A1B5">${t[0]}</span></div><div style="font-family:Sora,sans-serif;font-weight:600;font-size:13.5px;color:#5A6B82;margin-bottom:5px">${t[1]}</div><div style="font-size:11.5px;color:#93A1B5;line-height:1.5">${t[2]}</div></div>`).join('')}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+      ${[['через '+Math.max(1,3-depth)+' мес','Тренды категорий','что ползёт вверх 3+ месяца',depth>=3],['через '+Math.max(1,6-depth)+' мес','Динамика года и сезонность','помесячно за год, YoY',depth>=6]].filter(t=>!t[3]).map(t=>`<div style="${CARD};padding:16px;background:#F7F9FC;border-style:dashed;opacity:.9"><div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#93A1B5" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span style="${CAP};color:#93A1B5">${t[0]}</span></div><div style="font-family:Sora,sans-serif;font-weight:600;font-size:13.5px;color:#5A6B82;margin-bottom:5px">${t[1]}</div><div style="font-size:11.5px;color:#93A1B5;line-height:1.5">${t[2]}</div></div>`).join('')}
     </div>
   </section>`;
 
-  // ── drill drawer ──
-  let drill = '';
-  if (_anDrill) {
-    const ops = (txAll || []).map(r => ({ c: classify(r), r })).filter(x => x.c.ym === sel && x.c.cat === _anDrill && (x.c.kind === 'expense' || x.c.kind === 'income')).sort((a, c) => (a.c.day - c.c.day));
-    const tot = ops.reduce((s, x) => s + x.c.amt, 0);
-    drill = `<div onclick="anCloseDrill()" style="position:fixed;inset:0;z-index:300;background:rgba(15,36,60,.32);display:flex;justify-content:flex-end">
-      <div onclick="event.stopPropagation()" style="width:420px;max-width:92vw;height:100%;background:#fff;box-shadow:-20px 0 50px -20px rgba(15,36,60,.4);padding:22px;overflow-y:auto">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px">
-          <div><div style="${CAP}">${MNN[sm-1]} ${sy} · операции</div><div style="font-family:Sora,sans-serif;font-size:18px;font-weight:600;margin-top:3px">${esc(_anDrill)}</div><div style="font-size:13px;color:#5A6B82;margin-top:3px" class="num">${fmt(tot)} · ${ops.length} ${ops.length===1?'операция':'операций'}</div></div>
-          <button onclick="anCloseDrill()" aria-label="Закрыть" style="flex:none;width:30px;height:30px;border-radius:8px;border:1px solid rgba(15,36,60,.1);background:#F5F8FB;cursor:pointer;color:#93A1B5">✕</button>
-        </div>
-        ${ops.length ? ops.map(x => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid rgba(15,36,60,.06)"><div><div style="font-size:13px;color:#0F243C">${esc(x.r.categories?.subcategory || _anDrill)}</div><div style="font-size:11.5px;color:#93A1B5">${x.r.date}${x.r.note ? ' · ' + esc(x.r.note) : ''}</div></div><span style="font-family:Sora,sans-serif;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;color:${x.c.kind==='income'?'#4E7D3A':'#0F243C'}">${x.c.kind==='income'?'+':'−'}${fmtN(Math.abs(x.c.amt))}</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5;padding:12px 0">Операций за месяц нет.</div>'}
-      </div></div>`;
-  }
-
   mc.innerHTML = `
-<div style="padding:22px clamp(16px,4vw,34px) 64px;max-width:1040px;margin:0 auto">
+<div style="padding:22px clamp(16px,4vw,34px) 64px">
   <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
-    <div>
-      <div class="page-title">Аналитика</div>
-      <div style="font-size:12.5px;color:#93A1B5;margin-top:2px">${MNN[sm-1]} ${sy}${isCurrent && elapsed<daysInMonth ? ` · прошло ${elapsed} из ${daysInMonth} дней` : ''}</div>
-    </div>
+    <div><div class="page-title">Аналитика</div><div style="font-size:12.5px;color:#93A1B5;margin-top:2px">${MNN[sm-1]} ${sy}${isCurrent && elapsed<daysInMonth ? ` · прошло ${elapsed} из ${daysInMonth} дней` : ''}${_anMode==='table'?` · P&L за ${sy} год`:''}</div></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${modeBtn('visual','Визуально')}${modeBtn('table','Таблица')}</div>
       <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px;flex-wrap:wrap">${picker}</div>
     </div>
   </div>
-
-  <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC">
-    <span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span>
-    <div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div>
-  </div>
-
+  <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC"><span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span><div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div></div>
   ${_anMode === 'table' ? pnl() : visual}
-</div>${drill}`;
+</div>`;
 }
 
-function anPickMonth(ym) { _anMonth = ym; _anDrill = null; loadSummary(); }
-function anSetMode(m) { _anMode = m; _anDrill = null; loadSummary(); }
-function anDrill(cat) { _anDrill = cat; loadSummary(); }
-function anCloseDrill() { _anDrill = null; loadSummary(); }
+function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
+function anSetMode(m) { _anMode = m; loadSummary(); }
+function anDrillM(cat, ym) {
+  const ex = document.getElementById('anDrillOv'); if (ex) ex.remove();
+  const ops = ((window._anOps || {})[ym] || {})[cat] || [];
+  const fmtN = n => Math.round(n).toLocaleString('ru-RU');
+  const MNN = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  const [y, m] = ym.split('-'); const tot = ops.reduce((s, o) => s + o.amt, 0);
+  const list = ops.length ? ops.slice().sort((a, c) => a.date < c.date ? -1 : 1).map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid rgba(15,36,60,.06)"><div><div style="font-size:13px;color:#0F243C">${esc(o.sub)}</div><div style="font-size:11.5px;color:#93A1B5">${o.date}${o.note ? ' · ' + esc(o.note) : ''}</div></div><span style="font-family:Sora,sans-serif;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;color:${o.kind==='income'?'#4E7D3A':'#0F243C'}">${o.kind==='income'?'+':'−'}${fmtN(Math.abs(o.amt))} ₽</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5;padding:12px 0">Операций за месяц нет.</div>';
+  document.body.insertAdjacentHTML('beforeend', `<div id="anDrillOv" onclick="anCloseDrill()" style="position:fixed;inset:0;z-index:300;background:rgba(15,36,60,.32);display:flex;justify-content:flex-end"><div onclick="event.stopPropagation()" style="width:420px;max-width:92vw;height:100%;background:#fff;box-shadow:-20px 0 50px -20px rgba(15,36,60,.4);padding:22px;overflow-y:auto"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px"><div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${MNN[+m-1]} ${y} · операции</div><div style="font-family:Sora,sans-serif;font-size:18px;font-weight:600;margin-top:3px">${esc(cat)}</div><div style="font-size:13px;color:#5A6B82;margin-top:3px;font-variant-numeric:tabular-nums">${fmtN(tot)} ₽ · ${ops.length} шт.</div></div><button onclick="anCloseDrill()" aria-label="Закрыть" style="flex:none;width:30px;height:30px;border-radius:8px;border:1px solid rgba(15,36,60,.1);background:#F5F8FB;cursor:pointer;color:#93A1B5">✕</button></div>${list}</div></div>`);
+}
+function anDrill(cat) { anDrillM(cat, window._anSel); }
+function anCloseDrill() { const e = document.getElementById('anDrillOv'); if (e) e.remove(); }
 
 
 
