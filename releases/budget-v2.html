@@ -5005,22 +5005,20 @@ let _summaryMode = 'year'; // 'year' | 'all'
 let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Фиксированный' | 'Эпизодический'
 let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (категории)
 
-let _anMonth = null, _anMode = 'visual';
+let _anMonth = null, _anMode = 'visual', _anGran = 'cat', _anChar = 'all';
 
 async function loadSummary() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
 
-  const [{ data: txAll }, { data: plAll }, { data: accs }, { data: cbAll }, { data: catAll }] = await Promise.all([
+  const [{ data: txAll }, { data: plAll }, { data: accs }, cbAll] = await Promise.all([
     sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
     sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
     sb.from('accounts').select('name,account_type,include_in_balance'),
-    sb.from('category_budgets').select('category_id,year,month,budget').limit(100000),
-    sb.from('categories').select('id,category'),
+    fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
   ]);
   const savAcc  = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
   const operAcc = new Set((accs||[]).filter(a => a.account_type === 'Актив' &&  a.include_in_balance).map(a => a.name));
-  const catName = {}; (catAll||[]).forEach(c => catName[c.id] = c.category);
 
   function classify(r) {
     const ym = (r.date || '').slice(0, 7), day = +(r.date || '').slice(8, 10);
@@ -5038,21 +5036,23 @@ async function loadSummary() {
   const M = {}, PM = {}, ENV = {}, opsAll = {};
   (txAll || []).forEach(r => {
     const c = classify(r); if (!c.ym || !c.kind) return;
+    const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;   // гранулярность
     const b = M[c.ym] || (M[c.ym] = { inc: 0, exp: 0, obl: 0, sav: 0, expCat: {}, incCat: {}, expDay: Array(32).fill(0), fixExp: 0, flexExp: 0 });
-    if (c.kind === 'income') { b.inc += c.amt; b.incCat[c.cat] = (b.incCat[c.cat] || 0) + c.amt; }
-    else if (c.kind === 'expense') { b.exp += c.amt; b.expCat[c.cat] = (b.expCat[c.cat] || 0) + c.amt; if (c.day) b.expDay[c.day] += c.amt; if (c.char === 'Фиксированный') b.fixExp += c.amt; else b.flexExp += c.amt; }
+    if (c.kind === 'income') { b.inc += c.amt; b.incCat[key] = (b.incCat[key] || 0) + c.amt; }
+    else if (c.kind === 'expense') { if (_anChar !== 'all' && c.char !== _anChar) return; b.exp += c.amt; b.expCat[key] = (b.expCat[key] || 0) + c.amt; if (c.day) b.expDay[c.day] += c.amt; if (c.char === 'Фиксированный') b.fixExp += c.amt; else b.flexExp += c.amt; }
     else if (c.kind === 'obligation') b.obl += c.amt;
     else if (c.kind === 'savings') b.sav += c.amt;
-    if (c.kind === 'expense' || c.kind === 'income') { (opsAll[c.ym] = opsAll[c.ym] || {})[c.cat] = (opsAll[c.ym][c.cat] || []); opsAll[c.ym][c.cat].push({ date: r.date, sub: c.sub || c.cat, note: r.note, amt: c.amt, kind: c.kind }); }
+    if (c.kind === 'expense' || c.kind === 'income') { (opsAll[c.ym] = opsAll[c.ym] || {})[key] = (opsAll[c.ym][key] || []); opsAll[c.ym][key].push({ date: r.date, sub: c.sub || c.cat, note: r.note, amt: c.amt, kind: c.kind }); }
   });
   (plAll || []).forEach(r => {
     const c = classify(r); if (!c.ym) return;
+    const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;
     const b = PM[c.ym] || (PM[c.ym] = { exp: 0, inc: 0, expCat: {}, incCat: {} });
-    if (c.kind === 'expense') { b.exp += c.amt; b.expCat[c.cat] = (b.expCat[c.cat] || 0) + c.amt; }
-    else if (c.kind === 'income') { b.inc += c.amt; b.incCat[c.cat] = (b.incCat[c.cat] || 0) + c.amt; }
+    if (c.kind === 'expense') { b.exp += c.amt; b.expCat[key] = (b.expCat[key] || 0) + c.amt; }
+    else if (c.kind === 'income') { b.inc += c.amt; b.incCat[key] = (b.incCat[key] || 0) + c.amt; }
   });
-  // конверты (category_budgets) — план повседневных категорий, per category/month
-  (cbAll || []).forEach(cb => { const ym = cb.year + '-' + String(cb.month).padStart(2, '0'); const nm = catName[cb.category_id] || '—'; (ENV[ym] = ENV[ym] || {})[nm] = (ENV[ym][nm] || 0) + (+cb.budget || 0); });
+  // конверты (category_budgets) — план повседневных категорий (уровень КАТЕГОРИИ), per month
+  (cbAll || []).forEach(cb => { const ym = cb.year + '-' + String(cb.month).padStart(2, '0'); (ENV[ym] = ENV[ym] || {})[cb.category] = (ENV[ym][cb.category] || 0) + (+cb.budget || 0); });
 
   // план по категории/месяцу = правила+события (plan) + конверт (envelope)
   const pExpC = (ym, cat) => (PM[ym]?.expCat[cat] || 0) + (ENV[ym]?.[cat] || 0);
@@ -5093,8 +5093,10 @@ async function loadSummary() {
   if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const w = Math.min(10, elapsed); const rate = (cum[elapsed] - (cum[elapsed - w] || 0)) / w; projEnd = factSoFar + rate * (daysInMonth - elapsed); }
   if (!isFinite(projEnd)) projEnd = factSoFar;
   const plannedExp = pExpT(sel), income = b.inc, obligation = b.obl, savings = b.sav;
-  const profit = income - projEnd - obligation;
-  const norm = income > 0 ? profit / income * 100 : 0;
+  const incFore = Math.max(pIncT(sel), income);           // ожидаемый доход: план или уже полученный
+  const profit = incFore - projEnd - obligation;          // прогноз к концу месяца
+  const profitFact = income - factSoFar - obligation;     // по факту на сегодня
+  const norm = incFore > 0 ? profit / incFore * 100 : 0;
   const overPace = plannedExp > 0 && projEnd > plannedExp;
 
   const catRows = Object.entries(b.expCat).sort((a, c) => c[1] - a[1]);
@@ -5121,9 +5123,10 @@ async function loadSummary() {
     let planEls = '';
     if (plannedExp > 0) { const py = Y(plannedExp); planEls = `<line x1="${pL}" y1="${py.toFixed(1)}" x2="${W-14}" y2="${py.toFixed(1)}" stroke="#B7822F" stroke-width="1" stroke-dasharray="2 4" opacity=".7"/><text x="${W-16}" y="${(py-5).toFixed(1)}" font-size="9" fill="#B7822F" text-anchor="end">план ${fmtN(plannedExp)}</text><polyline points="${X(1).toFixed(1)},${Y(plannedExp/daysInMonth).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(plannedExp).toFixed(1)}" fill="none" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="5 6"/>`; }
     const centerLbl = (isCurrent && elapsed < daysInMonth) ? `<text x="${X(elapsed).toFixed(1)}" y="${H-9}" font-size="9" fill="#0F243C" text-anchor="middle" font-weight="600">${elapsed} (сегодня)</text>` : '';
-    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${yax}${planEls}
-      ${projPts ? `<polyline points="${projPts.trim()}" fill="none" stroke="#B27C72" stroke-width="1.8" stroke-dasharray="4 4"/>` : ''}
-      <polyline points="${actPts.join(' ')}" fill="none" stroke="#1E948A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    const todayLine = (isCurrent && elapsed < daysInMonth) ? `<line x1="${X(elapsed).toFixed(1)}" y1="${pT}" x2="${X(elapsed).toFixed(1)}" y2="${H-pB}" stroke="#0F243C" stroke-width="1" opacity=".08"/>` : '';
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${yax}${todayLine}${planEls}
+      ${projPts ? `<polyline points="${projPts.trim()}" fill="none" stroke="#B27C72" stroke-width="1.6" stroke-dasharray="4 4"/>` : ''}
+      <polyline points="${actPts.join(' ')}" fill="none" stroke="#1E948A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${X(elapsed).toFixed(1)}" cy="${Y(cum[elapsed]||0).toFixed(1)}" r="3.4" fill="#fff" stroke="#1E948A" stroke-width="2"/>
       <text x="${X(1).toFixed(1)}" y="${H-9}" font-size="9" fill="#93A1B5">1</text>${centerLbl}
       <text x="${X(daysInMonth).toFixed(1)}" y="${H-9}" font-size="9" fill="#93A1B5" text-anchor="end">${daysInMonth}</text></svg>`;
@@ -5131,6 +5134,9 @@ async function loadSummary() {
 
   const picker = months.slice(-12).map(ym => { const on = ym === sel; const [y, m] = ym.split('-'); return `<button onclick="anPickMonth('${ym}')" style="font:inherit;font-size:12px;font-weight:${on?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${on?'#fff':'transparent'};color:${on?'#0F243C':'#5A6B82'};box-shadow:${on?'0 1px 2px rgba(15,36,60,.12)':'none'}">${MNN[+m-1].slice(0,3)} ${y.slice(2)}</button>`; }).join('');
   const modeBtn = (m, l) => `<button onclick="anSetMode('${m}')" style="font:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:9px;border:0;cursor:pointer;background:${_anMode===m?'#fff':'transparent'};color:${_anMode===m?'#0F243C':'#5A6B82'};box-shadow:${_anMode===m?'0 1px 2px rgba(15,36,60,.12)':'none'}">${l}</button>`;
+  const segG = (cur, opts, fn) => `<div style="display:inline-flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${opts.map(o => `<button onclick="${fn}('${o[0]}')" style="font:inherit;font-size:12px;font-weight:${cur===o[0]?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${cur===o[0]?'#fff':'transparent'};color:${cur===o[0]?'#0F243C':'#5A6B82'};box-shadow:${cur===o[0]?'0 1px 2px rgba(15,36,60,.12)':'none'}">${o[1]}</button>`).join('')}</div>`;
+  const granCtl = segG(_anGran, [['cat','Категории'],['sub','Подкатегории']], 'anSetGran');
+  const charCtl = segG(_anChar, [['all','Все'],['Повседневный','Повседн.'],['Фиксированный','Фикс.'],['Эпизодический','Эпизод.']], 'anSetChar');
   const projNote = (isCurrent && elapsed < daysInMonth) ? 'прогноз к концу месяца' : 'за месяц';
   const barList = (rows, top, tot, ramp, ym) => rows.length ? rows.map(([name, v], i) => `<div onclick="anDrillM('${esc(name)}','${ym}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer"><span style="width:9px;height:9px;border-radius:2px;background:${ramp[i%ramp.length]};flex:none"></span><span style="flex:1;font-size:12.5px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><div style="width:120px;height:6px;background:#F5F8FB;border-radius:99px"><i style="display:block;height:100%;width:${Math.round(v/top*100)}%;background:${ramp[i%ramp.length]};border-radius:99px"></i></div><span style="width:96px;text-align:right;font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(v)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(v/(tot||1)*100)}%</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5">Нет данных за месяц.</div>';
 
@@ -5160,14 +5166,14 @@ async function loadSummary() {
     const profTot = profFacts.reduce((s, v) => s + v, 0);
     const oblRow = oblFacts.some(v => v) ? `<tr style="border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;position:sticky;left:0;background:#fff">Платежи по долгам</td>${oblFacts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(oblFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
     const savFacts = yMonths.map(m => M[m].sav);
-    const savRow = savFacts.some(v => v) ? `<tr><td style="padding:8px 12px;color:#93A1B5;position:sticky;left:0;background:#fff">Отложено в резервы <span style="font-size:10px">(памятка)</span></td>${savFacts.map(v => `<td style="padding:8px 10px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
+    const savRow = savFacts.some(v => v) ? `<tr><td style="padding:8px 12px;color:#93A1B5;position:sticky;left:0;background:#fff">Сбережения → в резервы</td>${savFacts.map(v => `<td style="padding:8px 10px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
     const profRow = `<tr style="border-top:2px solid rgba(15,36,60,.14)"><td style="padding:11px 12px;font-family:Sora,sans-serif;font-weight:700;position:sticky;left:0;background:#fff">Профит</td>${profFacts.map(v => `<td style="padding:11px 10px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${v>=0?'#4E7D3A':'#B5564A'}">${(v>=0?'':'−')+fmtN(Math.abs(v))}</td>`).join('')}<td style="padding:11px 12px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${profTot>=0?'#4E7D3A':'#B5564A'}">${(profTot>=0?'+':'−')+fmtN(Math.abs(profTot))}</td><td></td><td></td></tr>`;
     return `<div style="${CARD};overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid rgba(15,36,60,.12)">${th}</tr></thead><tbody>
       ${secHead('Доходы')}${incCats.map(n => rowFn(n, true)).join('')}${sumRow('Итого доходы', true)}
       ${secHead('Расходы')}${expCats.map(n => rowFn(n, false)).join('')}${sumRow('Итого расходы', false)}
       ${oblRow}${profRow}${savRow}
     </tbody></table></div>
-    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы − Платежи по долгам; сбережения — распределение прибыли (памятка). Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
+    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы − Платежи по долгам. Сбережения — часть прибыли, переведённая в резервы (в профит не входят, показаны отдельной строкой). Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
   }
 
   const note = depth < 3
@@ -5183,15 +5189,17 @@ async function loadSummary() {
     ${kpi('Профит', (profit>=0?'+':'')+fmt(profit), projNote)}
     ${kpi('Норма сбережений', norm.toFixed(0)+'%', projNote+' · ≥15% ок')}
   </div>
-  <div style="${CARD};padding:11px 16px;margin-bottom:24px;font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums">
-    Профит = Доход <b style="color:#0F243C">${fmtN(income)}</b> − Расход <b style="color:#0F243C">${fmtN(projEnd)}</b>${obligation>0?` − Долги <b style="color:#0F243C">${fmtN(obligation)}</b>`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)}</b>${(isCurrent&&elapsed<daysInMonth)?' <span style="color:#93A1B5">(расход — прогноз к концу месяца)</span>':''}
+  <div style="${CARD};padding:13px 16px;margin-bottom:24px;font-size:12.5px;color:#5A6B82;line-height:1.7;font-variant-numeric:tabular-nums">
+    <div><b style="color:#0F243C">Прогноз к концу месяца:</b> доход ${fmtN(incFore)} − расход ${fmtN(projEnd)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)} ₽</b></div>
+    ${(isCurrent&&elapsed<daysInMonth)?`<div><b style="color:#0F243C">По факту на сегодня:</b> доход ${fmtN(income)} − потрачено ${fmtN(factSoFar)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profitFact>=0?'#4E7D3A':'#B5564A'}">${(profitFact>=0?'+':'')+fmtN(profitFact)} ₽</b></div>`:''}
+    <div style="color:#93A1B5;font-size:11.5px">Прогноз опирается на Бюджет: доход и фиксированные (правила, события) — плановые; повседневные (конверты) — по текущему темпу трат.</div>
   </div>
 
   <section style="margin-bottom:24px">
     <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Темп месяца · успеваешь ли по плану</h2>
     <div style="${CARD};padding:18px 20px 10px">
       ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:6px">
-        <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
+        <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:600;font-size:18px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
         <div style="color:#5A6B82;font-size:12.5px;line-height:1.5;max-width:440px">${overPace?`Идёшь с опережением — по текущему темпу трат ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким.`:`В рамках плана: по темпу ${fmt(projEnd)} против плана ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
       </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи правила и конверты в Бюджете.</div>`}
       ${burndown()}
@@ -5250,6 +5258,10 @@ async function loadSummary() {
       <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px;flex-wrap:wrap">${picker}</div>
     </div>
   </div>
+  <div style="display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+    <span style="${CAP}">Детализация</span>${granCtl}
+    <span style="${CAP};margin-left:6px">Характер</span>${charCtl}
+  </div>
   <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC"><span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span><div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div></div>
   ${_anMode === 'table' ? pnl() : visual}
 </div>`;
@@ -5257,6 +5269,8 @@ async function loadSummary() {
 
 function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
 function anSetMode(m) { _anMode = m; loadSummary(); }
+function anSetGran(g) { _anGran = g; loadSummary(); }
+function anSetChar(c) { _anChar = c; loadSummary(); }
 function anDrillM(cat, ym) {
   const ex = document.getElementById('anDrillOv'); if (ex) ex.remove();
   const ops = ((window._anOps || {})[ym] || {})[cat] || [];
