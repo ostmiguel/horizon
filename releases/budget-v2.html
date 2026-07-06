@@ -5368,17 +5368,60 @@ function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
 function anSetMode(m) { _anMode = m; loadSummary(); }
 function anSetGran(g) { _anGran = g; loadSummary(); }
 function anSetChar(c) { _anChar = c; loadSummary(); }
-function anDrillM(cat, ym) {
-  const ex = document.getElementById('anDrillOv'); if (ex) ex.remove();
-  const ops = ((window._anOps || {})[ym] || {})[cat] || [];
+// ── Универсальный дрилл категории (работает с любой страницы) ────────────────
+// Открывается кликом по любому категорийному прогресс-бару. Сам грузит операции,
+// план и конверт по категории за месяц → шапка + KPI (Факт/План/Отклонение) +
+// столбчатый график дневного факта + список операций.
+function anCloseDrill() { const e = document.getElementById('anDrillOv'); if (e) e.remove(); }
+function _drillPanel(inner) {
+  return `<div id="anDrillOv" onclick="anCloseDrill()" style="position:fixed;inset:0;z-index:300;background:rgba(15,36,60,.32);display:flex;justify-content:flex-end"><div onclick="event.stopPropagation()" style="width:440px;max-width:94vw;height:100%;background:#fff;box-shadow:-20px 0 50px -20px rgba(15,36,60,.4);padding:22px;overflow-y:auto">${inner}</div></div>`;
+}
+async function openCatDrill(cat, ym, flowHint) {
+  anCloseDrill();
   const fmtN = n => Math.round(n).toLocaleString('ru-RU');
   const MNN = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-  const [y, m] = ym.split('-'); const tot = ops.reduce((s, o) => s + o.amt, 0);
-  const list = ops.length ? ops.slice().sort((a, c) => a.date < c.date ? -1 : 1).map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid rgba(15,36,60,.06)"><div><div style="font-size:13px;color:#0F243C">${esc(o.sub)}</div><div style="font-size:11.5px;color:#93A1B5">${o.date}${o.note ? ' · ' + esc(o.note) : ''}</div></div><span style="font-family:Sora,sans-serif;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;color:${o.kind==='income'?'#4E7D3A':'#0F243C'}">${o.kind==='income'?'+':'−'}${fmtN(Math.abs(o.amt))} ₽</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5;padding:12px 0">Операций за месяц нет.</div>';
-  document.body.insertAdjacentHTML('beforeend', `<div id="anDrillOv" onclick="anCloseDrill()" style="position:fixed;inset:0;z-index:300;background:rgba(15,36,60,.32);display:flex;justify-content:flex-end"><div onclick="event.stopPropagation()" style="width:420px;max-width:92vw;height:100%;background:#fff;box-shadow:-20px 0 50px -20px rgba(15,36,60,.4);padding:22px;overflow-y:auto"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px"><div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${MNN[+m-1]} ${y} · операции</div><div style="font-family:Sora,sans-serif;font-size:18px;font-weight:600;margin-top:3px">${esc(cat)}</div><div style="font-size:13px;color:#5A6B82;margin-top:3px;font-variant-numeric:tabular-nums">${fmtN(tot)} ₽ · ${ops.length} шт.</div></div><button onclick="anCloseDrill()" aria-label="Закрыть" style="flex:none;width:30px;height:30px;border-radius:8px;border:1px solid rgba(15,36,60,.1);background:#F5F8FB;cursor:pointer;color:#93A1B5">✕</button></div>${list}</div></div>`);
+  const [y, m] = ym.split('-').map(Number);
+  const closeBtn = `<button onclick="anCloseDrill()" aria-label="Закрыть" style="flex:none;width:30px;height:30px;border-radius:8px;border:1px solid rgba(15,36,60,.1);background:#F5F8FB;cursor:pointer;color:#93A1B5">✕</button>`;
+  document.body.insertAdjacentHTML('beforeend', _drillPanel(`<div style="display:flex;justify-content:space-between;gap:12px"><div style="font-family:Sora,sans-serif;font-size:18px;font-weight:600">${esc(cat)}</div>${closeBtn}</div><div style="padding:40px 0;text-align:center;color:#93A1B5"><div class="spinner"></div></div>`));
+  let txAll, plAll, cbAll;
+  try {
+    [{ data: txAll }, { data: plAll }, cbAll] = await Promise.all([
+      sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
+      sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory)').limit(100000),
+      fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
+    ]);
+  } catch (e) { const ov = document.getElementById('anDrillOv'); if (ov) ov.querySelector('div>div:last-child').innerHTML = '<div style="padding:20px;color:#B5564A;font-size:13px">Не удалось загрузить операции.</div>'; return; }
+  if (!document.getElementById('anDrillOv')) return;   // закрыли, пока грузилось
+  const inMonth = d => (d || '').slice(0, 7) === ym;
+  const ops = (txAll || []).filter(t => inMonth(t.date) && (t.categories?.category) === cat && (t.account_from === 'Доход' || t.account_to === 'Расход'))
+    .map(t => ({ date: t.date, sub: (t.categories?.subcategory) || cat, note: t.note, amt: +t.amount || 0, kind: t.account_from === 'Доход' ? 'income' : 'expense', day: +(t.date || '').slice(8, 10) }));
+  const isIncome = flowHint === 'income' || (ops.length > 0 && ops.every(o => o.kind === 'income'));
+  const fact = ops.reduce((s, o) => s + Math.abs(o.amt), 0);
+  let plan = (plAll || []).filter(p => inMonth(p.date) && (p.categories?.category) === cat && (isIncome ? p.account_from === 'Доход' : (p.account_to === 'Расход' || isLiabilityAcc(p.account_to)))).reduce((s, p) => s + (+p.amount || 0), 0);
+  if (!isIncome) (cbAll || []).forEach(cb => { if (cb.category === cat && +cb.year === y && +cb.month === m) plan += +cb.budget || 0; });
+  const dev = plan > 0 ? (fact - plan) / plan * 100 : null;
+  const devColor = dev == null ? '#93A1B5' : ((isIncome ? dev >= 0 : dev <= 0) ? '#4E7D3A' : '#B5564A');
+  const devStr = dev == null ? '—' : `${dev >= 0 ? '+' : '−'}${Math.abs(dev).toFixed(0)}%`;
+  const kpiBlock = (label, val, color) => `<div style="flex:1;min-width:0;background:#F7F9FC;border:1px solid rgba(15,36,60,.06);border-radius:12px;padding:10px 12px"><div style="font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5">${label}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;font-variant-numeric:tabular-nums;margin-top:3px;color:${color || '#0F243C'}">${val}</div></div>`;
+  const kpis = `<div style="display:flex;gap:8px;margin:14px 0 16px">${kpiBlock('Факт', fmtN(fact) + ' ₽')}${kpiBlock('План', plan > 0 ? fmtN(plan) + ' ₽' : '—')}${kpiBlock('Отклонение', devStr, devColor)}</div>`;
+  // столбчатый график дневного факта
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const dayAmt = Array(daysInMonth + 1).fill(0);
+  ops.forEach(o => { if (o.day >= 1 && o.day <= daysInMonth) dayAmt[o.day] += Math.abs(o.amt); });
+  const maxDay = Math.max(1, ...dayAmt.slice(1));
+  const barCol = isIncome ? '#2AA7CC' : '#2A8C82';
+  const W = 392, H = 92, pB = 15, pT = 8, pL = 2, pR = 2, bw = (W - pL - pR) / daysInMonth;
+  const bars = dayAmt.slice(1).map((v, idx) => { if (!v) return ''; const h = Math.max(2, v / maxDay * (H - pT - pB)); const x = pL + idx * bw; return `<rect x="${(x + bw * 0.16).toFixed(1)}" y="${(H - pB - h).toFixed(1)}" width="${(bw * 0.68).toFixed(1)}" height="${h.toFixed(1)}" rx="1.4" fill="${barCol}"><title>${idx + 1} ${MNN[m - 1].slice(0, 3).toLowerCase()} · ${fmtN(v)} ₽</title></rect>`; }).join('');
+  const xl = [...new Set([1, 10, 20, daysInMonth].filter(d => d <= daysInMonth))].map(d => `<text x="${(pL + (d - 0.5) * bw).toFixed(1)}" y="${H - 4}" font-size="8" fill="#93A1B5" text-anchor="middle">${d}</text>`).join('');
+  const chart = fact > 0 ? `<div style="font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#93A1B5;margin-bottom:4px">${isIncome ? 'Поступления по дням' : 'Траты по дням'}</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;margin-bottom:16px">${bars}${xl}</svg>` : '';
+  const list = ops.length ? ops.slice().sort((a, c) => a.date < c.date ? -1 : 1).map(o => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid rgba(15,36,60,.06)"><div><div style="font-size:13px;color:#0F243C">${esc(o.sub)}</div><div style="font-size:11.5px;color:#93A1B5">${o.date}${o.note ? ' · ' + esc(o.note) : ''}</div></div><span style="font-family:Sora,sans-serif;font-weight:600;font-size:13px;font-variant-numeric:tabular-nums;color:${o.kind === 'income' ? '#4E7D3A' : '#0F243C'}">${o.kind === 'income' ? '+' : '−'}${fmtN(Math.abs(o.amt))} ₽</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5;padding:12px 0">Операций за месяц нет.</div>';
+  const header = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div><div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${MNN[m - 1]} ${y} · ${isIncome ? 'доход' : 'категория'}</div><div style="font-family:Sora,sans-serif;font-size:18px;font-weight:600;margin-top:3px">${esc(cat)}</div><div style="font-size:12.5px;color:#5A6B82;margin-top:3px">${ops.length} ${ops.length === 1 ? 'операция' : (ops.length >= 2 && ops.length <= 4 ? 'операции' : 'операций')}</div></div>${closeBtn}</div>`;
+  const ov = document.getElementById('anDrillOv');
+  if (ov) ov.querySelector(':scope > div').innerHTML = header + kpis + chart + list;
 }
-function anDrill(cat) { anDrillM(cat, window._anSel); }
-function anCloseDrill() { const e = document.getElementById('anDrillOv'); if (e) e.remove(); }
+// Совместимость: прежние вызовы дрилла Аналитики → универсальный дрилл.
+function anDrillM(cat, ym) { openCatDrill(cat, ym); }
+function anDrill(cat) { openCatDrill(cat, window._anSel); }
 
 
 
@@ -5816,7 +5859,8 @@ async function loadBudget() {
       const barBg = over ? '#C0741A' : 'linear-gradient(90deg,#2AA7CC,#1FA497,#B4DE3C)';
       const fcColor = overFc ? '#C0741A' : 'var(--text3)';
       const fc = '<span class="bgt-fc2" style="color:' + fcColor + ';font-weight:' + (overFc ? '600' : '400') + '">прогноз ' + f(e.forecast) + ' ₽</span>';
-      return '<div class="bgt-flrow">'
+      const _eYm = year + '-' + String(month).padStart(2, '0');
+      return '<div class="bgt-flrow" style="cursor:pointer" onclick="openCatDrill(\'' + esc(e.name) + '\',\'' + _eYm + '\',\'expense\')">'
         + '<div class="bgt-rn">' + esc(e.name) + '</div>'
         + '<div class="bgt-pbar"><i style="width:' + pct + '%;background:' + barBg + '"></i></div>'
         + '<span class="bgt-amt2">' + f(e.fact) + ' / ' + f(e.budget) + ' ₽</span>' + fc
@@ -7250,6 +7294,7 @@ async function loadDashboardNew() {
     const _dim = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
     const _elapsedFrac = Math.min(_now.getDate(), _dim) / _dim;
     const _expectRem = 1 - _elapsedFrac;   // доля бюджета, что должна оставаться по темпу
+    const _ostYm = _now.getFullYear() + '-' + String(_now.getMonth() + 1).padStart(2, '0');
     const remColor = (remPct, over) => over ? '#B0492A' : remPct > 0.35 ? '#1FA497' : remPct > 0.15 ? '#C0741A' : '#B0492A';
     const everyday = Object.values(catMap)
       .filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический' && (c.amount_plan || 0) > 0)
@@ -7265,7 +7310,7 @@ async function loadDashboardNew() {
       const right = c.over
         ? `<span style="font-size:12.5px;font-family:Sora,sans-serif;font-variant-numeric:tabular-nums;color:#B0492A;white-space:nowrap"><b>перерасход −${f(-c.rem)} ₽</b></span>`
         : `<span style="font-size:12.5px;font-family:Sora,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap"><b style="color:${col}">${f(c.rem)} ₽</b> <span style="color:var(--text3)">осталось</span>${c.behind ? ' <span style="color:#B0492A;font-weight:700" title="тратишь быстрее плана">⚠</span>' : ''}</span>`;
-      return `<div style="padding:9px 0${i ? ';border-top:1px solid rgba(15,36,60,.05)' : ''}">
+      return `<div onclick="openCatDrill('${esc(c.name)}','${_ostYm}','expense')" style="padding:9px 0;cursor:pointer${i ? ';border-top:1px solid rgba(15,36,60,.05)' : ''}">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px">
           <span style="font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</span>${right}
         </div>
