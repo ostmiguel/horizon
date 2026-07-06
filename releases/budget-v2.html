@@ -123,6 +123,10 @@ body {
 .nav-dot { width: 8px; height: 8px; border-radius: 2px; background: #C4D0DD; flex-shrink: 0; transition: background 0.15s; }
 .nav-item.active .nav-dot { background: linear-gradient(135deg, #2AA7CC, #B4DE3C); }
 .nav-divider { height: 1px; background: var(--border); margin: 8px 14px; }
+.sidebar-foot { margin-top: auto; padding: 14px 20px 18px; border-top: 1px solid var(--border); }
+.sidebar-foot-lbl { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+.sidebar-foot-mail { font-size: 12px; color: var(--text2, var(--text3)); text-decoration: none; word-break: break-all; }
+.sidebar-foot-mail:hover { color: var(--accent); text-decoration: underline; }
 
 /* ── MAIN ── */
 .main { margin-left: 210px; padding: 24px; min-height: 100vh; }
@@ -1014,6 +1018,10 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
       <option value="7">Июл</option><option value="8">Авг</option><option value="9">Сен</option>
       <option value="10">Окт</option><option value="11">Ноя</option><option value="12">Дек</option>
     </select>
+  </div>
+  <div class="sidebar-foot">
+    <div class="sidebar-foot-lbl">Поддержка</div>
+    <a href="mailto:hello@horizonapp.ru" class="sidebar-foot-mail">hello@horizonapp.ru</a>
   </div>
 </nav>
 
