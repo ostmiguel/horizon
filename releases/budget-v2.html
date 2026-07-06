@@ -5047,9 +5047,10 @@ async function loadSummary() {
   (plAll || []).forEach(r => {
     const c = classify(r); if (!c.ym) return;
     const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;
-    const b = PM[c.ym] || (PM[c.ym] = { exp: 0, inc: 0, expCat: {}, incCat: {} });
+    const b = PM[c.ym] || (PM[c.ym] = { exp: 0, inc: 0, obl: 0, expCat: {}, incCat: {} });
     if (c.kind === 'expense') { b.exp += c.amt; b.expCat[key] = (b.expCat[key] || 0) + c.amt; }
     else if (c.kind === 'income') { b.inc += c.amt; b.incCat[key] = (b.incCat[key] || 0) + c.amt; }
+    else if (c.kind === 'obligation') b.obl += c.amt;   // плановые платежи по телу долга (график кредитов)
   });
   // конверты (category_budgets) — план повседневных категорий (уровень КАТЕГОРИИ), per month
   (cbAll || []).forEach(cb => { const ym = cb.year + '-' + String(cb.month).padStart(2, '0'); (ENV[ym] = ENV[ym] || {})[cb.category] = (ENV[ym][cb.category] || 0) + (+cb.budget || 0); });
@@ -5059,6 +5060,7 @@ async function loadSummary() {
   const pExpT = ym => (PM[ym]?.exp || 0) + Object.values(ENV[ym] || {}).reduce((s, v) => s + v, 0);
   const pIncC = (ym, cat) => (PM[ym]?.incCat[cat] || 0);
   const pIncT = ym => (PM[ym]?.inc || 0);
+  const pObl  = ym => (PM[ym]?.obl || 0);   // плановые долги месяца из графика кредитов
 
   window._anOps = opsAll;
   const months = Object.keys(M).filter(ym => M[ym].inc || M[ym].exp).sort();
@@ -5093,9 +5095,11 @@ async function loadSummary() {
   if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const w = Math.min(10, elapsed); const rate = (cum[elapsed] - (cum[elapsed - w] || 0)) / w; projEnd = factSoFar + rate * (daysInMonth - elapsed); }
   if (!isFinite(projEnd)) projEnd = factSoFar;
   const plannedExp = pExpT(sel), income = b.inc, obligation = b.obl, savings = b.sav;
+  const planObl = pObl(sel);                              // плановые долги месяца (график кредитов), не факт-отток
+  const oblFore = (isCurrent && elapsed < daysInMonth) ? planObl : obligation;  // прогноз — план, завершённый месяц — факт
   const incFore = Math.max(pIncT(sel), income);           // ожидаемый доход: план или уже полученный
-  const profit = incFore - projEnd - obligation;          // прогноз к концу месяца
-  const profitFact = income - factSoFar - obligation;     // по факту на сегодня
+  const profit = incFore - projEnd - oblFore;             // прогноз к концу месяца (долги из графика)
+  const profitFact = income - factSoFar - obligation;     // по факту на сегодня (долги — фактический отток)
   const norm = incFore > 0 ? profit / incFore * 100 : 0;
   const overPace = plannedExp > 0 && projEnd > plannedExp;
 
@@ -5114,22 +5118,35 @@ async function loadSummary() {
   }
 
   function burndown() {
-    const W = 720, H = 210, pT = 16, pB = 26, pL = 58;
+    // viewBox фиксирован; max-width на SVG держит кегль текста стабильным независимо от ширины карточки
+    const W = 560, H = 224, pT = 14, pB = 30, pL = 50, pR = 14;
     const maxV = Math.max(projEnd, plannedExp, factSoFar) * 1.08 || 1;
-    const X = d => pL + (d - 1) * (W - pL - 14) / (daysInMonth - 1), Y = v => H - pB - v / maxV * (H - pT - pB);
+    const X = d => pL + (d - 1) * (W - pL - pR) / (daysInMonth - 1), Y = v => H - pB - v / maxV * (H - pT - pB);
     const actPts = []; for (let d = 1; d <= elapsed; d++) actPts.push(`${X(d).toFixed(1)},${Y(cum[d]).toFixed(1)}`);
     let projPts = ''; if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const rate = (cum[elapsed] - (cum[Math.max(0, elapsed - 10)] || 0)) / Math.min(10, elapsed); projPts = `${X(elapsed).toFixed(1)},${Y(cum[elapsed]).toFixed(1)} `; for (let d = elapsed + 1; d <= daysInMonth; d++) projPts += `${X(d).toFixed(1)},${Y(cum[elapsed] + rate * (d - elapsed)).toFixed(1)} `; }
-    const yax = [0, .5, 1].map(f => { const v = maxV * f, y = Y(v); return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-14}" y2="${y.toFixed(1)}" stroke="rgba(15,36,60,.06)"/><text x="${pL-8}" y="${(y+3).toFixed(1)}" font-size="9" fill="#93A1B5" text-anchor="end" style="font-family:Sora,sans-serif">${fmtN(v)}</text>`; }).join('');
+    const yax = [0, .25, .5, .75, 1].map(f => { const v = maxV * f, y = Y(v); return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-pR}" y2="${y.toFixed(1)}" stroke="rgba(15,36,60,.05)"/><text x="${pL-7}" y="${(y+3).toFixed(1)}" font-size="10" fill="#93A1B5" text-anchor="end">${fmtN(v)}</text>`; }).join('');
     let planEls = '';
-    if (plannedExp > 0) { const py = Y(plannedExp); planEls = `<line x1="${pL}" y1="${py.toFixed(1)}" x2="${W-14}" y2="${py.toFixed(1)}" stroke="#B7822F" stroke-width="1" stroke-dasharray="2 4" opacity=".7"/><text x="${W-16}" y="${(py-5).toFixed(1)}" font-size="9" fill="#B7822F" text-anchor="end">план ${fmtN(plannedExp)}</text><polyline points="${X(1).toFixed(1)},${Y(plannedExp/daysInMonth).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(plannedExp).toFixed(1)}" fill="none" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="5 6"/>`; }
-    const centerLbl = (isCurrent && elapsed < daysInMonth) ? `<text x="${X(elapsed).toFixed(1)}" y="${H-9}" font-size="9" fill="#0F243C" text-anchor="middle" font-weight="600">${elapsed} (сегодня)</text>` : '';
-    const todayLine = (isCurrent && elapsed < daysInMonth) ? `<line x1="${X(elapsed).toFixed(1)}" y1="${pT}" x2="${X(elapsed).toFixed(1)}" y2="${H-pB}" stroke="#0F243C" stroke-width="1" opacity=".08"/>` : '';
-    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${yax}${todayLine}${planEls}
+    if (plannedExp > 0) { const py = Y(plannedExp); planEls = `<line x1="${pL}" y1="${py.toFixed(1)}" x2="${W-pR}" y2="${py.toFixed(1)}" stroke="#B7822F" stroke-width="1" stroke-dasharray="2 4" opacity=".7"/><text x="${W-pR}" y="${(py-5).toFixed(1)}" font-size="10" fill="#B7822F" text-anchor="end">план ${fmtN(plannedExp)}</text><polyline points="${X(1).toFixed(1)},${Y(plannedExp/daysInMonth).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(plannedExp).toFixed(1)}" fill="none" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="5 6"/>`; }
+    const todayLine = (isCurrent && elapsed < daysInMonth) ? `<line x1="${X(elapsed).toFixed(1)}" y1="${pT}" x2="${X(elapsed).toFixed(1)}" y2="${H-pB}" stroke="#0F243C" stroke-width="1" opacity=".1"/><text x="${X(elapsed).toFixed(1)}" y="${pT-3}" font-size="9.5" fill="#0F243C" text-anchor="middle" font-weight="600">сегодня</text>` : '';
+    // подписи дат по оси X
+    const step = daysInMonth <= 12 ? 2 : 5;
+    const ticks = []; for (let d = 1; d <= daysInMonth; d += step) ticks.push(d); if (ticks[ticks.length-1] !== daysInMonth) ticks.push(daysInMonth);
+    const xax = ticks.map(d => `<text x="${X(d).toFixed(1)}" y="${H-9}" font-size="10" fill="#93A1B5" text-anchor="${d===1?'start':d===daysInMonth?'end':'middle'}">${d}</text>`).join('');
+    // интерактив: наведение на день — вертикаль + точка + нативная подсказка со суммой
+    let hov = '';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const cx = X(d), val = d <= elapsed ? (cum[d] || 0) : null;
+      const x0 = d === 1 ? pL : (X(d) + X(d-1)) / 2, x1 = d === daysInMonth ? W - pR : (X(d) + X(d+1)) / 2;
+      const dot = val != null ? `<circle class="hzc" cx="${cx.toFixed(1)}" cy="${Y(val).toFixed(1)}" r="3.6" fill="#1E948A"/>` : '';
+      const line = `<line class="hzc" x1="${cx.toFixed(1)}" y1="${pT}" x2="${cx.toFixed(1)}" y2="${H-pB}" stroke="#1E948A" stroke-width="1" stroke-opacity=".45"/>`;
+      const tip = val != null ? `${d} ${MNG[sm-1]} · накоплено ${fmtN(val)} ₽` : `${d} ${MNG[sm-1]} · нет данных`;
+      hov += `<g class="hzg"><title>${tip}</title>${line}${dot}<rect x="${x0.toFixed(1)}" y="${pT}" width="${(x1-x0).toFixed(1)}" height="${(H-pT-pB).toFixed(1)}" fill="transparent"/></g>`;
+    }
+    return `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;max-width:640px;height:auto;font-family:Sora,sans-serif"><style>.hzc{opacity:0;transition:opacity .08s}.hzg:hover .hzc{opacity:1}</style>${yax}${todayLine}${planEls}
       ${projPts ? `<polyline points="${projPts.trim()}" fill="none" stroke="#B27C72" stroke-width="1.6" stroke-dasharray="4 4"/>` : ''}
       <polyline points="${actPts.join(' ')}" fill="none" stroke="#1E948A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${X(elapsed).toFixed(1)}" cy="${Y(cum[elapsed]||0).toFixed(1)}" r="3.4" fill="#fff" stroke="#1E948A" stroke-width="2"/>
-      <text x="${X(1).toFixed(1)}" y="${H-9}" font-size="9" fill="#93A1B5">1</text>${centerLbl}
-      <text x="${X(daysInMonth).toFixed(1)}" y="${H-9}" font-size="9" fill="#93A1B5" text-anchor="end">${daysInMonth}</text></svg>`;
+      ${xax}${hov}</svg>`;
   }
 
   const picker = months.slice(-12).map(ym => { const on = ym === sel; const [y, m] = ym.split('-'); return `<button onclick="anPickMonth('${ym}')" style="font:inherit;font-size:12px;font-weight:${on?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${on?'#fff':'transparent'};color:${on?'#0F243C':'#5A6B82'};box-shadow:${on?'0 1px 2px rgba(15,36,60,.12)':'none'}">${MNN[+m-1].slice(0,3)} ${y.slice(2)}</button>`; }).join('');
@@ -5185,38 +5202,40 @@ async function loadSummary() {
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:14px">
     ${kpi('Доход', fmt(income), 'поступило за месяц')}
     ${kpi('Расход', fmt(factSoFar), plannedExp>0 ? 'из '+fmtN(plannedExp)+' плана' : 'потрачено')}
-    ${obligation>0 ? kpi('Платежи по долгам', fmt(obligation), 'тело + проценты') : ''}
+    ${(oblFore>0) ? kpi('Платежи по долгам', fmt(oblFore), (isCurrent&&elapsed<daysInMonth)?'план · график кредитов':'погашение тела') : ''}
     ${kpi('Профит', (profit>=0?'+':'')+fmt(profit), projNote)}
     ${kpi('Норма сбережений', norm.toFixed(0)+'%', projNote+' · ≥15% ок')}
   </div>
   <div style="${CARD};padding:13px 16px;margin-bottom:24px;font-size:12.5px;color:#5A6B82;line-height:1.7;font-variant-numeric:tabular-nums">
-    <div><b style="color:#0F243C">Прогноз к концу месяца:</b> доход ${fmtN(incFore)} − расход ${fmtN(projEnd)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)} ₽</b></div>
+    <div><b style="color:#0F243C">Прогноз к концу месяца:</b> доход ${fmtN(incFore)} − расход ${fmtN(projEnd)}${oblFore>0?` − долги ${fmtN(oblFore)}`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)} ₽</b></div>
     ${(isCurrent&&elapsed<daysInMonth)?`<div><b style="color:#0F243C">По факту на сегодня:</b> доход ${fmtN(income)} − потрачено ${fmtN(factSoFar)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profitFact>=0?'#4E7D3A':'#B5564A'}">${(profitFact>=0?'+':'')+fmtN(profitFact)} ₽</b></div>`:''}
-    <div style="color:#93A1B5;font-size:11.5px">Прогноз опирается на Бюджет: доход и фиксированные (правила, события) — плановые; повседневные (конверты) — по текущему темпу трат.</div>
+    <div style="color:#93A1B5;font-size:11.5px">Прогноз опирается на Бюджет: доход, фиксированные (правила, события) и долги (график кредитов) — плановые; повседневные (конверты) — по текущему темпу трат. Долги — только тело, проценты уже в расходах. Профит = Доходы − Расходы − Платежи по телу долга (как в Бюджете и Операциях).</div>
   </div>
 
-  <section style="margin-bottom:24px">
-    <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Темп месяца · успеваешь ли по плану</h2>
-    <div style="${CARD};padding:18px 20px 10px">
-      ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:6px">
-        <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:600;font-size:18px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
-        <div style="color:#5A6B82;font-size:12.5px;line-height:1.5;max-width:440px">${overPace?`Идёшь с опережением — по текущему темпу трат ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким.`:`В рамках плана: по темпу ${fmt(projEnd)} против плана ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
-      </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи правила и конверты в Бюджете.</div>`}
-      ${burndown()}
-      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#93A1B5;margin-top:2px">
-        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#1E948A"></span>факт накопительно</span>
-        ${(isCurrent&&elapsed<daysInMonth)?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #B27C72"></span>прогноз по темпу</span>`:''}
-        ${plannedExp>0?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #CBD5E1"></span>ровный темп по плану (правила + конверты)</span>`:''}
+  <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:24px;align-items:start">
+    <div>
+      <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Темп месяца · успеваешь ли по плану</h2>
+      <div style="${CARD};padding:18px 20px 12px">
+        ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:8px">
+          <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
+          <div style="color:#5A6B82;font-size:12px;line-height:1.5;flex:1;min-width:200px">${overPace?`Идёшь с опережением — по темпу ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким.`:`В рамках плана: по темпу ${fmt(projEnd)} против плана ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
+        </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи правила и конверты в Бюджете.</div>`}
+        ${burndown()}
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:#93A1B5;margin-top:6px">
+          <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#1E948A"></span>факт накопительно</span>
+          ${(isCurrent&&elapsed<daysInMonth)?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #B27C72"></span>прогноз по темпу</span>`:''}
+          ${plannedExp>0?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #CBD5E1"></span>ровный темп по плану</span>`:''}
+        </div>
+        <div style="font-size:10.5px;color:#93A1B5;margin-top:4px">Наведи курсор на график — сумма накопленных трат на любой день.</div>
       </div>
     </div>
+    ${(catRows.length && plannedExp>0) ? `<div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт · категории</h2><span style="font-size:11px;color:#93A1B5">пунктир — темп ${Math.round(elapsed/daysInMonth*100)}% месяца · клик — операции</span></div>
+      <div style="${CARD};padding:8px 20px 14px">
+        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const over=plv&&fv>plv,pace=plv?fv/(plv*elapsed/daysInMonth):0,overPaceC=!over&&plv&&pace>1.05;const col=over?'#B27C72':(overPaceC?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${over?' · <span style="color:#B5564A">перерасход</span>':(overPaceC?' · <span style="color:#B7822F">быстрее плана</span>':'')}</span></div><div style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${Math.round(elapsed/daysInMonth*100)}% - 1px)"></span>`:''}</div></div>`;}).join('')}
+      </div>
+    </div>` : ''}
   </section>
-
-  ${(catRows.length && plannedExp>0) ? `<section style="margin-bottom:24px">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт · категории</h2><span style="font-size:11.5px;color:#93A1B5">пунктир — ровный темп (${Math.round(elapsed/daysInMonth*100)}% месяца) · клик — операции</span></div>
-    <div style="${CARD};padding:8px 20px 14px">
-      ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const over=plv&&fv>plv,pace=plv?fv/(plv*elapsed/daysInMonth):0,overPaceC=!over&&plv&&pace>1.05;const col=over?'#B27C72':(overPaceC?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${over?' · <span style="color:#B5564A">перерасход</span>':(overPaceC?' · <span style="color:#B7822F">быстрее плана</span>':'')}</span></div><div style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${Math.round(elapsed/daysInMonth*100)}% - 1px)"></span>`:''}</div></div>`;}).join('')}
-    </div>
-  </section>` : ''}
 
   <section class="an-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
     <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Куда ушли деньги</h2>${barList(catRows, catTop, b.exp, RAMP, sel)}</div>
