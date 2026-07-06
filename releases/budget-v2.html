@@ -991,7 +991,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
   <div class="nav">
     <div class="nav-item active" id="navDashboard" data-page="dashboard"><span class="nav-dot" aria-hidden="true"></span>Обзор</div>
     <div class="nav-item" id="navForecast" data-page="forecast" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Прогноз</div>
-    <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-dot" aria-hidden="true"></span>Сводка</div>
+    <div class="nav-item" id="navSummary" data-page="summary"><span class="nav-dot" aria-hidden="true"></span>Аналитика</div>
     <div class="nav-item" id="navBudget" data-page="budget" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Бюджет</div>
     <div class="nav-item" id="navOps" data-page="operations" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Операции</div>
     <div class="nav-item" id="navGoals" data-page="goals" style="display:none"><span class="nav-dot" aria-hidden="true"></span>Фонды</div>
@@ -5005,271 +5005,213 @@ let _summaryMode = 'year'; // 'year' | 'all'
 let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Фиксированный' | 'Эпизодический'
 let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (категории)
 
+let _anMonth = null;   // выбранный месяц 'YYYY-MM' (null → последний с данными)
+
 async function loadSummary() {
-  const sidebarYear = +document.getElementById('selYear')?.value;
-  if (sidebarYear && _summaryMode === 'year') _summaryYear = sidebarYear;
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
 
-  // Get available years from actual data
-  const [{ data: txAll2 }, { data: plAll3 }] = await Promise.all([
-    sb.from('transactions').select('date').limit(100000),
-    sb.from('plan').select('date').limit(100000),
-  ]);
-  const years = [...new Set([
-    ...(txAll2||[]).map(r => +r.date.substring(0,4)),
-    ...(plAll3||[]).map(r => +r.date.substring(0,4)),
-  ])].filter(y => y > 2000).sort();
-
-  // Load data
-  let txQ = sb.from('transactions').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)').limit(100000);
-  let plQ = sb.from('plan').select('date,amount,account_from,account_to,category_id,categories(group_name,category,subcategory,character)').limit(100000);
-
-  if (_summaryMode === 'year') {
-    txQ = txQ.eq('year', _summaryYear);
-    plQ = plQ.eq('year', _summaryYear);
-  }
-
   const [{ data: txAll }, { data: plAll }, { data: accs }] = await Promise.all([
-    txQ, plQ,
-    sb.from('accounts').select('name,account_type,include_in_balance,color')
+    sb.from('transactions').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
+    sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
+    sb.from('accounts').select('name,account_type,include_in_balance'),
   ]);
+  const savAcc  = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
+  const operAcc = new Set((accs||[]).filter(a => a.account_type === 'Актив' &&  a.include_in_balance).map(a => a.name));
 
-  const savingsAccNames = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
-  const operAccNames   = new Set((accs||[]).filter(a => a.account_type === 'Актив' && a.include_in_balance).map(a => a.name));
+  // ── классификация строки → тип + месяц + категория + характер + день ──
+  function classify(r) {
+    const ym = (r.date || '').slice(0, 7), day = +(r.date || '').slice(8, 10);
+    const sub = r.categories?.subcategory || r.categories?.category || '—';
+    const cat = r.categories?.category || sub;
+    const char = r.categories?.character || null;
+    const amt = +r.amount || 0, from = r.account_from, to = r.account_to;
+    let kind = null, sign = 1;
+    if (from === 'Доход') kind = 'income';
+    else if (to === 'Расход') kind = 'expense';
+    else if (savAcc.has(to) && operAcc.has(from)) kind = 'savings';
+    else if (savAcc.has(from) && operAcc.has(to)) { kind = 'savings'; sign = -1; }
+    else if (isLiabilityAcc(to)) kind = 'obligation';
+    return { ym, day, cat, sub, char, amt: amt * sign, kind };
+  }
+  // агрегируем по месяцам
+  const M = {};  // ym → {inc,exp,obl,sav, expCat:{cat:amt}, expDay:[..31], fixExp, flexExp}
+  const PM = {}; // план: ym → {exp, expCat}
+  function bucket(store, r, isPlan) {
+    const c = classify(r); if (!c.ym || !c.kind) return;
+    const b = store[c.ym] || (store[c.ym] = { inc: 0, exp: 0, obl: 0, sav: 0, expCat: {}, expDay: Array(32).fill(0), fixExp: 0, flexExp: 0 });
+    if (c.kind === 'income') b.inc += c.amt;
+    else if (c.kind === 'expense') { b.exp += c.amt; b.expCat[c.cat] = (b.expCat[c.cat] || 0) + c.amt; if (c.day) b.expDay[c.day] += c.amt; if (c.char === 'Фиксированный') b.fixExp += c.amt; else b.flexExp += c.amt; }
+    else if (c.kind === 'obligation') b.obl += c.amt;
+    else if (c.kind === 'savings') b.sav += c.amt;
+  }
+  (txAll || []).forEach(r => bucket(M, r, false));
+  (plAll || []).forEach(r => { const c = classify(r); if (!c.ym) return; const b = PM[c.ym] || (PM[c.ym] = { exp: 0, expCat: {} }); if (c.kind === 'expense') { b.exp += c.amt; b.expCat[c.cat] = (b.expCat[c.cat] || 0) + c.amt; } });
 
-  // ── Aggregate helpers ──
-  function groupTx(rows) {
-    // totals by name
-    const income={}, expense={}, savings={}, obligation={};
-    // per cat per col: { catName: { colKey: amount } }
-    const incomeCM={}, expenseCM={}, savingsCM={}, obligationCM={};
+  const months = Object.keys(M).filter(ym => M[ym].inc || M[ym].exp).sort();  // месяцы с фактом
+  const depth = months.length;
+  const CARD = 'background:#fff;border:1px solid rgba(15,36,60,.07);border-radius:16px;box-shadow:0 1px 2px rgba(15,36,60,.04)';
+  const CAP = 'font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5';
+  const RAMP = ['#134E4A','#1E6E68','#2A8C82','#3AA79B','#5FBBAF','#84CCC2','#A7DBD3'];
+  const fmt = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+  const fmtK = n => { const a = Math.abs(n); if (a >= 1e6) return (n/1e6).toFixed(1).replace('.', ',') + ' млн'; if (a >= 1e3) return Math.round(n/1e3) + 'к'; return String(Math.round(n)); };
+  const MN = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 
-    rows.forEach(r => {
-      const yr  = r.date.substring(0,4);
-      const m   = r.date.substring(5,7);
-      const key = _summaryMode === 'all' ? yr : m;
-      const sub = r.categories?.subcategory || '—';
-      const cat = r.categories?.category    || '—';
-      const amt = +r.amount;
-      const from = r.account_from, to = r.account_to;
-
-      function addCat(totMap, catMap, name, val) {
-        totMap[name] = (totMap[name]||0) + val;
-        if (!catMap[name]) catMap[name] = {};
-        catMap[name][key] = (catMap[name][key]||0) + val;
-      }
-
-      const char = r.categories?.character || null; // character is on subcategory level
-      const gkey = _summaryGran === 'cat' ? cat : sub;  // гранулярность: категория или подкатегория
-      if (from === 'Доход') {
-        addCat(income, incomeCM, gkey, amt);
-      } else if (to === 'Расход') {
-        if (_summaryChar === 'all' || char === _summaryChar) addCat(expense, expenseCM, gkey, amt);
-      } else if (savingsAccNames.has(to) && operAccNames.has(from)) {
-        addCat(savings, savingsCM, to, amt);
-      } else if (savingsAccNames.has(from) && operAccNames.has(to)) {
-        addCat(savings, savingsCM, from, -amt);
-      } else if (isLiabilityAcc(to)) {
-        addCat(obligation, obligationCM, gkey, amt);
-      }
-    });
-    return { income, expense, savings, obligation, incomeCM, expenseCM, savingsCM, obligationCM };
+  if (!depth) {
+    mc.innerHTML = `<div style="padding:24px clamp(16px,4vw,34px);max-width:1040px;margin:0 auto"><div class="page-title">Аналитика</div>
+      <div style="${CARD};padding:40px 24px;text-align:center;margin-top:20px;color:#5A6B82">
+        <div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#0F243C;margin-bottom:8px">Пока нет данных для аналитики</div>
+        <div style="font-size:13px">Внеси несколько операций и заведи бюджет — здесь появится темп месяца, план vs факт и структура трат.</div>
+      </div></div>`;
+    return;
   }
 
-  const fact    = groupTx(txAll||[]);
-  const plan    = groupTx(plAll||[]);
+  const sel = (_anMonth && M[_anMonth]) ? _anMonth : months[months.length - 1];
+  const [sy, sm] = sel.split('-').map(Number);
+  const daysInMonth = new Date(sy, sm, 0).getDate();
+  const now = new Date(), curYM = now.toISOString().slice(0, 7);
+  const isCurrent = sel === curYM;
+  const elapsed = isCurrent ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+  const b = M[sel], pl = PM[sel] || { exp: 0, expCat: {} };
 
-  const totalIncome     = Object.values(fact.income).reduce((s,v)=>s+v,0);
-  const totalExpense    = Object.values(fact.expense).reduce((s,v)=>s+v,0);
-  const totalObligation = Object.values(fact.obligation).reduce((s,v)=>s+v,0);
-  const totalSavings    = Object.values(fact.savings).reduce((s,v)=>s+v,0);
-  const profit          = totalIncome - totalExpense - totalObligation;
-  const savingsRate     = totalIncome > 0 ? (totalSavings / totalIncome * 100) : 0;
+  // накопительная трата по дням + проекция
+  const cum = []; let run = 0; for (let d = 1; d <= daysInMonth; d++) { run += b.expDay[d] || 0; cum[d] = run; }
+  const factSoFar = cum[elapsed] || 0;
+  let projEnd = factSoFar;
+  if (isCurrent && elapsed < daysInMonth && elapsed > 0) { const w = Math.min(10, elapsed); const rate = (cum[elapsed] - cum[elapsed - w]) / w; projEnd = factSoFar + rate * (daysInMonth - elapsed); }
+  const plannedExp = pl.exp;
+  const income = b.inc, obligation = b.obl, savings = b.sav;
+  const profit = income - projEnd - obligation;
+  const norm = income > 0 ? profit / income * 100 : 0;
+  const overPace = plannedExp > 0 && projEnd > plannedExp;
 
-  // ── Column keys ──
-  const MONTH_NAMES = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
-  let colKeys, colLabels;
-  if (_summaryMode === 'all') {
-    colKeys   = years.map(y => String(y));
-    colLabels = colKeys;
-  } else {
-    colKeys   = ['01','02','03','04','05','06','07','08','09','10','11','12'];
-    colLabels = MONTH_NAMES;
+  // структура (факт по категориям)
+  const catRows = Object.entries(b.expCat).sort((a, c) => c[1] - a[1]);
+  const catTop = catRows[0] ? catRows[0][1] : 1;
+  const committed = b.fixExp, flexible = b.flexExp, expTot = committed + flexible || 1;
+  const cPct = Math.round(committed / expTot * 100);
+
+  // MoM
+  const idx = months.indexOf(sel), prevYM = idx > 0 ? months[idx - 1] : null, pb = prevYM ? M[prevYM] : null;
+  let mom = null;
+  if (pb) {
+    const cats = new Set([...Object.keys(b.expCat), ...Object.keys(pb.expCat)]);
+    const movers = [...cats].map(c => ({ name: c, d: (b.expCat[c] || 0) - (pb.expCat[c] || 0) })).sort((a, c) => Math.abs(c.d) - Math.abs(a.d)).filter(x => Math.abs(x.d) > 500).slice(0, 5);
+    mom = { incD: income - pb.inc, expD: b.exp - pb.exp, profD: (income - b.exp - obligation) - (pb.inc - pb.exp - pb.obl), movers, maxMov: Math.max(...movers.map(x => Math.abs(x.d)), 1), label: MN[(+prevYM.slice(5)) - 1] };
   }
 
-  // ── Render helpers ──
-  function renderTable(rows, totalFact, planRows, totalColor) {
-    if (!rows.length) return '<tr><td colspan="4" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>';
-    const body = rows.map(([name, factAmt]) => {
-      const planAmt = planRows[name] || 0;
-      const pct = totalFact > 0 ? (Math.abs(factAmt) / Math.abs(totalFact) * 100).toFixed(1) : '0.0';
-      const over = planAmt > 0 && factAmt > planAmt;
-      return `<tr>
-        <td style="color:var(--text)">${name}</td>
-        <td class="num" style="color:var(--text2)">${planAmt > 0 ? fmt(planAmt) : '—'}</td>
-        <td class="num" style="color:${over ? '#bf7419' : 'var(--text)'}">${fmt(factAmt)}</td>
-        <td class="pct" style="color:var(--text3)">${pct}%</td>
-      </tr>`;
-    }).join('');
-    const totalPlan = rows.reduce((s,[name]) => s + (planRows[name]||0), 0);
-    const totalFactSum = rows.reduce((s,[,v]) => s + v, 0);
-    const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">
-      <td style="color:var(--text);font-weight:600">Итого</td>
-      <td class="num" style="color:var(--text2);font-weight:600">${totalPlan > 0 ? fmt(totalPlan) : '—'}</td>
-      <td class="num" style="color:var(--text);font-weight:600">${fmt(totalFactSum)}</td>
-      <td class="pct" style="color:var(--text3);font-weight:600">100%</td>
-    </tr>`;
-    return body + totalRow;
+  // ── burn-down chart ──
+  function burndown() {
+    const W = 680, H = 210, pT = 16, pB = 26, pL = 46;
+    const maxV = Math.max(projEnd, plannedExp, factSoFar) * 1.08 || 1;
+    const X = d => pL + (d - 1) * (W - pL - 14) / (daysInMonth - 1), Y = v => H - pB - v / maxV * (H - pT - pB);
+    const actPts = []; for (let d = 1; d <= elapsed; d++) actPts.push(`${X(d).toFixed(1)},${Y(cum[d]).toFixed(1)}`);
+    let projPts = ''; if (isCurrent && elapsed < daysInMonth) { const rate = (cum[elapsed] - cum[Math.max(1, elapsed - 10)]) / Math.min(10, elapsed); projPts = `${X(elapsed).toFixed(1)},${Y(cum[elapsed]).toFixed(1)} `; for (let d = elapsed + 1; d <= daysInMonth; d++) projPts += `${X(d).toFixed(1)},${Y(cum[elapsed] + rate * (d - elapsed)).toFixed(1)} `; }
+    const yax = [0, .5, 1].map(f => { const v = maxV * f, y = Y(v); return `<line x1="${pL}" y1="${y.toFixed(1)}" x2="${W-14}" y2="${y.toFixed(1)}" stroke="rgba(15,36,60,.06)"/><text x="${pL-7}" y="${(y+3).toFixed(1)}" font-size="9" fill="#93A1B5" text-anchor="end" style="font-family:Sora,sans-serif">${fmtK(v)}</text>`; }).join('');
+    let planEls = '';
+    if (plannedExp > 0) { const py = Y(plannedExp); planEls = `<line x1="${pL}" y1="${py.toFixed(1)}" x2="${W-14}" y2="${py.toFixed(1)}" stroke="#B7822F" stroke-width="1" stroke-dasharray="2 4" opacity=".7"/><text x="${W-16}" y="${(py-5).toFixed(1)}" font-size="9" fill="#B7822F" text-anchor="end">план ${fmtK(plannedExp)}</text><polyline points="${X(1).toFixed(1)},${Y(plannedExp/daysInMonth).toFixed(1)} ${X(daysInMonth).toFixed(1)},${Y(plannedExp).toFixed(1)}" fill="none" stroke="#CBD5E1" stroke-width="1.6" stroke-dasharray="5 6"/>`; }
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${yax}${planEls}
+      ${projPts ? `<polyline points="${projPts.trim()}" fill="none" stroke="#B27C72" stroke-width="1.8" stroke-dasharray="4 4"/>` : ''}
+      <polyline points="${actPts.join(' ')}" fill="none" stroke="#1E948A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${X(elapsed).toFixed(1)}" cy="${Y(cum[elapsed]||0).toFixed(1)}" r="3.4" fill="#fff" stroke="#1E948A" stroke-width="2"/>
+      <text x="${X(1).toFixed(1)}" y="${H-9}" font-size="9" fill="#93A1B5">1</text>
+      <text x="${X(elapsed).toFixed(1)}" y="${H-9}" font-size="9" fill="#0F243C" text-anchor="middle" font-weight="600">${elapsed}${isCurrent ? ' (сегодня)' : ''}</text>
+      <text x="${X(daysInMonth).toFixed(1)}" y="${H-9}" font-size="9" fill="#93A1B5" text-anchor="end">${daysInMonth}</text></svg>`;
   }
 
-  function renderMonthTable(catFactMap, colorFn, totalColor) {
-    const cats = Object.keys(catFactMap);
-    if (!cats.length) return `<tr><td colspan="${colKeys.length}" style="text-align:center;padding:12px;color:var(--text3)">Нет данных</td></tr>`;
-    const rows = cats.map(cat => {
-      const cells = colKeys.map(k => {
-        const v = (catFactMap[cat]||{})[k] || 0;
-        return `<td class="num" style="color:${v !== 0 ? 'var(--text)' : 'var(--text3)'}">${v !== 0 ? fmt(v) : '—'}</td>`;
-      }).join('');
-      return `<tr>${cells}</tr>`;
-    }).join('');
-    const totalCells = colKeys.map(k => {
-      const total = cats.reduce((s, cat) => s + ((catFactMap[cat]||{})[k]||0), 0);
-      const c = total !== 0 ? 'var(--text)' : 'var(--text3)';
-      return `<td class="num" style="color:${c};font-weight:600">${total !== 0 ? fmt(total) : '—'}</td>`;
-    }).join('');
-    const totalRow = `<tr style="border-top:2px solid var(--border2);background:var(--bg)">${totalCells}</tr>`;
-    return rows + totalRow;
-  }
+  // month picker
+  const picker = months.slice(-12).map(ym => { const on = ym === sel; const [y, m] = ym.split('-'); return `<button onclick="anPickMonth('${ym}')" style="font:inherit;font-size:12px;font-weight:${on?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${on?'#fff':'transparent'};color:${on?'#0F243C':'#5A6B82'};box-shadow:${on?'0 1px 2px rgba(15,36,60,.12)':'none'}">${MN[+m-1].slice(0,3)} ${y.slice(2)}</button>`; }).join('');
 
-  const monthHead = colKeys.map((k,i) => `<th class="num">${colLabels[i]}</th>`).join('');
+  // KPI
+  const kpi = (label, val, sub) => `<div style="${CARD};padding:16px 16px 14px;display:flex;flex-direction:column;gap:6px"><span style="${CAP}">${label}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:21px;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:#0F243C">${val}</div><div style="font-size:10.5px;color:#93A1B5">${sub}</div></div>`;
+  const projNote = (isCurrent && elapsed < daysInMonth) ? 'прогноз к концу месяца' : 'за месяц';
 
-  function section(title, leftRows, leftTotal, leftPlan, catMonthMap, color, headerColor, sectionTotalColor) {
-    const sortedRows = Object.entries(leftRows)
-      .filter(([,v]) => Math.abs(v) > 0)
-      .sort((a,b) => Math.abs(b[1]) - Math.abs(a[1]));
-    const filteredCM = {};
-    sortedRows.forEach(([name]) => { filteredCM[name] = catMonthMap[name] || {}; });
-    const hStyle = headerColor ? `background:${headerColor};border-bottom:2px solid var(--border2)` : '';
-    return `<div class="sum-card">
-      <div class="sum-pair">
-        <div class="sum-pair-left">
-          <div class="sum-card-title" style="${hStyle}">${title}</div>
-          <table class="sum-table">
-            <thead><tr>
-              <th>${_summaryGran==='cat'?'Категория':'Подкатегория'}</th>
-              <th class="num">План</th>
-              <th class="num">Факт</th>
-              <th class="num">%</th>
-            </tr></thead>
-            <tbody>${renderTable(sortedRows, leftTotal, leftPlan, sectionTotalColor)}</tbody>
-          </table>
-        </div>
-        <div class="sum-pair-right sum-months">
-          <div class="sum-card-title" style="${hStyle}">${title}</div>
-          <table class="sum-table">
-            <thead><tr>${monthHead}</tr></thead>
-            <tbody>${renderMonthTable(filteredCM, color, sectionTotalColor)}</tbody>
-          </table>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  // Фирменная KPI-карточка (как bgtCard на Бюджете): цветная точка + подпись + число.
-  const sumKpi = (dot, label, value, vColor) =>
-    `<div class="card" style="padding:14px 16px">`
-    + `<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:7px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:2px;background:${dot};display:inline-block;flex-shrink:0"></span>${label}</div>`
-    + `<div style="font-size:22px;font-weight:700;color:${vColor};font-variant-numeric:tabular-nums">${value}</div></div>`;
+  // progressive note
+  const note = depth < 3
+    ? `Данных пока за ${depth} ${depth===1?'месяц':'месяца'} — показываем то, что полезно сразу: темп месяца и план vs факт. Тренды и сравнение с прошлым годом подключатся, когда накопится история.`
+    : `Аналитика за ${sel.slice(0,4)}. Клик по месяцу выше переключает период.`;
 
   mc.innerHTML = `
-<div class="summary-wrap">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+<div style="padding:22px clamp(16px,4vw,34px) 64px;max-width:1040px;margin:0 auto">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
     <div>
-      <div class="page-title">Сводка</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">${_summaryMode==='all'?'Все годы':_summaryYear + ' год'}</div>
+      <div class="page-title">Аналитика</div>
+      <div style="font-size:12.5px;color:#93A1B5;margin-top:2px">${MN[sm-1][0].toUpperCase()+MN[sm-1].slice(1)} ${sy}${isCurrent && elapsed<daysInMonth ? ` · прошло ${elapsed} из ${daysInMonth} дней` : ''}</div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-      <div class="summary-year-bar" style="margin-bottom:0">
-        <button class="sy-btn${_summaryMode==='all'?' active':''}" onclick="setSummaryMode('all')">Все годы</button>
-        ${years.map(y=>`<button class="sy-btn${_summaryMode==='year'&&_summaryYear===y?' active':''}" onclick="setSummaryYear(${y})">${y}</button>`).join('')}
-      </div>
-      <div style="width:1px;height:20px;background:var(--border)"></div>
-      <div class="summary-year-bar" style="margin-bottom:0">
-        <button class="sy-btn${_summaryGran==='sub'?' active':''}" onclick="setSummaryGran('sub')">Подкатегории</button>
-        <button class="sy-btn${_summaryGran==='cat'?' active':''}" onclick="setSummaryGran('cat')">Категории</button>
-      </div>
-      <div style="width:1px;height:20px;background:var(--border)"></div>
-      <div class="summary-year-bar" style="margin-bottom:0">
-        <button class="sy-btn${_summaryChar==='all'?' active':''}" onclick="setSummaryChar('all')">Все расходы</button>
-        <button class="sy-btn${_summaryChar==='Повседневный'?' active':''}" onclick="setSummaryChar('Повседневный')">Повседневные</button>
-        <button class="sy-btn${_summaryChar==='Фиксированный'?' active':''}" onclick="setSummaryChar('Фиксированный')">Фиксированные</button>
-        <button class="sy-btn${_summaryChar==='Эпизодический'?' active':''}" onclick="setSummaryChar('Эпизодический')">Эпизодические</button>
-      </div>
-    </div>
+    <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px;flex-wrap:wrap">${picker}</div>
   </div>
 
-  <div class="summary-kpi">
-    ${sumKpi('#5E9B1E', 'Доходы', fmt(totalIncome), '#5E9B1E')}
-    ${sumKpi('#bf7419', 'Расходы' + (_summaryChar!=='all' ? ' ('+({'Повседневный':'повсед.','Фиксированный':'фикс.','Эпизодический':'эпизод.'}[_summaryChar]||'')+')' : ''), fmt(_summaryChar==='all'?totalExpense:Object.values(fact.expense).reduce((s,v)=>s+v,0)), '#bf7419')}
-    ${sumKpi('#C0741A', 'Долги', fmt(totalObligation), '#C0741A')}
-    ${sumKpi(profit>=0?'#5E9B1E':'#bf7419', 'Профит', fmt(profit), profit>=0?'#5E9B1E':'#bf7419')}
-    ${sumKpi('#1FA497', 'Сбережения', fmt(totalSavings), totalSavings>=0?'#5E9B1E':'#bf7419')}
-    ${sumKpi('#2AA7CC', 'Норма сбережений', savingsRate.toFixed(1)+'%', '#2AA7CC')}
+  <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC">
+    <span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span>
+    <div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div>
   </div>
 
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px" class="an-kpis">
+    ${kpi('Доход', fmt(income), 'поступило за месяц')}
+    ${kpi('Расход', fmt(factSoFar), plannedExp>0 ? 'потрачено из '+fmtK(plannedExp)+' плана' : 'потрачено')}
+    ${kpi('Профит', (profit>=0?'+':'')+fmt(profit), projNote)}
+    ${kpi('Норма сбережений', norm.toFixed(0)+'%', projNote+' · ≥15% ок')}
+  </div>
 
-  ${section('Доходы', fact.income, totalIncome, plan.income, fact.incomeCM, v => v > 0 ? 'var(--income)' : 'var(--text3)', 'rgba(94,155,30,0.10)', 'var(--income)')}
-  ${section('Расходы', fact.expense, totalExpense, plan.expense, fact.expenseCM, v => v > 0 ? '#bf7419' : 'var(--text3)', 'rgba(191,116,25,0.10)', '#bf7419')}
-  ${section('Сбережения', fact.savings, Math.abs(totalSavings), plan.savings, fact.savingsCM, v => v > 0 ? 'var(--income)' : v < 0 ? '#bf7419' : 'var(--text3)', 'rgba(31,164,151,0.10)', 'var(--text)')}
-  ${section('Долги', fact.obligation, totalObligation, plan.obligation, fact.obligationCM, null, 'rgba(192,116,26,0.10)', 'var(--text)')}
+  <section style="margin-bottom:24px">
+    <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Темп месяца · успеваешь ли по плану</h2>
+    <div style="${CARD};padding:18px 20px 10px">
+      ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:6px">
+        <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по текущему темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:22px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
+        <div style="color:#5A6B82;font-size:12.5px;line-height:1.5;max-width:380px">${overPace?`Идёшь с опережением — ожидается <b style="color:#0F243C">+${fmt(projEnd-plannedExp)}</b> сверх плана ${fmt(plannedExp)}. Сбавь по гибким тратам.`:`В рамках плана: ${fmt(projEnd)} против ${fmt(plannedExp)}. Запас <b style="color:#0F243C">${fmt(Math.max(0,plannedExp-projEnd))}</b>.`}</div>
+      </div>` : `<div style="font-size:12.5px;color:#93A1B5;margin-bottom:6px">Бюджет на месяц не задан — показываем только факт. Заведи план в Бюджете, чтобы видеть темп относительно него.</div>`}
+      ${burndown()}
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#93A1B5;margin-top:2px">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:2px;background:#1E948A"></span>факт накопительно</span>
+        ${(isCurrent&&elapsed<daysInMonth)?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #B27C72"></span>прогноз</span>`:''}
+        ${plannedExp>0?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #CBD5E1"></span>ровный темп по плану</span>`:''}
+      </div>
+    </div>
+  </section>
+
+  ${(catRows.length && plannedExp>0) ? `<section style="margin-bottom:24px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт · категории</h2><span style="font-size:11.5px;color:#93A1B5">пунктир — ровный темп на сегодня (${Math.round(elapsed/daysInMonth*100)}% месяца)</span></div>
+    <div style="${CARD};padding:8px 20px 14px">
+      ${catRows.map(([name,fv])=>{const plv=pl.expCat[name]||0;if(!plv&&!fv)return '';const over=plv&&fv>plv,pace=plv?fv/(plv*elapsed/daysInMonth):0,overPaceC=!over&&plv&&pace>1.05;const col=over?'#B27C72':(overPaceC?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;return `<div style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06)"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtK(fv)}</b>${plv?' / '+fmtK(plv):''}${over?' · <span style="color:#B5564A">перерасход</span>':(overPaceC?' · <span style="color:#B7822F">быстрее плана</span>':'')}</span></div><div style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${Math.round(elapsed/daysInMonth*100)}% - 1px)"></span>`:''}</div></div>`;}).join('')}
+    </div>
+  </section>` : ''}
+
+  <section class="an-two" style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:24px">
+    <div style="${CARD};padding:18px 20px">
+      <h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Куда ушли деньги</h2>
+      ${catRows.length ? catRows.map(([name,v],i)=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 0"><span style="width:9px;height:9px;border-radius:2px;background:${RAMP[i%RAMP.length]};flex:none"></span><span style="flex:1;font-size:12.5px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><div style="width:80px;height:6px;background:#F5F8FB;border-radius:99px"><i style="display:block;height:100%;width:${Math.round(v/catTop*100)}%;background:${RAMP[i%RAMP.length]};border-radius:99px"></i></div><span style="width:60px;text-align:right;font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtK(v)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(v/(b.exp||1)*100)}%</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5">Нет расходов в этом месяце.</div>'}
+    </div>
+    <div style="${CARD};padding:18px 20px">
+      <h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Природа трат</h2>
+      <div style="display:flex;height:12px;border-radius:99px;overflow:hidden;margin-bottom:12px"><div style="width:${cPct}%;background:#2A8C82"></div><div style="width:${100-cPct}%;background:#8FB84A"></div></div>
+      <div style="font-size:12.5px;color:#5A6B82;line-height:1.9">
+        <div><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2A8C82;margin-right:6px;vertical-align:middle"></span>Обязательные · <b style="color:#0F243C">${cPct}%</b> · ${fmt(committed)}</div>
+        <div><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#8FB84A;margin-right:6px;vertical-align:middle"></span>Гибкие · <b style="color:#0F243C">${100-cPct}%</b> · ${fmt(flexible)}</div>
+      </div>
+      <div style="font-size:11.5px;color:#93A1B5;margin-top:12px;line-height:1.5">Рычаг — гибкие ${fmtK(flexible)}. Даже −10% здесь = ${fmt(flexible*0.1)}/мес в сбережения.</div>
+    </div>
+  </section>
+
+  ${mom ? `<section style="margin-bottom:24px">
+    <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Что изменилось vs ${mom.label}</h2>
+    <div style="${CARD};padding:18px 20px">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        ${[['Доход',mom.incD,true],['Расход',mom.expD,false],['Профит',mom.profD,true]].map(([l,d,up])=>`<div style="flex:1;min-width:110px;background:#F7F9FC;border:1px solid rgba(15,36,60,.06);border-radius:12px;padding:11px 12px"><span style="${CAP}">${l}</span><div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;margin-top:2px;color:${((d>0)===up)?'#4E7D3A':'#B5564A'}">${d>=0?'+':'−'}${fmtK(Math.abs(d))}</div></div>`).join('')}
+      </div>
+      ${mom.movers.length?`<span style="${CAP}">категории-драйверы расходов</span>${mom.movers.map(mv=>`<div style="display:flex;align-items:center;gap:12px;padding:7px 0"><span style="width:110px;font-size:13px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(mv.name)}</span><div style="flex:1;height:8px;background:#F5F8FB;border-radius:99px;position:relative"><i style="position:absolute;top:0;height:100%;width:${Math.min(Math.abs(mv.d)/mom.maxMov*100,100)}%;border-radius:99px;background:${mv.d>0?'#B27C72':'#6E9B62'};${mv.d>0?'left:0':'right:0'}"></i></div><span style="width:80px;text-align:right;font-weight:600;font-size:12.5px;color:${mv.d>0?'#B5564A':'#4E7D3A'};font-variant-numeric:tabular-nums">${mv.d>0?'+':'−'}${fmtK(Math.abs(mv.d))}</span></div>`).join('')}`:'<div style="font-size:12px;color:#93A1B5;margin-top:6px">Категории почти не изменились.</div>'}
+    </div>
+  </section>` : ''}
+
+  <section>
+    <div style="${CAP};margin-bottom:12px">Появится, когда накопится история</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px" class="an-teasers">
+      ${[[depth<2?'через 1 месяц':'готово','Сравнение с прошлым месяцем','MoM-дельты: что выросло, что упало',depth>=2],['через '+Math.max(1,3-depth)+' мес','Тренды категорий','что ползёт вверх 3+ месяца подряд',depth>=3],['через '+Math.max(1,6-depth)+' мес','Динамика года и сезонность','помесячно за год, сравнение YoY',depth>=6]].filter(t=>!t[3]).map(t=>`<div style="${CARD};padding:16px;background:#F7F9FC;border-style:dashed;opacity:.9"><div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#93A1B5" stroke-width="1.8"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span style="${CAP};color:#93A1B5">${t[0]}</span></div><div style="font-family:Sora,sans-serif;font-weight:600;font-size:13.5px;color:#5A6B82;margin-bottom:5px">${t[1]}</div><div style="font-size:11.5px;color:#93A1B5;line-height:1.5">${t[2]}</div></div>`).join('')}
+    </div>
+  </section>
 </div>`;
-  setTimeout(bindSummaryHover, 0);
-
-
 }
 
-function bindSummaryHover() {
-  // For each sum-card, sync hover between left and right tbody rows
-  document.querySelectorAll('.sum-card').forEach(card => {
-    const leftRows  = Array.from(card.querySelectorAll('.sum-pair-left  tbody tr'));
-    const rightRows = Array.from(card.querySelectorAll('.sum-pair-right tbody tr'));
-    const allPairs  = leftRows.map((lr, i) => [lr, rightRows[i]]).filter(([a,b]) => a && b);
-    allPairs.forEach(([lr, rr]) => {
-      [lr, rr].forEach(el => {
-        el.addEventListener('mouseenter', () => {
-          lr.classList.add('sum-row-hover');
-          rr.classList.add('sum-row-hover');
-        });
-        el.addEventListener('mouseleave', () => {
-          lr.classList.remove('sum-row-hover');
-          rr.classList.remove('sum-row-hover');
-        });
-      });
-    });
-  });
-}
-
-function setSummaryChar(char) {
-  _summaryChar = char;
-  loadSummary();
-}
-
-function setSummaryYear(y) {
-  _summaryYear = y;
-  _summaryMode = 'year';
-  loadSummary();
-}
-
-function setSummaryMode(mode) {
-  _summaryMode = mode;
-  loadSummary();
-}
-
-function setSummaryGran(g) {
-  _summaryGran = g;
-  loadSummary();
-}
+function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
 
 
 
@@ -8077,7 +8019,7 @@ async function mobileMore() {
       ${user.email ? `<div style="font-size:12px;color:var(--text3);margin-top:2px">${esc(user.email)}</div>` : ''}
     </div>
     <div class="card" style="padding:16px 18px;margin-bottom:12px;font-size:13px;color:var(--text2);line-height:1.55">
-      Аналитика, Бюджет, Сводка и настройки — удобнее на компьютере.<br>Открой <b>horizonapp.ru</b> на десктопе.
+      Аналитика, Бюджет и настройки — удобнее на компьютере.<br>Открой <b>horizonapp.ru</b> на десктопе.
     </div>
     <button class="btn-ghost" style="width:100%" onclick="fetch(API_BASE+'/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>location.reload())">Выйти</button>
   </div>`;
