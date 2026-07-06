@@ -5105,7 +5105,13 @@ async function loadSummary() {
   const plannedExp = pExpT(sel), income = b.inc, obligation = b.obl, savings = b.sav;
   const planObl = pObl(sel);                              // плановые долги месяца (график кредитов), не факт-отток
   const oblFore = (isCurrent && elapsed < daysInMonth) ? planObl : obligation;  // прогноз — план, завершённый месяц — факт
-  const incFore = Math.max(pIncT(sel), income);           // ожидаемый доход: план или уже полученный
+  // Ожидаемый доход = ПОкатегорийно max(план, факт). Так: пришедшее раньше срока
+  // не двоится (та же категория → max, не сумма), внезапный доход в новой категории
+  // (план 0) берётся фактом, а ещё не пришедшая плановая зарплата (факт 0) держится
+  // планом. Итог всегда ≥ и суммы фактов, и суммы плана.
+  const incKeys = new Set([...Object.keys(b.incCat), ...Object.keys(PM[sel]?.incCat || {})]);
+  let incFore = 0; incKeys.forEach(c => { incFore += Math.max(pIncC(sel, c), b.incCat[c] || 0); });
+  if (!isCurrent) incFore = income;                       // завершённый месяц — чистый факт дохода
   const profit = incFore - projEnd - oblFore;             // прогноз к концу месяца (долги из графика)
   const profitFact = income - factSoFar - obligation;     // по факту на сегодня (долги — фактический отток)
   const norm = incFore > 0 ? profit / incFore * 100 : 0;
@@ -5140,21 +5146,28 @@ async function loadSummary() {
     const step = daysInMonth <= 12 ? 2 : 5;
     const ticks = []; for (let d = 1; d <= daysInMonth; d += step) ticks.push(d); if (ticks[ticks.length-1] !== daysInMonth) ticks.push(daysInMonth);
     const xax = ticks.map(d => `<text x="${X(d).toFixed(1)}" y="${H-9}" font-size="10" fill="#93A1B5" text-anchor="${d===1?'start':d===daysInMonth?'end':'middle'}">${d}</text>`).join('');
-    // интерактив: наведение на день — вертикаль + точка + нативная подсказка со суммой
-    let hov = '';
+    // Подневные ряды для попапа при наведении (факт / прогноз по темпу / ровный темп плана).
+    const factCum = [], projCum = [], planEven = [], primY = [];
+    let prate = 0;
+    if (isCurrent && elapsed < daysInMonth && elapsed > 0) prate = (cum[elapsed] - (cum[Math.max(0, elapsed - 10)] || 0)) / Math.min(10, elapsed);
     for (let d = 1; d <= daysInMonth; d++) {
-      const cx = X(d), val = d <= elapsed ? (cum[d] || 0) : null;
-      const x0 = d === 1 ? pL : (X(d) + X(d-1)) / 2, x1 = d === daysInMonth ? W - pR : (X(d) + X(d+1)) / 2;
-      const dot = val != null ? `<circle class="hzc" cx="${cx.toFixed(1)}" cy="${Y(val).toFixed(1)}" r="3.6" fill="#1E948A"/>` : '';
-      const line = `<line class="hzc" x1="${cx.toFixed(1)}" y1="${pT}" x2="${cx.toFixed(1)}" y2="${H-pB}" stroke="#1E948A" stroke-width="1" stroke-opacity=".45"/>`;
-      const tip = val != null ? `${d} ${MNG[sm-1]} · накоплено ${fmtN(val)} ₽` : `${d} ${MNG[sm-1]} · нет данных`;
-      hov += `<g class="hzg"><title>${tip}</title>${line}${dot}<rect x="${x0.toFixed(1)}" y="${pT}" width="${(x1-x0).toFixed(1)}" height="${(H-pT-pB).toFixed(1)}" fill="transparent"/></g>`;
+      factCum[d] = d <= elapsed ? (cum[d] || 0) : null;
+      planEven[d] = plannedExp > 0 ? plannedExp / daysInMonth * d : null;
+      projCum[d] = (isCurrent && elapsed < daysInMonth && elapsed > 0 && d >= elapsed) ? cum[elapsed] + prate * (d - elapsed) : null;
+      const pv = factCum[d] != null ? factCum[d] : projCum[d];
+      primY[d] = pv != null ? +Y(pv).toFixed(1) : null;
     }
-    return `<svg viewBox="0 0 ${W} ${H}" style="display:block;width:100%;max-width:640px;height:auto;font-family:Sora,sans-serif"><style>.hzc{opacity:0;transition:opacity .08s}.hzg:hover .hzc{opacity:1}</style>${yax}${todayLine}${planEls}
+    const svgId = 'anb' + Math.random().toString(36).slice(2, 7);
+    window._anBurn = (window._anBurn || {});
+    window._anBurn[svgId] = { x1: pL, plotW: W - pL - pR, dim: daysInMonth, elapsed, month: sm, factCum, projCum, planEven, primY, pT, pB: H - pB };
+    const crosshair = `<line id="${svgId}-cx" x1="0" y1="${pT}" x2="0" y2="${H-pB}" stroke="rgba(15,36,60,.22)" stroke-width="1" stroke-dasharray="3 3" style="display:none"/>`;
+    const focusDot = `<circle id="${svgId}-fd" r="4" fill="#fff" stroke="#1E948A" stroke-width="2.2" style="display:none"/>`;
+    const overlay = `<rect x="${pL}" y="${pT}" width="${(W-pL-pR).toFixed(1)}" height="${(H-pT-pB).toFixed(1)}" fill="transparent" style="cursor:crosshair" onmousemove="anBurnHover(event,this,'${svgId}')" onmouseleave="anBurnLeave('${svgId}')"/>`;
+    return `<svg id="${svgId}" viewBox="0 0 ${W} ${H}" style="display:block;width:100%;max-width:640px;height:auto;font-family:Sora,sans-serif">${yax}${todayLine}${planEls}${crosshair}
       ${projPts ? `<polyline points="${projPts.trim()}" fill="none" stroke="#B27C72" stroke-width="1.6" stroke-dasharray="4 4"/>` : ''}
       <polyline points="${actPts.join(' ')}" fill="none" stroke="#1E948A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${X(elapsed).toFixed(1)}" cy="${Y(cum[elapsed]||0).toFixed(1)}" r="3.4" fill="#fff" stroke="#1E948A" stroke-width="2"/>
-      ${xax}${hov}</svg>`;
+      ${xax}${focusDot}${overlay}</svg>`;
   }
 
   const picker = months.slice(-12).map(ym => { const on = ym === sel; const [y, m] = ym.split('-'); return `<button onclick="anPickMonth('${ym}')" style="font:inherit;font-size:12px;font-weight:${on?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${on?'#fff':'transparent'};color:${on?'#0F243C':'#5A6B82'};box-shadow:${on?'0 1px 2px rgba(15,36,60,.12)':'none'}">${MNN[+m-1].slice(0,3)} ${y.slice(2)}</button>`; }).join('');
@@ -5164,6 +5177,40 @@ async function loadSummary() {
   const charCtl = segG(_anChar, [['all','Все'],['Повседневный','Повседн.'],['Фиксированный','Фикс.'],['Эпизодический','Эпизод.']], 'anSetChar');
   const projNote = (isCurrent && elapsed < daysInMonth) ? 'прогноз к концу месяца' : 'за месяц';
   const barList = (rows, top, tot, ramp, ym) => rows.length ? rows.map(([name, v], i) => `<div onclick="anDrillM('${esc(name)}','${ym}')" style="display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer"><span style="width:9px;height:9px;border-radius:2px;background:${ramp[i%ramp.length]};flex:none"></span><span style="flex:1;font-size:12.5px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><div style="width:120px;height:6px;background:#F5F8FB;border-radius:99px"><i style="display:block;height:100%;width:${Math.round(v/top*100)}%;background:${ramp[i%ramp.length]};border-radius:99px"></i></div><span style="width:96px;text-align:right;font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(v)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(v/(tot||1)*100)}%</span></div>`).join('') : '<div style="font-size:12.5px;color:#93A1B5">Нет данных за месяц.</div>';
+
+  // Пончик со структурой: сегмент приподнимается при наведении, сумма категории — в центре бублика.
+  const donut = (rows, total, ramp, centerLbl, ym) => {
+    if (!rows.length || total <= 0) return '<div style="font-size:12.5px;color:#93A1B5;padding:24px 0;text-align:center">Нет данных за месяц.</div>';
+    const id = 'dn' + Math.random().toString(36).slice(2, 7);
+    const cx = 110, cy = 110, R = 95, r = 58, TAU = Math.PI * 2;
+    const gap = rows.length > 1 ? 0.018 : 0;
+    const pol = (rad, a) => [(cx + rad * Math.sin(a)).toFixed(2), (cy - rad * Math.cos(a)).toFixed(2)];
+    let a0 = 0, segs = ''; const meta = [];
+    rows.forEach(([name, val], i) => {
+      const frac = val / total, a1 = a0 + frac * TAU, sa = a0 + gap / 2, ea = Math.max(sa, a1 - gap / 2), color = ramp[i % ramp.length], mid = (sa + ea) / 2;
+      if (frac >= 0.9999) {
+        segs += `<circle id="${id}-s${i}" cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" stroke="${color}" stroke-width="${R - r}" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="cursor:pointer"/>`;
+      } else {
+        const [xo0, yo0] = pol(R, sa), [xo1, yo1] = pol(R, ea), [xi1, yi1] = pol(r, ea), [xi0, yi0] = pol(r, sa), large = (ea - sa) > Math.PI ? 1 : 0;
+        const d = `M${xo0} ${yo0} A${R} ${R} 0 ${large} 1 ${xo1} ${yo1} L${xi1} ${yi1} A${r} ${r} 0 ${large} 0 ${xi0} ${yi0} Z`;
+        segs += `<path id="${id}-s${i}" d="${d}" fill="${color}" data-dx="${(Math.sin(mid) * 6).toFixed(2)}" data-dy="${(-Math.cos(mid) * 6).toFixed(2)}" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="cursor:pointer;transition:transform .1s"/>`;
+      }
+      meta.push({ name: esc(name), val: Math.round(val), pct: Math.round(frac * 100), color });
+      a0 = a1;
+    });
+    window._anDonut = (window._anDonut || {}); window._anDonut[id] = { rows: meta, total: Math.round(total), label: centerLbl };
+    const legend = rows.map(([name, val], i) => `<div onclick="anDrillM('${esc(name)}','${ym}')" onmouseenter="anDonutHover('${id}',${i})" onmouseleave="anDonutLeave('${id}')" style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer"><span style="width:9px;height:9px;border-radius:2px;background:${ramp[i % ramp.length]};flex:none"></span><span style="flex:1;font-size:12px;color:#5A6B82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span><span style="font-size:12px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(val)}</span><span style="width:34px;text-align:right;font-size:11px;color:#93A1B5">${Math.round(val / total * 100)}%</span></div>`).join('');
+    return `<div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+      <div style="position:relative;width:176px;height:176px;flex:none;margin:0 auto">
+        <svg viewBox="0 0 220 220" style="width:100%;height:100%;display:block">${segs}</svg>
+        <div id="${id}-c" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 24px">
+          <div style="${CAP}">${centerLbl}</div>
+          <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#0F243C;font-variant-numeric:tabular-nums">${fmtN(total)}</div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:170px">${legend}</div>
+    </div>`;
+  };
 
   // ── P&L: годовая матрица по месяцам ──
   function pnl() {
@@ -5217,12 +5264,16 @@ async function loadSummary() {
   <div style="${CARD};padding:13px 16px;margin-bottom:24px;font-size:12.5px;color:#5A6B82;line-height:1.7;font-variant-numeric:tabular-nums">
     <div><b style="color:#0F243C">Прогноз к концу месяца:</b> доход ${fmtN(incFore)} − расход ${fmtN(projEnd)}${oblFore>0?` − долги ${fmtN(oblFore)}`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)} ₽</b></div>
     ${(isCurrent&&elapsed<daysInMonth)?`<div><b style="color:#0F243C">По факту на сегодня:</b> доход ${fmtN(income)} − потрачено ${fmtN(factSoFar)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profitFact>=0?'#4E7D3A':'#B5564A'}">${(profitFact>=0?'+':'')+fmtN(profitFact)} ₽</b></div>`:''}
-    <div style="color:#93A1B5;font-size:11.5px">Прогноз опирается на Бюджет: доход, фиксированные (правила, события) и долги (график кредитов) — плановые; повседневные (конверты) — по текущему темпу трат. Долги — только тело, проценты уже в расходах. Профит = Доходы − Расходы − Платежи по телу долга (как в Бюджете и Операциях).</div>
+    <div style="color:#93A1B5;font-size:11.5px;line-height:1.6">Как считается прогноз к концу месяца:<br>
+      <b>Доход</b> — по каждой категории берём большее из плана и уже полученного факта. Поэтому внезапный доход, которого не было в плане, поднимает прогноз, а зарплата, пришедшая раньше срока, не считается дважды.<br>
+      <b>Расход</b> — уже потраченное плюс прогноз остатка: фиксированные (правила, события) по плану, повседневные (конверты) — по текущему темпу трат.<br>
+      <b>Долги</b> — плановые платежи из графика кредитов; только тело, проценты уже сидят в расходах.<br>
+      Профит = Доходы − Расходы − Платежи по телу долга — та же формула, что в Бюджете (план) и Операциях (факт).</div>
   </div>
 
   <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:24px;align-items:start">
     <div>
-      <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Темп месяца · успеваешь ли по плану</h2>
+      <h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600;margin-bottom:12px">Прогноз месяца</h2>
       <div style="${CARD};padding:18px 20px 12px">
         ${plannedExp>0 ? `<div style="display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline;margin-bottom:8px">
           <div><span style="${CAP}">${(isCurrent&&elapsed<daysInMonth)?'по темпу к концу месяца':'итог за месяц'}</span><div style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;font-variant-numeric:tabular-nums;color:${overPace?'#B5564A':'#4E7D3A'};margin-top:2px">${fmt(projEnd)}</div></div>
@@ -5234,20 +5285,20 @@ async function loadSummary() {
           ${(isCurrent&&elapsed<daysInMonth)?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #B27C72"></span>прогноз по темпу</span>`:''}
           ${plannedExp>0?`<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;border-top:2px dashed #CBD5E1"></span>ровный темп по плану</span>`:''}
         </div>
-        <div style="font-size:10.5px;color:#93A1B5;margin-top:4px">Наведи курсор на график — сумма накопленных трат на любой день.</div>
+        <div style="font-size:10.5px;color:#93A1B5;margin-top:4px">Наведи курсор на график — факт, прогноз и плановый темп на выбранный день.</div>
       </div>
     </div>
     ${(catRows.length && plannedExp>0) ? `<div>
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт · категории</h2><span style="font-size:11px;color:#93A1B5">пунктир — темп ${Math.round(elapsed/daysInMonth*100)}% месяца · клик — операции</span></div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт${(isCurrent&&elapsed<daysInMonth)?' vs прогноз':''} · категории</h2><span style="font-size:11px;color:#93A1B5">факт / план${(isCurrent&&elapsed<daysInMonth)?' · прогноз' :''} · наведи на маркер · клик — операции</span></div>
       <div style="${CARD};padding:8px 20px 14px">
-        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const over=plv&&fv>plv,pace=plv?fv/(plv*elapsed/daysInMonth):0,overPaceC=!over&&plv&&pace>1.05;const col=over?'#B27C72':(overPaceC?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${over?' · <span style="color:#B5564A">перерасход</span>':(overPaceC?' · <span style="color:#B7822F">быстрее плана</span>':'')}</span></div><div style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${Math.round(elapsed/daysInMonth*100)}% - 1px)"></span>`:''}</div></div>`;}).join('')}
+        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const isC=isCurrent&&elapsed<daysInMonth&&elapsed>0;const projCat=isC?fv/elapsed*daysInMonth:fv;const over=plv&&fv>plv;const projOver=!over&&plv&&projCat>plv*1.03;const col=over?'#B27C72':(projOver?'#B7822F':'#2A8C82');const w=plv?Math.min(fv/plv*100,100):100;const paceP=Math.round(elapsed/daysInMonth*100);const projP=plv?Math.min(projCat/plv*100,100):100;const status=over?' · <span style="color:#B5564A">перерасход</span>':(projOver?' · <span style="color:#B7822F">прогноз выше плана</span>':'');const projTxt=(isC&&plv)?` · прогноз <b style="color:${projOver?'#B7822F':'#0F243C'}">${fmtN(projCat)}</b>`:'';return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${projTxt}${status}</span></div><div title="факт ${fmtN(fv)}${plv?' · план '+fmtN(plv):''}" style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span title="ровный темп — прошло ${paceP}% месяца" style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${paceP}% - 1px)"></span>`:''}${(isC&&plv)?`<span title="прогноз к концу месяца: ${fmtN(projCat)} ₽" style="position:absolute;top:-4px;height:14px;width:2.5px;border-radius:2px;background:${projOver?'#B7822F':'#2A8C82'};left:calc(${projP}% - 1px)"></span>`:''}</div></div>`;}).join('')}
       </div>
     </div>` : ''}
   </section>
 
   <section class="an-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
-    <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Куда ушли деньги</h2>${barList(catRows, catTop, b.exp, RAMP, sel)}</div>
-    <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Источники дохода</h2>${barList(incRows, incTop, income, RAMPI, sel)}</div>
+    <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Куда ушли деньги</h2>${donut(catRows, b.exp, RAMP, 'Расход', sel)}</div>
+    <div style="${CARD};padding:18px 20px"><h2 style="font-family:Sora,sans-serif;font-size:14px;font-weight:600;margin-bottom:12px">Источники дохода</h2>${donut(incRows, income, RAMPI, 'Доход', sel)}</div>
   </section>
 
   <section style="margin-bottom:24px"><div style="${CARD};padding:18px 20px">
@@ -6958,6 +7009,57 @@ window.fcHoverLeave = function() {
   const tip = document.getElementById('fc-tooltip');
   if (tip) tip.style.display = 'none';
   document.querySelectorAll('[id$="-tl"]').forEach(el => { el.style.display = 'none'; });
+};
+
+// ── Аналитика: попап графика «Прогноз месяца» (стиль как на Обзоре) ───────────
+window.anBurnHover = function(evt, el, id) {
+  const svg = el.ownerSVGElement; if (!svg) return;
+  const meta = (window._anBurn || {})[id]; if (!meta) return;
+  const { x1, plotW, dim, month, elapsed, factCum, projCum, planEven, primY } = meta;
+  const rect = svg.getBoundingClientRect();
+  const scaleX = svg.viewBox.baseVal.width / rect.width;
+  const mx = (evt.clientX - rect.left) * scaleX;
+  if (mx < x1 || mx > x1 + plotW) { window.anBurnLeave(id); return; }
+  let day = Math.round((mx - x1) / plotW * (dim - 1)) + 1;
+  day = Math.max(1, Math.min(dim, day));
+  const cx = x1 + (day - 1) / (dim - 1) * plotW;
+  const ch = document.getElementById(id + '-cx');
+  if (ch) { ch.setAttribute('x1', cx.toFixed(1)); ch.setAttribute('x2', cx.toFixed(1)); ch.style.display = ''; }
+  const fd = document.getElementById(id + '-fd');
+  if (fd) { if (primY[day] != null) { fd.setAttribute('cx', cx.toFixed(1)); fd.setAttribute('cy', primY[day]); fd.style.display = ''; } else fd.style.display = 'none'; }
+  const MNG = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  const nf = v => (v < 0 ? '−' : '') + new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(v))) + ' ₽';
+  const row = (color, label, v) => v == null ? '' : `<div style="display:flex;align-items:center;gap:7px;margin-top:3px"><span style="width:9px;height:9px;border-radius:2px;background:${color};flex:none"></span><span style="font-size:11px;color:#9FB2C7;flex:1;white-space:nowrap">${label}</span><span style="font-family:Sora,sans-serif;font-weight:600;font-size:12px;color:#fff;font-variant-numeric:tabular-nums">${nf(v)}</span></div>`;
+  let tip = document.getElementById('an-burn-tip');
+  if (!tip) { tip = document.createElement('div'); tip.id = 'an-burn-tip'; tip.style.cssText = 'position:fixed;background:#0F243C;border-radius:10px;padding:9px 12px;box-shadow:0 10px 24px -10px rgba(15,36,60,.5);pointer-events:none;z-index:9999;min-width:180px'; document.body.appendChild(tip); }
+  tip.innerHTML = `<div style="font-size:10.5px;color:#9FB2C7;margin-bottom:1px">${day} ${MNG[month - 1]}</div>`
+    + row('#1E948A', 'факт накопительно', factCum[day])
+    + row('#B27C72', 'прогноз по темпу', (projCum[day] != null && day > elapsed) ? projCum[day] : null)
+    + row('#CBD5E1', 'ровный темп плана', planEven[day]);
+  tip.style.display = 'block';
+  tip.style.left = Math.min(evt.clientX + 16, window.innerWidth - 200) + 'px';
+  tip.style.top = Math.max(evt.clientY - 46, 8) + 'px';
+};
+window.anBurnLeave = function(id) {
+  const tip = document.getElementById('an-burn-tip'); if (tip) tip.style.display = 'none';
+  const ch = document.getElementById(id + '-cx'); if (ch) ch.style.display = 'none';
+  const fd = document.getElementById(id + '-fd'); if (fd) fd.style.display = 'none';
+};
+
+// ── Аналитика: пончик «Куда ушли деньги / Источники дохода» ───────────────────
+window.anDonutHover = function(id, i) {
+  const meta = (window._anDonut || {})[id]; if (!meta) return;
+  const seg = meta.rows[i]; if (!seg) return;
+  const c = document.getElementById(id + '-c');
+  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:${seg.color};max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${seg.name}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#0F243C;font-variant-numeric:tabular-nums">${seg.val.toLocaleString('ru-RU')}</div><div style="font-size:11px;color:#93A1B5">${seg.pct}%</div>`;
+  const el = document.getElementById(id + '-s' + i);
+  if (el && el.dataset && el.dataset.dx != null) el.setAttribute('transform', `translate(${el.dataset.dx} ${el.dataset.dy})`);
+};
+window.anDonutLeave = function(id) {
+  const meta = (window._anDonut || {})[id]; if (!meta) return;
+  const c = document.getElementById(id + '-c');
+  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5">${meta.label}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;color:#0F243C;font-variant-numeric:tabular-nums">${meta.total.toLocaleString('ru-RU')}</div>`;
+  (meta.rows || []).forEach((_, i) => { const el = document.getElementById(id + '-s' + i); if (el) el.removeAttribute('transform'); });
 };
 
 function renderRing(pct) {
