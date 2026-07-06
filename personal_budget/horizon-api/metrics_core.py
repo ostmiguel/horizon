@@ -149,6 +149,32 @@ async def monthly_fixed_income_sum(db, user_id: str, year: int, month: int) -> f
     return float(val)
 
 
+async def remaining_planned_income(db, user_id: str, year: int, month: int) -> float:
+    """Ожидаемый ещё доход = Σ по категориям max(0, план_месяца − факт_месяца).
+
+    Привязка к КАТЕГОРИИ, а не к дате плановой строки. Поэтому: пришло раньше
+    срока — не двоится (факт≈план → 0), опоздало — не теряется (факт<план →
+    добираем остаток). Внезапный доход без плана (только факт) сюда не входит —
+    он уже в балансе (B0). Заменяет прежнее «сумма плановых строк с датой > сегодня».
+    """
+    plan_rows = await db.fetch("""
+        SELECT COALESCE(c.category, '') AS cat, COALESCE(SUM(p.amount), 0) AS amt
+        FROM plan p LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1 AND EXTRACT(YEAR FROM p.date)=$2 AND EXTRACT(MONTH FROM p.date)=$3
+          AND p.account_from = 'Доход'
+        GROUP BY COALESCE(c.category, '')
+    """, user_id, year, month)
+    fact_rows = await db.fetch("""
+        SELECT COALESCE(c.category, '') AS cat, COALESCE(SUM(t.amount), 0) AS amt
+        FROM transactions t LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id=$1 AND EXTRACT(YEAR FROM t.date)=$2 AND EXTRACT(MONTH FROM t.date)=$3
+          AND t.account_from = 'Доход'
+        GROUP BY COALESCE(c.category, '')
+    """, user_id, year, month)
+    fact_by = {r["cat"]: float(r["amt"]) for r in fact_rows}
+    return sum(max(0.0, float(r["amt"]) - fact_by.get(r["cat"], 0.0)) for r in plan_rows)
+
+
 async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
     # Расход + тело долга (платёж в любой счёт-Пассив = погашение обязательства).
     val = await db.fetchval("""
@@ -226,7 +252,9 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
 
     # ── Остаток плана ──────────────────────────────────────────────────────────
     plan_rows = await plan_remaining(db, user_id, year, month, today)
-    I_remain = sum(float(r["amount"]) for r in plan_rows if r.get("account_from") == "Доход")
+    # Доход-остаток — по категориям (план_месяца − факт_месяца), а не по дате
+    # плановой строки: не двоит ранний приход и не теряет опоздавший. См. хелпер.
+    I_remain = await remaining_planned_income(db, user_id, year, month)
     F_remain = sum(
         float(r["amount"]) for r in plan_rows
         if r.get("account_to") == "Расход" and (
