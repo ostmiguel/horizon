@@ -5047,12 +5047,24 @@ async function loadSummary() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
 
-  const [{ data: txAll }, { data: plAll }, { data: accs }, cbAll] = await Promise.all([
+  const [{ data: txAll }, { data: plAll }, { data: accs }, cbAll, metrics] = await Promise.all([
     sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
     sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
     sb.from('accounts').select('name,account_type,include_in_balance'),
     fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
+    fetch(`${API_BASE}/api/metrics`, { credentials: 'include' }).then(r => r.json()).catch(() => null),  // умный прогноз категорий (MAD) — текущий месяц
   ]);
+  // Прогноз категорий из бэкенда (MAD-фильтр, окно 30 дн). Применим только к ТЕКУЩЕМУ
+  // месяцу (metrics считается по серверному «сегодня»); прошлые месяцы — факт.
+  const mFcByCat = {}; const mVarCats = new Set(); let mSumForecast = 0; let mHasFc = false;
+  if (metrics && Array.isArray(metrics.categories)) {
+    mHasFc = true;
+    metrics.categories.forEach(c => {
+      mFcByCat[c.category] = (mFcByCat[c.category] || 0) + (+c.amount_forecast || 0);
+      mSumForecast += (+c.amount_forecast || 0);
+      if (c.expense_type === 'variable' && c.character !== 'Эпизодический') mVarCats.add(c.category);
+    });
+  }
   const savAcc  = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
   const operAcc = new Set((accs||[]).filter(a => a.account_type === 'Актив' &&  a.include_in_balance).map(a => a.name));
 
@@ -5134,17 +5146,21 @@ async function loadSummary() {
   const povCum = [0]; { let pr = 0; for (let d = 1; d <= daysInMonth; d++) { pr += (b.povDay[d] || 0); povCum[d] = pr; } }
   let projEnd = factSoFar;
   if (isCurrent && elapsed < daysInMonth && elapsed > 0 && _anChar === 'all') {
-    // Обязательное (фикс/эпизодич/проценты) добираем по ПЛАНУ; повседневное НЕ
-    // экстраполируем по темпу (один крупный день ≠ норма) — якорим к бюджету
-    // конвертов: ожидаем бюджет, либо уже потраченное, если оно больше.
-    const povFactSoFar = povCum[elapsed] || 0;
-    const envBudgetTotal = Object.values(ENV[sel] || {}).reduce((s, v) => s + v, 0);
-    const committedFact = factSoFar - povFactSoFar;
-    const committedRemainder = Math.max(0, (PM[sel]?.exp || 0) - committedFact);
-    const povExpected = Math.max(povFactSoFar, envBudgetTotal);
-    projEnd = committedFact + committedRemainder + povExpected;
+    if (mHasFc) {
+      // Умный прогноз из бэкенда (тот же, что кормит Бюджет/Обзор): Σ прогнозов
+      // категорий − тело долга (оно показано в «Долгах» отдельно, не в расходе).
+      projEnd = mSumForecast - pObl(sel);
+    } else {
+      // Fallback (метрики недоступны): обязательное по плану + повседневное по конвертам.
+      const povFactSoFar = povCum[elapsed] || 0;
+      const envBudgetTotal = Object.values(ENV[sel] || {}).reduce((s, v) => s + v, 0);
+      const committedFact = factSoFar - povFactSoFar;
+      const committedRemainder = Math.max(0, (PM[sel]?.exp || 0) - committedFact);
+      projEnd = committedFact + committedRemainder + Math.max(povFactSoFar, envBudgetTotal);
+    }
   }
   if (!isFinite(projEnd)) projEnd = factSoFar;
+  if (projEnd < factSoFar) projEnd = factSoFar;   // прогноз не меньше уже потраченного
   const plannedExp = pExpT(sel), income = b.inc, obligation = b.obl, savings = b.sav;
   const planObl = pObl(sel);                              // плановые долги месяца (график кредитов), не факт-отток
   const oblFore = (isCurrent && elapsed < daysInMonth) ? planObl : obligation;  // прогноз — план, завершённый месяц — факт
@@ -5309,7 +5325,7 @@ async function loadSummary() {
     ${(isCurrent&&elapsed<daysInMonth)?`<div><b style="color:#0F243C">По факту на сегодня:</b> доход ${fmtN(income)} − потрачено ${fmtN(factSoFar)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profitFact>=0?'#4E7D3A':'#B5564A'}">${(profitFact>=0?'+':'')+fmtN(profitFact)} ₽</b></div>`:''}
     <div style="color:#93A1B5;font-size:11.5px;line-height:1.6">Как считается прогноз к концу месяца:<br>
       <b>Доход</b> — по каждой категории берём большее из плана и уже полученного факта. Поэтому внезапный доход, которого не было в плане, поднимает прогноз, а зарплата, пришедшая раньше срока, не считается дважды.<br>
-      <b>Расход</b> — фиксированные (правила, события) по плану; повседневные — по бюджету конвертов (ожидаем бюджет, либо уже потраченное, если оно больше). Один крупный день не размазывается на весь месяц.<br>
+      <b>Расход</b> — фиксированные (правила, события) по плану; повседневные — по среднему темпу трат за 30 дней с отсевом выбросов (тот же расчёт, что в Бюджете и Обзоре). Один крупный день не размазывается на весь месяц.<br>
       <b>Долги</b> — плановые платежи из графика кредитов; только тело, проценты уже сидят в расходах.<br>
       Профит = Доходы − Расходы − Платежи по телу долга — та же формула, что в Бюджете (план) и Операциях (факт).</div>
   </div>
@@ -5335,7 +5351,7 @@ async function loadSummary() {
     ${(catRows.length && plannedExp>0) ? `<div>
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px"><h2 style="font-family:Sora,sans-serif;font-size:15px;font-weight:600">План vs факт${(isCurrent&&elapsed<daysInMonth)?' vs прогноз':''} · категории</h2><span style="font-size:11px;color:#93A1B5">факт / план${(isCurrent&&elapsed<daysInMonth)?' · прогноз' :''} · наведи на маркер · клик — операции</span></div>
       <div style="${CARD};padding:8px 20px 14px">
-        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const isC=isCurrent&&elapsed<daysInMonth&&elapsed>0;const projCat=Math.max(fv,plv);const over=plv&&fv>plv;const col=over?'#B27C72':'#2A8C82';const w=plv?Math.min(fv/plv*100,100):100;const paceP=Math.round(elapsed/daysInMonth*100);const status=over?' · <span style="color:#B5564A">перерасход</span>':'';const projTxt=(isC&&plv)?` · прогноз <b style="color:#0F243C">${fmtN(projCat)}</b>`:'';return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${projTxt}${status}</span></div><div title="факт ${fmtN(fv)}${plv?' · план '+fmtN(plv):''} · прогноз ${fmtN(projCat)}" style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span title="ровный темп — прошло ${paceP}% месяца" style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${paceP}% - 1px)"></span>`:''}</div></div>`;}).join('')}
+        ${catRows.map(([name,fv])=>{const plv=pExpC(sel,name);if(!plv&&!fv)return '';const isC=isCurrent&&elapsed<daysInMonth&&elapsed>0;const projCat=(isCurrent&&_anGran==='cat'&&mVarCats.has(name)&&mFcByCat[name]!=null)?mFcByCat[name]:Math.max(fv,plv);const over=plv&&fv>plv;const col=over?'#B27C72':'#2A8C82';const w=plv?Math.min(fv/plv*100,100):100;const paceP=Math.round(elapsed/daysInMonth*100);const status=over?' · <span style="color:#B5564A">перерасход</span>':'';const projTxt=(isC&&plv)?` · прогноз <b style="color:#0F243C">${fmtN(projCat)}</b>`:'';return `<div onclick="anDrillM('${esc(name)}','${sel}')" style="padding:11px 0;border-top:1px solid rgba(15,36,60,.06);cursor:pointer"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px"><span style="font-size:13px;color:#5A6B82">${esc(name)}</span><span style="font-size:12.5px;color:#5A6B82;font-variant-numeric:tabular-nums"><b style="color:#0F243C">${fmtN(fv)}</b>${plv?' / '+fmtN(plv):' · нет плана'}${projTxt}${status}</span></div><div title="факт ${fmtN(fv)}${plv?' · план '+fmtN(plv):''} · прогноз ${fmtN(projCat)}" style="position:relative;height:6px;background:#F5F8FB;border-radius:99px"><i style="position:absolute;left:0;top:0;height:100%;width:${w}%;border-radius:99px;background:${col}"></i>${plv?`<span title="ровный темп — прошло ${paceP}% месяца" style="position:absolute;top:-3px;height:12px;width:2px;border-radius:2px;background:#CBD5E1;left:calc(${paceP}% - 1px)"></span>`:''}</div></div>`;}).join('')}
       </div>
     </div>` : ''}
   </section>
