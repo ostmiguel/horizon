@@ -2504,6 +2504,7 @@ async function loadReferences() {
               <th style="width:24px"></th>
               <th class="sortable" onclick="sortAccTable(1)">Счёт</th>
               <th class="sortable" style="text-align:right" onclick="sortAccTable(3)">Нач. остаток</th>
+              <th class="sortable" style="text-align:right" onclick="sortAccTable(4)">Текущий остаток</th>
               <th style="text-align:center">В балансе</th>
               <th style="text-align:center">Резерв</th>
               <th style="text-align:center" title="Виден в «откуда» при Расходе">Оплата</th>
@@ -2569,18 +2570,31 @@ async function loadReferences() {
   }
 }
 
+function accBal(a) { return a.current_balance != null ? +a.current_balance : (+a.initial_balance || 0); }
 function renderAccRows(rows) {
-  if (!rows.length) return '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
+  if (!rows.length) return '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
   // Группировка по типу (стабильная сортировка сохраняет ручной порядок внутри типа).
   const TORD = { 'Актив': 0, 'Пассив': 1, 'Поток': 2 };
   const TLBL = { 'Актив': 'Активы', 'Пассив': 'Пассивы', 'Поток': 'Потоки' };
   const sorted = [...rows].sort((a, b) => (TORD[a.account_type] ?? 9) - (TORD[b.account_type] ?? 9));
-  let out = '', lastType = null;
-  sorted.forEach((a, idx) => {
+  const CAPs = 'font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)';
+  const money = v => `${v < 0 ? '−' : ''}${fmt(Math.abs(v))}`;
+  const soraNum = (v, big) => `font-family:Sora,sans-serif;font-weight:${big?700:600};font-variant-numeric:tabular-nums;color:${v < 0 ? '#B0492A' : (big ? '#5E9B1E' : '#0F243C')}`;
+  const subtotal = (type, sum) => (type == null || type === 'Поток') ? '' :
+    `<tr><td></td><td style="${CAPs};padding:7px 12px">Итого · ${TLBL[type]}</td><td></td><td style="text-align:right;padding:7px 12px;${soraNum(sum)}">${money(sum)}</td><td colspan="4"></td></tr>`;
+  let out = '', lastType = null, gSum = 0, assets = 0, liab = 0, hasBal = false;
+  sorted.forEach((a) => {
     if (a.account_type !== lastType) {
-      lastType = a.account_type;
-      out += `<tr><td colspan="7" style="padding:14px 8px 5px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);border:none">${TLBL[a.account_type] || a.account_type}</td></tr>`;
+      if (lastType !== null) { out += subtotal(lastType, gSum); }
+      lastType = a.account_type; gSum = 0;
+      out += `<tr><td colspan="8" style="padding:14px 8px 5px;${CAPs};border:none">${TLBL[a.account_type] || a.account_type}</td></tr>`;
     }
+    const b = accBal(a);
+    if (a.account_type === 'Актив') { gSum += b; assets += b; hasBal = true; }
+    else if (a.account_type === 'Пассив') { gSum += b; liab += b; hasBal = true; }
+    const balCell = a.account_type === 'Поток'
+      ? '<td style="text-align:right;color:var(--text3)">—</td>'
+      : `<td style="text-align:right;${soraNum(b)}">${money(b)}</td>`;
     out += `<tr class="draggable-row" draggable="true" data-id="${a.id}"
     ondragstart="onAccDragStart(event,${a.id})"
     ondragover="onAccDragOver(event)"
@@ -2588,7 +2602,8 @@ function renderAccRows(rows) {
     ondrop="onAccDrop(event,${a.id})">
     <td style="width:24px;padding:0 4px"><span class="drag-handle" title="Перетащи для сортировки">⠿</span></td>
     <td><span class="color-dot" style="background:${a.color||'#888'}"></span>${a.name}</td>
-    <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(a.initial_balance)}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--text3)">${fmt(a.initial_balance)}</td>
+    ${balCell}
     <td style="text-align:center">
       <label class="toggle" title="Включать в оперативный баланс">
         <input type="checkbox" ${a.include_in_balance?'checked':''} onchange="toggleBalance(${a.id},this.checked)">
@@ -2612,6 +2627,11 @@ function renderAccRows(rows) {
     </td>
   </tr>`;
   });
+  out += subtotal(lastType, gSum);
+  if (hasBal) {
+    const net = assets + liab;   // пассивы уже с минусом (долг) → сумма = чистый капитал
+    out += `<tr style="border-top:2px solid rgba(15,36,60,.12)"><td></td><td style="padding:12px;font-family:Sora,sans-serif;font-weight:700;color:var(--text)">Чистый капитал</td><td></td><td style="text-align:right;padding:12px;font-family:Sora,sans-serif;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;color:${net < 0 ? '#B0492A' : '#5E9B1E'}">${net < 0 ? '−' : ''}${fmt(Math.abs(net))}</td><td colspan="4"></td></tr>`;
+  }
   return out;
 }
 
@@ -2671,6 +2691,7 @@ function sortAccTable(col) {
     if (col===1) return a.name.localeCompare(b.name)*_sortDir;
     if (col===2) return a.account_type.localeCompare(b.account_type)*_sortDir;
     if (col===3) return (+a.initial_balance - +b.initial_balance)*_sortDir;
+    if (col===4) return (accBal(a) - accBal(b))*_sortDir;
     return 0;
   });
   const tbody = document.getElementById('accBody');
