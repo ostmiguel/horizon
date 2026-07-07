@@ -8,8 +8,8 @@ from metrics_core import (
     Z_80, FLOW_CHARS, EPISODIC_CHARS, FIXED_CHARS,
     month_context, robust_rate, robust_sigma, _is_op, _is_rsv,
     account_balances, flow_daily_rate, monthly_income_sum,
-    monthly_fixed_income_sum, monthly_expense_sum, plan_remaining, plan_window, safe_to_spend,
-    today_unrealized_planned,
+    monthly_fixed_income_sum, monthly_planned_fixed_income, monthly_expense_sum,
+    plan_remaining, plan_window, safe_to_spend, today_unrealized_planned,
 )
 from plan_materialize import ensure_materialized, current_and_next_month
 
@@ -100,10 +100,13 @@ async def get_metrics(request: Request):
             prev_incomes.append(await monthly_income_sum(db, user_id, y, m))
         cur_income = statistics.mean(prev_incomes) if prev_incomes else 1
 
-    # DSR считаем от ГАРАНТИРОВАННОГО (фиксированного) дохода: платежи по долгам
-    # должны соотноситься со стабильным приходом (зарплата), а не со всем доходом,
-    # который может включать разовые/нерегулярные поступления.
-    dsr_income = await monthly_fixed_income_sum(db, user_id, year, month)
+    # DSR считаем от ГАРАНТИРОВАННОГО (фиксированного) дохода — и берём ПЛАНОВУЮ
+    # (бюджетную) зарплату, а не факт: у кого доход приходит частями, факт в первой
+    # половине месяца неполный и завышал бы нагрузку. Нет плана → факт → среднее
+    # фикс-дохода за прошлые месяцы.
+    dsr_income = await monthly_planned_fixed_income(db, user_id, year, month)
+    if dsr_income == 0:
+        dsr_income = await monthly_fixed_income_sum(db, user_id, year, month)
     if dsr_income == 0:
         prev_fixed = []
         for i in range(1, 4):
@@ -737,14 +740,16 @@ async def get_forecast(request: Request, range: str = "30"):
         amount = float(r["amount"]); af = r.get("account_from", ""); at = r.get("account_to", "")
         cat_et = r.get("cat_expense_type"); cat_ch = r.get("cat_character", "")
         is_var = (at == "Расход" and cat_et == "variable" and cat_ch not in EPISODIC_CHARS)
-        if af == "Доход":
+        if af == "Доход" and at in op_names:
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
-        elif at == "Расход" or at in liability_names:
+        elif af in op_names and (at == "Расход" or at in liability_names):
+            # только оттоки с ОПЕРАЦИОННОГО счёта двигают линию баланса (обеспеченные
+            # резервом платежи списываются не с B0 → на прогноз/«Свободно» не влияют)
             if not is_var:
                 plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
                 if d < next_income_date:
                     F_before += amount
-        elif at in reserve_names:
+        elif af in op_names and at in reserve_names:
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
             if d < next_income_date:
                 R_before += amount
@@ -755,7 +760,7 @@ async def get_forecast(request: Request, range: str = "30"):
     # точкой дня-перед-доходом (тот же расчёт, что sts в safe_to_spend).
     # Сегодняшний план, ещё не в факте (в день зарплаты доход иначе выпадает из графика).
     inc_today, out_today = await today_unrealized_planned(
-        db, user_id, today, liability_names, reserve_names)
+        db, user_id, today, liability_names, reserve_names, set(op_names))
     days_before = max(days_to_income - 1, 0)
     trough_value = round(B0_now + inc_today - out_today - F_before - r_var * days_before - R_before)
     trough_day = (next_income_date - timedelta(days=1)) if days_to_income > 0 else today

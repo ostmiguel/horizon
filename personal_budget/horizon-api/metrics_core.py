@@ -149,6 +149,22 @@ async def monthly_fixed_income_sum(db, user_id: str, year: int, month: int) -> f
     return float(val)
 
 
+async def monthly_planned_fixed_income(db, user_id: str, year: int, month: int) -> float:
+    """Плановый (бюджетный) фиксированный доход месяца — из plan-строк дохода с
+    character='Фиксированный'. Для DSR: у кого зарплата приходит частями, факт в
+    первой половине месяца неполный и завышает нагрузку; бюджетная сумма стабильна."""
+    val = await db.fetchval("""
+        SELECT COALESCE(SUM(p.amount), 0) FROM plan p
+        JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1
+          AND EXTRACT(YEAR  FROM p.date)=$2
+          AND EXTRACT(MONTH FROM p.date)=$3
+          AND p.account_from = 'Доход'
+          AND c.character = 'Фиксированный'
+    """, user_id, year, month)
+    return float(val)
+
+
 async def remaining_planned_income_by_cat(db, user_id: str, year: int, month: int) -> dict:
     """Ожидаемый ещё доход ПО КАТЕГОРИЯМ = max(0, план_месяца − факт_месяца).
 
@@ -183,7 +199,7 @@ async def remaining_planned_income_by_cat(db, user_id: str, year: int, month: in
 
 
 async def today_unrealized_planned(db, user_id: str, today: date,
-                                   liability_names: set, reserve_names: set):
+                                   liability_names: set, reserve_names: set, op_names: set):
     """План на СЕГОДНЯ, ещё не проведённый фактом (нетто по направлению).
 
     Движки прогноза берут плановые движения только для дней > сегодня, а как факт
@@ -207,13 +223,16 @@ async def today_unrealized_planned(db, user_id: str, today: date,
     """, user_id, today)
 
     def is_committed_out(r):
+        if r["af"] not in op_names:   # списание не с операционного счёта → на «Свободно» не влияет
+            return False
         at = r["at"]
         if at in liability_names or at in reserve_names:
             return True
         return at == "Расход" and (r["et"] == "fixed" or r["ch"] in EPISODIC_CHARS)
 
-    plan_inc = sum(float(r["amount"]) for r in plan if r["af"] == "Доход")
-    fact_inc = sum(float(r["amount"]) for r in fact if r["af"] == "Доход")
+    # доход поднимает «Свободно» только если приходит на операционный счёт
+    plan_inc = sum(float(r["amount"]) for r in plan if r["af"] == "Доход" and r["at"] in op_names)
+    fact_inc = sum(float(r["amount"]) for r in fact if r["af"] == "Доход" and r["at"] in op_names)
     plan_out = sum(float(r["amount"]) for r in plan if is_committed_out(r))
     fact_out = sum(float(r["amount"]) for r in fact if is_committed_out(r))
     return max(0.0, plan_inc - fact_inc), max(0.0, plan_out - fact_out)
@@ -283,6 +302,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
         for a in accs.values() if _is_op(a)
     ]
     B0 = sum(a["balance"] for a in b0_accounts)
+    op_names = {a["name"] for a in b0_accounts}   # операционные счета (входят в B0)
     C_cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
     reserve_balance = sum(float(a["balance"]) for a in accs.values() if _is_rsv(a))
     liabilities = sum(
@@ -331,15 +351,20 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     days_to_income = max((next_income_date - today).days, 0)
     win = [r for r in fut_rows if r["date"] < next_income_date]
 
+    # Оттоки уменьшают «Свободно» только если списываются с ОПЕРАЦИОННОГО счёта
+    # (входит в B0). Платёж, обеспеченный резервом (account_from = резервный счёт),
+    # не трогает операционный кэш → на «Свободно» влиять не должен.
     F_before = sum(
         float(r["amount"]) for r in win
-        if r.get("account_to") == "Расход" and (
+        if r.get("account_from") in op_names and r.get("account_to") == "Расход" and (
             r.get("cat_expense_type") == "fixed"
             or r.get("cat_character") in EPISODIC_CHARS
         )
     )
-    F_before += sum(float(r["amount"]) for r in win if r.get("account_to") in liability_names)
-    R_before = sum(float(r["amount"]) for r in win if r.get("account_to") in reserve_names)
+    F_before += sum(float(r["amount"]) for r in win
+                    if r.get("account_from") in op_names and r.get("account_to") in liability_names)
+    R_before = sum(float(r["amount"]) for r in win
+                   if r.get("account_from") in op_names and r.get("account_to") in reserve_names)
     # Низшая точка = КОНЕЦ дня ПЕРЕД доходом (в день зарплаты деньги приходят —
     # не считаем ещё один день трат до поступления). Поэтому дней спада = N−1.
     days_before = max(days_to_income - 1, 0)
@@ -348,7 +373,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
 
     # Сегодняшний план, ещё не в факте (в день зарплаты доход иначе выпадает).
     inc_today, out_today = await today_unrealized_planned(
-        db, user_id, today, liability_names, reserve_names)
+        db, user_id, today, liability_names, reserve_names, op_names)
     sts = B0 + inc_today - out_today - F_before - V_to_income - R_before
     sts_low  = sts - Z_80 * sigma_to_income
     sts_high = sts + Z_80 * sigma_to_income
