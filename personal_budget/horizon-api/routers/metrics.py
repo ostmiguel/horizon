@@ -45,6 +45,7 @@ async def get_metrics(request: Request):
     V_remain = m["V_remain"]; sigma_remain = m["sigma_remain"]
     plan_rows = m["plan_rows"]; reserve_names = m["reserve_names"]
     liability_names = m["liability_names"]   # имена всех счетов-Пассивов (обязательства)
+    income_remaining_by_cat = m.get("income_remaining_by_cat", {})  # берём пока m — словарь (ниже m переиспользуется как № месяца)
     I_remain = m["I_remain"]; F_remain = m["F_remain"]; R_topup = m["R_topup"]
     F_before = m["F_before"]; V_to_income = m["V_to_income"]; R_before = m["R_before"]
     next_income_date = m["next_income_date"]; days_to_income = m["days_to_income"]
@@ -397,7 +398,7 @@ async def get_metrics(request: Request):
     # Детализация «Доходов» — из того же источника, что и сумма пилюли (I_remain):
     # per-category max(0, план−факт). Иначе сумма и разбивка по клику расходятся.
     income_items = [{"category": k, "amount": round(v)}
-                    for k, v in sorted(m.get("income_remaining_by_cat", {}).items(),
+                    for k, v in sorted(income_remaining_by_cat.items(),
                                        key=lambda x: -x[1])]
 
     fixed_by_cat: dict[tuple, float] = {}
