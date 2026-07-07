@@ -181,7 +181,7 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid var(--border);
 }
-.card-title { font-size: 13px; font-weight: 600; color: var(--text2); }
+.card-title { font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 600; color: var(--text2); letter-spacing: -0.01em; }
 .card-hint  { font-size: 10px; color: var(--text3); }
 .card-header { padding: 16px 18px 8px; display: flex; justify-content: space-between; align-items: center; }
 .card-body  { padding: 10px 18px 16px; }
@@ -2528,7 +2528,7 @@ async function loadReferences() {
                     <span class="toggle-slider"></span>
                   </label>
                 </td>
-                <td><button class="edit-btn" onclick="editParticipant(${p.id})">ред.</button></td>
+                <td style="text-align:right"><button class="bgt-dots" title="Действия" onclick="event.stopPropagation();partMenu(this,${p.id})">⋮</button></td>
               </tr>`).join('')}
             </tbody>
           </table>
@@ -2573,28 +2573,30 @@ async function loadReferences() {
 function accBal(a) { return a.current_balance != null ? +a.current_balance : (+a.initial_balance || 0); }
 function renderAccRows(rows) {
   if (!rows.length) return '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text3)">Нет счетов</td></tr>';
-  // Группировка по типу (стабильная сортировка сохраняет ручной порядок внутри типа).
   const TORD = { 'Актив': 0, 'Пассив': 1, 'Поток': 2 };
   const TLBL = { 'Актив': 'Активы', 'Пассив': 'Пассивы', 'Поток': 'Потоки' };
   const sorted = [...rows].sort((a, b) => (TORD[a.account_type] ?? 9) - (TORD[b.account_type] ?? 9));
   const CAPs = 'font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)';
   const money = v => `${v < 0 ? '−' : ''}${fmt(Math.abs(v))}`;
-  const soraNum = (v, big) => `font-family:Sora,sans-serif;font-weight:${big?700:600};font-variant-numeric:tabular-nums;color:${v < 0 ? '#B0492A' : (big ? '#5E9B1E' : '#0F243C')}`;
-  const subtotal = (type, sum) => (type == null || type === 'Поток') ? '' :
-    `<tr><td></td><td style="${CAPs};padding:7px 12px">Итого · ${TLBL[type]}</td><td></td><td style="text-align:right;padding:7px 12px;${soraNum(sum)}">${money(sum)}</td><td colspan="4"></td></tr>`;
-  let out = '', lastType = null, gSum = 0, assets = 0, liab = 0, hasBal = false;
-  sorted.forEach((a) => {
-    if (a.account_type !== lastType) {
-      if (lastType !== null) { out += subtotal(lastType, gSum); }
-      lastType = a.account_type; gSum = 0;
-      out += `<tr><td colspan="8" style="padding:14px 8px 5px;${CAPs};border:none">${TLBL[a.account_type] || a.account_type}</td></tr>`;
-    }
-    const b = accBal(a);
-    if (a.account_type === 'Актив') { gSum += b; assets += b; hasBal = true; }
-    else if (a.account_type === 'Пассив') { gSum += b; liab += b; hasBal = true; }
-    const balCell = a.account_type === 'Поток'
+  const calmNum = v => `font-variant-numeric:tabular-nums;color:${v < 0 ? '#B0492A' : 'var(--text)'}`;  // спокойные числа: Inter, без зелёного/жирного
+  // Группируем по типу в порядке появления (внутри типа — ручной порядок из стабильной сортировки).
+  const order = [], byType = {};
+  sorted.forEach(a => { if (!byType[a.account_type]) { byType[a.account_type] = []; order.push(a.account_type); } byType[a.account_type].push(a); });
+  let out = '', assets = 0, liab = 0, hasBal = false;
+  order.forEach(type => {
+    const list = byType[type], isFlow = type === 'Поток';
+    const gSum = isFlow ? 0 : list.reduce((s, a) => s + accBal(a), 0);
+    if (type === 'Актив') { assets += gSum; hasBal = true; }
+    else if (type === 'Пассив') { liab += gSum; hasBal = true; }
+    // Заголовок группы + подытог справа (в колонке «Текущий остаток»).
+    out += `<tr><td colspan="3" style="padding:15px 8px 6px;${CAPs};border:none">${TLBL[type] || type}</td>`
+      + (isFlow ? '<td colspan="5" style="border:none"></td>'
+                : `<td style="text-align:right;padding:15px 12px 6px;border:none;font-family:Sora,sans-serif;font-weight:600;font-variant-numeric:tabular-nums;color:${gSum < 0 ? '#B0492A' : 'var(--text)'}">${money(gSum)}</td><td colspan="4" style="border:none"></td>`)
+      + `</tr>`;
+    list.forEach(a => {
+    const balCell = isFlow
       ? '<td style="text-align:right;color:var(--text3)">—</td>'
-      : `<td style="text-align:right;${soraNum(b)}">${money(b)}</td>`;
+      : `<td style="text-align:right;${calmNum(accBal(a))}">${money(accBal(a))}</td>`;
     out += `<tr class="draggable-row" draggable="true" data-id="${a.id}"
     ondragstart="onAccDragStart(event,${a.id})"
     ondragover="onAccDragOver(event)"
@@ -2626,11 +2628,12 @@ function renderAccRows(rows) {
       <button class="bgt-dots" title="Действия" onclick="event.stopPropagation();accMenu(this,${a.id})">⋮</button>
     </td>
   </tr>`;
+    });
   });
-  out += subtotal(lastType, gSum);
   if (hasBal) {
     const net = assets + liab;   // пассивы уже с минусом (долг) → сумма = чистый капитал
-    out += `<tr style="border-top:2px solid rgba(15,36,60,.12)"><td></td><td style="padding:12px;font-family:Sora,sans-serif;font-weight:700;color:var(--text)">Чистый капитал</td><td></td><td style="text-align:right;padding:12px;font-family:Sora,sans-serif;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;color:${net < 0 ? '#B0492A' : '#5E9B1E'}">${net < 0 ? '−' : ''}${fmt(Math.abs(net))}</td><td colspan="4"></td></tr>`;
+    const nb = 'border-top:1px solid var(--border);';
+    out += `<tr><td style="${nb}"></td><td style="${nb}padding:11px 12px;font-weight:600;color:var(--text2)">Чистый капитал</td><td style="${nb}"></td><td style="${nb}text-align:right;padding:11px 12px;font-family:Sora,sans-serif;font-weight:600;font-variant-numeric:tabular-nums;color:${net < 0 ? '#B0492A' : 'var(--text)'}">${money(net)}</td><td style="${nb}" colspan="4"></td></tr>`;
   }
   return out;
 }
@@ -2989,6 +2992,10 @@ function accMenu(btn, id) {
     items.push({ label: 'Удалить', danger: true, fn: () => deleteAccount(id, a.name) });
   }
   bgtMenu(btn, items);
+}
+
+function partMenu(btn, id) {
+  bgtMenu(btn, [{ label: 'Редактировать', fn: () => editParticipant(id) }]);
 }
 
 function openAddParticipant() {
