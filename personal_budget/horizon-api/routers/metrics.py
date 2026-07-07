@@ -9,6 +9,7 @@ from metrics_core import (
     month_context, robust_rate, robust_sigma, _is_op, _is_rsv,
     account_balances, flow_daily_rate, monthly_income_sum,
     monthly_fixed_income_sum, monthly_expense_sum, plan_remaining, plan_window, safe_to_spend,
+    today_unrealized_planned,
 )
 from plan_materialize import ensure_materialized, current_and_next_month
 
@@ -753,8 +754,11 @@ async def get_forecast(request: Request, range: str = "30"):
     # приходят, лишний день трат не считаем). Один день = одна точка на графике,
     # без синтетического пред-зарплатного дубля. Закрытая формула сходится с
     # точкой дня-перед-доходом (тот же расчёт, что sts в safe_to_spend).
+    # Сегодняшний план, ещё не в факте (в день зарплаты доход иначе выпадает из графика).
+    inc_today, out_today = await today_unrealized_planned(
+        db, user_id, today, liability_names, reserve_names)
     days_before = max(days_to_income - 1, 0)
-    trough_value = round(B0_now - F_before - r_var * days_before - R_before)
+    trough_value = round(B0_now + inc_today - out_today - F_before - r_var * days_before - R_before)
     trough_day = (next_income_date - timedelta(days=1)) if days_to_income > 0 else today
     trough_date = trough_day.isoformat()
 
@@ -772,6 +776,7 @@ async def get_forecast(request: Request, range: str = "30"):
             running_fact += fact_by_date.get(d, 0)   # → B0_now
             pt["fact"] = round(running_fact)
             pt["forecast"] = round(running_fcst)     # стыкуем линии без разрыва
+            running_fcst += inc_today - out_today    # сегодняшний план (зарплата) — со след. дня
         else:
             running_fcst -= r_var
             running_fcst += plan_fixed_by_date.get(d, 0)

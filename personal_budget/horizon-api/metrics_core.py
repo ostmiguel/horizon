@@ -175,6 +175,43 @@ async def remaining_planned_income(db, user_id: str, year: int, month: int) -> f
     return sum(max(0.0, float(r["amt"]) - fact_by.get(r["cat"], 0.0)) for r in plan_rows)
 
 
+async def today_unrealized_planned(db, user_id: str, today: date,
+                                   liability_names: set, reserve_names: set):
+    """План на СЕГОДНЯ, ещё не проведённый фактом (нетто по направлению).
+
+    Движки прогноза берут плановые движения только для дней > сегодня, а как факт
+    сегодняшнее ещё может быть не записано. В день зарплаты это роняло линию:
+    доход выпадал и из баланса, и из прогноза. Возвращаем (доход_ещё_не_пришёл,
+    обязательный_отток_ещё_не_ушёл) — netto max(0, план − факт), чтобы после
+    проводки факта вклад стал 0 (без двойного счёта). Повседневное сюда не входит —
+    оно в r_var.
+    """
+    plan = await db.fetch("""
+        SELECT p.account_from AS af, p.account_to AS at, p.amount,
+               c.expense_type AS et, c.character AS ch
+        FROM plan p LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.user_id=$1 AND p.date=$2
+    """, user_id, today)
+    fact = await db.fetch("""
+        SELECT t.account_from AS af, t.account_to AS at, t.amount,
+               c.expense_type AS et, c.character AS ch
+        FROM transactions t LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id=$1 AND t.date=$2
+    """, user_id, today)
+
+    def is_committed_out(r):
+        at = r["at"]
+        if at in liability_names or at in reserve_names:
+            return True
+        return at == "Расход" and (r["et"] == "fixed" or r["ch"] in EPISODIC_CHARS)
+
+    plan_inc = sum(float(r["amount"]) for r in plan if r["af"] == "Доход")
+    fact_inc = sum(float(r["amount"]) for r in fact if r["af"] == "Доход")
+    plan_out = sum(float(r["amount"]) for r in plan if is_committed_out(r))
+    fact_out = sum(float(r["amount"]) for r in fact if is_committed_out(r))
+    return max(0.0, plan_inc - fact_inc), max(0.0, plan_out - fact_out)
+
+
 async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
     # Расход + тело долга (платёж в любой счёт-Пассив = погашение обязательства).
     val = await db.fetchval("""
@@ -301,7 +338,10 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     V_to_income = r_var * days_before
     sigma_to_income = sigma_day * math.sqrt(days_before) if days_before > 0 else 0.0
 
-    sts = B0 - F_before - V_to_income - R_before
+    # Сегодняшний план, ещё не в факте (в день зарплаты доход иначе выпадает).
+    inc_today, out_today = await today_unrealized_planned(
+        db, user_id, today, liability_names, reserve_names)
+    sts = B0 + inc_today - out_today - F_before - V_to_income - R_before
     sts_low  = sts - Z_80 * sigma_to_income
     sts_high = sts + Z_80 * sigma_to_income
 
