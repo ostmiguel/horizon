@@ -18,7 +18,7 @@ cp -f "$T/docs/privacy.html" "$T/docs/terms.html" "$T/docs/consent.html" "$APP/s
 
 # ── backend ──
 cp -f "$SRC/forecast_cron.py" "$SRC/metrics_core.py" "$SRC/plan_materialize.py" \
-      "$SRC/seed_user.py" "$SRC/main.py" "$SRC/middleware.py" "$APP/"
+      "$SRC/seed_user.py" "$SRC/smoke_test.py" "$SRC/main.py" "$SRC/middleware.py" "$APP/"
 cp -f "$SRC/routers/"*.py "$APP/routers/"
 mkdir -p "$APP/migrations" "$APP/deploy"
 cp -f "$SRC/migrations/"*.sql "$APP/migrations/"
@@ -47,6 +47,24 @@ sed "s#^ExecStart=.*#ExecStart=$PY $APP/forecast_cron.py#" \
 cp -f "$APP/deploy/horizon-forecast.timer" /etc/systemd/system/horizon-forecast.timer
 systemctl daemon-reload
 systemctl enable --now horizon-forecast.timer
+
+# ── SMOKE нового кода ПЕРЕД рестартом (ловит рантайм-ошибки эндпоинтов) ──
+# Гоняем новый код через TestClient под сессией активного пользователя. Любой 5xx
+# или ошибка импорта → рестарт ПРОПУСКАЕМ (прод остаётся на рабочем коде) + алерт.
+if [ -n "$DB_URL" ]; then
+  echo "smoke: проверяю эндпоинты на новом коде…"
+  if ! ( cd "$APP" && DATABASE_URL="$DB_URL" "$PY" smoke_test.py ); then
+    echo "!!! SMOKE FAILED — рестарт ПРОПУЩЕН, прод остаётся на рабочем коде"
+    TG_TOKEN=$(grep -E '^TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2-)
+    TG_CHAT=$(grep -E '^TELEGRAM_CHAT_ID='  "$ENV_FILE" | head -1 | cut -d= -f2-)
+    [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && curl -s \
+      "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+      -d chat_id="$TG_CHAT" \
+      -d text="🚑 Horizon deploy: SMOKE упал — рестарт пропущен, прод на старом коде. Смотри Actions/journalctl." >/dev/null || true
+    exit 1
+  fi
+  echo "smoke: OK"
+fi
 
 # ── рестарт API ──
 systemctl restart horizon
