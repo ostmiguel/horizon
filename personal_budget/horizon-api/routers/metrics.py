@@ -394,13 +394,11 @@ async def get_metrics(request: Request):
     """, user_id, year, month))
 
     # ── Waterfall detail (pill breakdowns) ───────────────────────────────────
-    income_by_cat: dict[str, float] = {}
-    for r in plan_rows:
-        if r.get("account_from") == "Доход":
-            cat = r.get("cat_category") or "Доходы"
-            income_by_cat[cat] = income_by_cat.get(cat, 0) + float(r["amount"])
+    # Детализация «Доходов» — из того же источника, что и сумма пилюли (I_remain):
+    # per-category max(0, план−факт). Иначе сумма и разбивка по клику расходятся.
     income_items = [{"category": k, "amount": round(v)}
-                    for k, v in sorted(income_by_cat.items(), key=lambda x: -x[1])]
+                    for k, v in sorted(m.get("income_remaining_by_cat", {}).items(),
+                                       key=lambda x: -x[1])]
 
     fixed_by_cat: dict[tuple, float] = {}
     for r in plan_rows:

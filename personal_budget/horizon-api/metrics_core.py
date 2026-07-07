@@ -149,13 +149,14 @@ async def monthly_fixed_income_sum(db, user_id: str, year: int, month: int) -> f
     return float(val)
 
 
-async def remaining_planned_income(db, user_id: str, year: int, month: int) -> float:
-    """Ожидаемый ещё доход = Σ по категориям max(0, план_месяца − факт_месяца).
+async def remaining_planned_income_by_cat(db, user_id: str, year: int, month: int) -> dict:
+    """Ожидаемый ещё доход ПО КАТЕГОРИЯМ = max(0, план_месяца − факт_месяца).
 
     Привязка к КАТЕГОРИИ, а не к дате плановой строки. Поэтому: пришло раньше
     срока — не двоится (факт≈план → 0), опоздало — не теряется (факт<план →
     добираем остаток). Внезапный доход без плана (только факт) сюда не входит —
-    он уже в балансе (B0). Заменяет прежнее «сумма плановых строк с датой > сегодня».
+    он уже в балансе (B0). Один источник и для пилюли «Доходы» (сумма), и для её
+    детализации по клику (список) — чтобы не расходились.
     """
     plan_rows = await db.fetch("""
         SELECT COALESCE(c.category, '') AS cat, COALESCE(SUM(p.amount), 0) AS amt
@@ -172,7 +173,13 @@ async def remaining_planned_income(db, user_id: str, year: int, month: int) -> f
         GROUP BY COALESCE(c.category, '')
     """, user_id, year, month)
     fact_by = {r["cat"]: float(r["amt"]) for r in fact_rows}
-    return sum(max(0.0, float(r["amt"]) - fact_by.get(r["cat"], 0.0)) for r in plan_rows)
+    out: dict[str, float] = {}
+    for r in plan_rows:
+        rem = max(0.0, float(r["amt"]) - fact_by.get(r["cat"], 0.0))
+        if rem > 0:
+            key = r["cat"] or "Доходы"
+            out[key] = out.get(key, 0.0) + rem
+    return out
 
 
 async def today_unrealized_planned(db, user_id: str, today: date,
@@ -291,7 +298,8 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     plan_rows = await plan_remaining(db, user_id, year, month, today)
     # Доход-остаток — по категориям (план_месяца − факт_месяца), а не по дате
     # плановой строки: не двоит ранний приход и не теряет опоздавший. См. хелпер.
-    I_remain = await remaining_planned_income(db, user_id, year, month)
+    income_remaining_by_cat = await remaining_planned_income_by_cat(db, user_id, year, month)
+    I_remain = sum(income_remaining_by_cat.values())
     F_remain = sum(
         float(r["amount"]) for r in plan_rows
         if r.get("account_to") == "Расход" and (
@@ -364,7 +372,8 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
         "V_remain": V_remain, "sigma_remain": sigma_remain,
         "plan_rows": plan_rows, "reserve_names": reserve_names,
         "liability_names": liability_names,
-        "I_remain": I_remain, "F_remain": F_remain, "R_topup": R_topup,
+        "I_remain": I_remain, "income_remaining_by_cat": income_remaining_by_cat,
+        "F_remain": F_remain, "R_topup": R_topup,
         # trough «до следующего дохода»
         "next_income_date": next_income_date, "days_to_income": days_to_income,
         "F_before": F_before, "V_to_income": V_to_income, "R_before": R_before,
