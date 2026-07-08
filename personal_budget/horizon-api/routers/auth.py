@@ -26,6 +26,13 @@ TELEGRAM_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID")
 TELEGRAM_RELAY_URL    = os.getenv("TELEGRAM_RELAY_URL")
 TELEGRAM_RELAY_SECRET = os.getenv("TELEGRAM_RELAY_SECRET")
 
+# Страховка от частой опечатки в .env: URL реле без схемы (httpx падает с
+# UnsupportedProtocol). Если схемы нет — считаем https://.
+if TELEGRAM_RELAY_URL:
+    TELEGRAM_RELAY_URL = TELEGRAM_RELAY_URL.strip()
+    if TELEGRAM_RELAY_URL and not TELEGRAM_RELAY_URL.startswith(("http://", "https://")):
+        TELEGRAM_RELAY_URL = "https://" + TELEGRAM_RELAY_URL
+
 
 async def send_telegram(text: str):
     """Отправка в Telegram. Приоритет — relay (Cloudflare Worker, доступен из РФ);
