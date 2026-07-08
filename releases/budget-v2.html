@@ -2554,12 +2554,12 @@ async function loadReferences() {
             <option value="Эпизодический">Эпизодический</option>
           </select>
         </div>
-        <table class="ref-tbl">
+        <div class="ref-tbl-wrap"><table class="ref-tbl">
           <thead><tr>
             <th>Категория</th><th>Подкатегория</th><th>Группа</th><th>Характер</th><th style="width:44px"></th>
           </tr></thead>
           <tbody id="catBody">${renderCatRows(cats_all||[])}</tbody>
-        </table>
+        </table></div>
         <div class="add-row-btn" onclick="openAddCategory()">＋ Добавить подкатегорию</div>
       </div>`;
 
@@ -5634,17 +5634,6 @@ async function loadProfile() {
 
         </div>
       </div>
-
-      ${window.MOBILE ? `<div class="card" style="margin-bottom:16px">
-        <div class="card-head"><span class="card-title">Счета и справочники</span></div>
-        <div class="card-body">
-          <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:12px">Добавляй и редактируй счета, категории и участников.</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn-primary" onclick="openAddAccount()">+ Добавить счёт</button>
-            <button class="btn-ghost" onclick="loadReferences()">Справочники →</button>
-          </div>
-        </div>
-      </div>` : ''}
 
       ${statsCard}
 
