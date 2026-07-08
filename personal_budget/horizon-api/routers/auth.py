@@ -27,6 +27,7 @@ async def notify_new_user(name: str, email: str, provider: str, total: int):
     """Шлёт в Telegram уведомление о новой регистрации. Best-effort: любые
     ошибки (нет токена, сеть, Telegram лежит) молча глотаем — регистрация важнее."""
     if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        print("[notify_new_user] TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID не заданы — уведомление пропущено", flush=True)
         return
     text = (
         "🎉 Новый пользователь Horizon!\n\n"
@@ -37,12 +38,14 @@ async def notify_new_user(name: str, email: str, provider: str, total: int):
     )
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
+            resp = await client.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
             )
-    except Exception:
-        pass
+        if resp.status_code != 200:
+            print(f"[notify_new_user] Telegram ответил {resp.status_code}: {resp.text[:300]}", flush=True)
+    except Exception as e:
+        print(f"[notify_new_user] ошибка отправки: {type(e).__name__}: {e}", flush=True)
 
 # ── Yandex OAuth ─────────────────────────────────────────────
 @router.get("/yandex")
