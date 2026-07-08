@@ -17,6 +17,9 @@
 материализуется — см. plan_materialize), чтобы не задваивать с созданной операцией.
 """
 from datetime import date, timedelta
+# Алиас типа: поля, НАЗВАННЫЕ 'date', затеняют тип date (дефолт =None → Pydantic
+# резолвит тип как NoneType → 422 «Input should be None»). Через алиас коллизии нет.
+_Date = date
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -203,7 +206,7 @@ class ResolveBody(BaseModel):
     occ_date: Optional[date] = None  # дата occurrence (таргетинг месяца для rule)
     resolution: str = "paid"         # 'paid' | 'manual'
     amount: Optional[float] = None
-    date: Optional[date] = None
+    date: Optional[_Date] = None
     account_from: Optional[str] = None
     account_to: Optional[str] = None
     category_id: Optional[int] = None
@@ -334,7 +337,7 @@ async def confirm(body: ResolveBody, request: Request):
 class SkipBody(BaseModel):
     kind: str
     ref_id: int
-    date: Optional[date] = None
+    date: Optional[_Date] = None
     title: Optional[str] = None
     amount: Optional[float] = None
 
