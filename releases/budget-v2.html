@@ -1071,7 +1071,19 @@ const CURRENCIES = [
   { sym: 'сум', name: 'Сум' }, { sym: 'zł', name: 'Злотый' }, { sym: '₼', name: 'Манат' },
 ];
 let _CUR = localStorage.getItem('hz_currency') || '₽';
-function setCurrency(sym) { localStorage.setItem('hz_currency', sym); location.reload(); }
+async function setCurrency(sym) {
+  localStorage.setItem('hz_currency', sym);
+  // Per-user: дожидаемся записи на сервер ДО reload, иначе стартовый reconcile
+  // прочитает старое значение и откатит выбор (гонка POST vs reload).
+  try {
+    await fetch('/api/account/currency', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currency: sym }),
+    });
+  } catch (e) {}
+  location.reload();
+}
 function _curNode(t) { if (t.nodeValue && t.nodeValue.indexOf('₽') !== -1) t.nodeValue = t.nodeValue.replace(/₽/g, _CUR); }
 function _applyCurrency(root) {
   if (_CUR === '₽' || !root) return;
@@ -8175,6 +8187,12 @@ window.onload = async () => {
   await loadMeta();
   // Статус подписки/триала — один раз при загрузке (для баннера на Обзоре).
   window._acctStatus = await fetch('/api/account/status', { credentials: 'include' }).then(r => r.json()).catch(() => null);
+  // Per-user валюта: сервер — источник правды. Если на этом устройстве стоит другой
+  // символ (сменили на другом девайсе, или первый вход) — синхронизируем и перерисуем.
+  {
+    const sc = (window._acctStatus && window._acctStatus.currency) || '₽';
+    if (sc !== _CUR) { localStorage.setItem('hz_currency', sc); location.reload(); return; }
+  }
   // Новый пользователь без СВОИХ счетов — гайд первого запуска (Дебиторка сеется
   // системно и «своим» счётом не считается, иначе онбординг пропускался у всех).
   if (!(accounts_cache || []).some(isRealAccount)) { showOnboarding(); return; }

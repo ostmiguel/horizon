@@ -209,6 +209,7 @@ async def get_me(request: Request):
         "avatar_url": user.get("avatar_url"),
         "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
         "last_login": user["last_login"].isoformat() if user.get("last_login") else None,
+        "currency": user.get("currency") or "₽",
     }
 
 @router.post("/logout")

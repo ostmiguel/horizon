@@ -47,7 +47,7 @@ def compute_status(user: dict, now: datetime = None) -> dict:
 
 async def _load_user(db, user_id: str) -> dict:
     row = await db.fetchrow(
-        "SELECT id, email, name, trial_started_at, paid_until, is_free_forever "
+        "SELECT id, email, name, trial_started_at, paid_until, is_free_forever, currency "
         "FROM users WHERE id=$1", user_id
     )
     if not row:
@@ -58,7 +58,26 @@ async def _load_user(db, user_id: str) -> dict:
 @router.get("/status")
 async def account_status(request: Request):
     user = await _load_user(request.state.db, request.state.user_id)
-    return compute_status(user)
+    st = compute_status(user)
+    # Отображаемая валюта (моно-режим). Пусто → ₽ по умолчанию.
+    st["currency"] = user.get("currency") or "₽"
+    return st
+
+
+class CurrencyBody(BaseModel):
+    currency: str
+
+
+@router.post("/currency")
+async def set_currency(request: Request, body: CurrencyBody):
+    """Сохранить отображаемую валюту пользователя (per-user, моно-режим)."""
+    cur = (body.currency or "").strip()
+    if not cur or len(cur) > 8:
+        raise HTTPException(400, "Некорректная валюта")
+    await request.state.db.execute(
+        "UPDATE users SET currency=$1 WHERE id=$2", cur, request.state.user_id
+    )
+    return {"ok": True, "currency": cur}
 
 
 @router.get("/stats")
