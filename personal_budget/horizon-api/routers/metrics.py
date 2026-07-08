@@ -554,7 +554,7 @@ async def get_metrics(request: Request):
 
 # ── /api/metrics/forecast — balance trajectory for chart ─────────────────────
 
-async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liability_names):
+async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liability_names, op_names):
     """Годовой прогноз — РЕАЛЬНАЯ траектория день-в-день на 365 дней.
 
     Источники (всё, что пользователь уже задал):
@@ -564,19 +564,28 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
         покупки, отпуск и т.п. на конкретные даты;
       • график кредитов (loan_schedule) — тело+процент как отток в дату платежа
         (естественно учитывает завершение кредита — платежи просто кончаются);
-      • повседневные — по конвертам месяца (category_budgets), распределённым
-        равномерно по дням; если конверта на месяц нет — падаем на r_var.
-    Точки — ежедневные, поэтому виден настоящий рельеф: зарплатные подъёмы,
-    провалы под эпизодические траты, снижение нагрузки после закрытия кредитов."""
+      • повседневные — по r_var (тот же поведенческий темп, что в 30-дневном
+        графике и «Свободно»), чтобы горизонты совпадали на общих датах.
+    Модель повседневных, фильтры по операционным счётам и шов «сегодня» — те же,
+    что в 30-дневном прогнозе: график «Год» = честная экстраполяция той же
+    реальности, а не отдельная бюджетная модель. Точки ежедневные, поэтому виден
+    рельеф: зарплатные подъёмы, провалы под эпизодику, спад нагрузки после кредитов."""
     horizon_end = today + timedelta(days=365)
+    op_set = set(op_names)
     events: dict = {}   # дата → знаковая дельта (доход +, отток −)
+
+    # Пропуски правил по месяцам — как в материализованном плане (30-дневный график
+    # их уважает через plan). Без этого «Год» разворачивал бы пропущенное правило.
+    skip_rows = await db.fetch(
+        "SELECT rule_id, year, month FROM plan_rule_skips WHERE user_id=$1", user_id)
+    skips = {(s["rule_id"], s["year"], s["month"]) for s in skip_rows}
 
     def add(d, amt):
         events[d] = events.get(d, 0.0) + amt
 
     # 1) Регулярные правила → раскладываем по месяцам
     rules = await db.fetch("""
-        SELECT pr.amount, pr.account_from, pr.account_to, pr.day_of_month,
+        SELECT pr.id AS rule_id, pr.amount, pr.account_from, pr.account_to, pr.day_of_month,
                c.expense_type AS et, c.character AS ch
         FROM plan_rules pr
         LEFT JOIN categories c ON pr.category_id = c.id
@@ -586,18 +595,22 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
     for _ in range(14):   # текущий + 13 месяцев — покрывает 365 дней
         dim = monthrange(cur.year, cur.month)[1]
         for r in rules:
+            if (r["rule_id"], cur.year, cur.month) in skips:
+                continue   # правило пропущено в этом месяце
             dom = int(r["day_of_month"]) if r["day_of_month"] else 1
             d = date(cur.year, cur.month, max(1, min(dom, dim)))
             if d <= today or d > horizon_end:
                 continue
             amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
-            if af == "Доход":
+            # Те же фильтры, что в 30-дневном: доход двигает линию только если приходит
+            # на операционный счёт; отток — только если списывается с операционного.
+            if af == "Доход" and at in op_set:
                 add(d, amt)
-            elif at == "Расход" or at in liability_names:
+            elif af in op_set and (at == "Расход" or at in liability_names):
                 is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
                 if not is_var:
                     add(d, -amt)
-            elif at in reserve_names:
+            elif af in op_set and at in reserve_names:
                 add(d, -amt)
         cur = date(cur.year + (1 if cur.month == 12 else 0), 1 if cur.month == 12 else cur.month + 1, 1)
 
@@ -613,13 +626,13 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
     """, user_id, today, horizon_end)
     for r in oneoffs:
         amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]
-        if af == "Доход":
+        if af == "Доход" and at in op_set:
             add(r["date"], amt)
-        elif at == "Расход" or at in liability_names:
+        elif af in op_set and (at == "Расход" or at in liability_names):
             is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
             if not is_var:
                 add(r["date"], -amt)
-        elif at in reserve_names:
+        elif af in op_set and at in reserve_names:
             add(r["date"], -amt)
 
     # 3) График кредитов — тело+процент как отток (завершение кредита учтено само)
@@ -632,22 +645,17 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
     for r in loan_rows:
         add(r["date"], -(float(r["principal"] or 0) + float(r["interest"] or 0)))
 
-    # 4) Повседневные по конвертам месяца (иначе r_var)
-    budgets = await db.fetch("""
-        SELECT year, month, COALESCE(SUM(budget), 0) AS total
-        FROM category_budgets WHERE user_id=$1 GROUP BY year, month
-    """, user_id)
-    env_by_ym = {(b["year"], b["month"]): float(b["total"]) for b in budgets}
-
     # ── Проекция день-в-день ────────────────────────────────────────────────────
+    # Повседневные — r_var (тот же темп, что в 30-дневном графике и «Свободно»).
+    # Шов «сегодня»: сегодняшний ещё-не-проведённый план (зарплата) учитываем со
+    # следующего дня — иначе доход выпадает в день выплаты (как в 30-дневном).
+    inc_today, out_today = await today_unrealized_planned(
+        db, user_id, today, liability_names, reserve_names, op_set)
     points = [{"date": today.isoformat(), "forecast": round(B0_now)}]
-    running = B0_now
+    running = B0_now + inc_today - out_today
     d = today + timedelta(days=1)
     while d <= horizon_end:
-        dim = monthrange(d.year, d.month)[1]
-        env = env_by_ym.get((d.year, d.month))
-        daily_flow = (env / dim) if env is not None else r_var
-        running -= daily_flow
+        running -= r_var
         running += events.get(d, 0.0)
         points.append({"date": d.isoformat(), "forecast": round(running)})
         d += timedelta(days=1)
@@ -695,7 +703,7 @@ async def get_forecast(request: Request, range: str = "30"):
 
     # ── Горизонт «Год»: помесячный тренд по run-rate ───────────────────────────
     if range == "year":
-        return await _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liability_names)
+        return await _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liability_names, op_names)
 
     # ── Следующий доход (план; может быть в следующем месяце) ──────────────────
     fut = await plan_window(db, user_id, today, today + timedelta(days=75))
