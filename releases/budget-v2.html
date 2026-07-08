@@ -974,8 +974,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
         <div class="field-input field-auto" id="qmCat" style="font-size:11px;color:var(--accent)">—</div>
       </div>
       <div class="field" style="margin:0">
-        <div class="field-label">Группа</div>
-        <div class="field-input field-auto" id="qmGroup" style="font-size:11px;color:var(--accent)">—</div>
+        <div class="field-label">Характер</div>
+        <div class="field-input field-auto" id="qmChar" style="font-size:11px;color:var(--accent)">—</div>
       </div>
     </div>
     <div class="field" style="margin-bottom:8px">
@@ -1452,15 +1452,6 @@ function loadForecastStub() {
 function esc(s) {
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-// Подпись подкатегории в селектах: « (Категория, Характер)». Характер делает
-// видимой скрытую механику (Фиксированный→правило, Эпизодический→разовый и т.д.).
-// Пустые части пропускаем, чтобы не было хвоста «(Еда, )».
-function _catMeta(c) {
-  const parts = [];
-  if (c && c.category)  parts.push(esc(c.category));
-  if (c && c.character) parts.push(esc(c.character));
-  return parts.length ? ' (' + parts.join(', ') + ')' : '';
 }
 function fmt(n) {
   if (n == null || isNaN(n)) return '—';
@@ -3313,7 +3304,7 @@ function setQmType(type) {
       if (type === 'obligation') return c.group_name === 'Обязательства' || c.group_name === 'Дебиторка';
       return false;
     });
-    const optHtmlQm = c => `<option value="${c.id}" data-cat="${c.category}">${esc(c.subcategory)}${_catMeta(c)}</option>`;
+    const optHtmlQm = c => `<option value="${c.id}" data-cat="${c.category}">${esc(c.subcategory)}</option>`;
     if (type === 'expense') {
       const { recent, frequent, rest } = getSmartCats(filtered);
       let html = '<option value="">— выбери —</option>';
@@ -3329,27 +3320,38 @@ function setQmType(type) {
       subcatSel.innerHTML = '<option value="">— выбери —</option>' +
         [...filtered].sort((a,b)=>a.subcategory.localeCompare(b.subcategory,'ru')).map(optHtmlQm).join('');
     }
-    // Reset cat/group on type change
-    const catEl2   = document.getElementById('qmCat');
-    const groupEl2 = document.getElementById('qmGroup');
-    if (catEl2)   catEl2.textContent   = '—';
-    if (groupEl2) groupEl2.textContent = '—';
+    // Reset cat/char on type change
+    const catEl2  = document.getElementById('qmCat');
+    const charEl2 = document.getElementById('qmChar');
+    if (catEl2)  catEl2.textContent  = '—';
+    if (charEl2) charEl2.textContent = '—';
   }
 }
 
 function onQmSubcatChange() {
   const sel = document.getElementById('qmSubcat');
   const opt = sel?.options[sel.selectedIndex];
-  const catEl   = document.getElementById('qmCat');
-  const groupEl = document.getElementById('qmGroup');
+  const catEl  = document.getElementById('qmCat');
+  const charEl = document.getElementById('qmChar');
   if (opt && opt.value) {
     const cat = cats.find(c => c.id === parseInt(opt.value));
-    if (catEl)   catEl.textContent   = cat?.category   || '—';
-    if (groupEl) groupEl.textContent = cat?.group_name || '—';
+    if (catEl)  catEl.textContent  = cat?.category  || '—';
+    if (charEl) charEl.textContent = cat?.character || '—';
   } else {
-    if (catEl)   catEl.textContent   = '—';
-    if (groupEl) groupEl.textContent = '—';
+    if (catEl)  catEl.textContent  = '—';
+    if (charEl) charEl.textContent = '—';
   }
+}
+
+// Авто-поля Категория/Характер под подкатегорией в модалке Операций (десктоп).
+function onOpsCatChange() {
+  const sel = document.getElementById('opsFCat');
+  const catEl  = document.getElementById('opsFCatName');
+  const charEl = document.getElementById('opsFChar');
+  const id  = sel && sel.value ? parseInt(sel.value) : null;
+  const cat = id ? cats.find(c => c.id === id) : null;
+  if (catEl)  catEl.textContent  = cat?.category  || '—';
+  if (charEl) charEl.textContent = cat?.character || '—';
 }
 
 // Направление операции «Долг» задаёт КАТЕГОРИЯ, а не порядок счетов в селектах.
@@ -6152,7 +6154,7 @@ function ruleFormHtml(r, kind, opts) {
   const catOpts = (cats || [])
     .filter(c => kind === 'income' ? c.group_name === 'Доходы' : c.group_name !== 'Доходы')
     .map(c => '<option value="' + c.id + '"' + (r && r.category_id === c.id ? ' selected' : '') + '>'
-      + esc(c.subcategory) + _catMeta(c) + '</option>')
+      + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>')
     .join('');
 
   // Откуда/Куда зависят от направления — лишние варианты не показываем:
@@ -9226,7 +9228,7 @@ function _buildOpsForm(type) {
   }).sort((a,b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
 
   // Та же умная сортировка, что в Транзакциях: для расхода — Недавние/Частые/Все
-  const optHtml = c => `<option value="${c.id}">${esc(c.subcategory)}${_catMeta(c)}</option>`;
+  const optHtml = c => `<option value="${c.id}">${esc(c.subcategory)}</option>`;
   let catInner;
   if (type === 'expense') {
     const { recent, frequent, rest } = getSmartCats(catsForType);
@@ -9279,8 +9281,14 @@ function _buildOpsForm(type) {
       <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
         <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
     </div>
-    ${type !== 'transfer' ? `<div class="field"><div class="field-label">Категория</div>
-      <select class="field-select" id="opsFCat">${catOpts}</select></div>` : ''}
+    ${type !== 'transfer' ? `<div class="field" style="margin-bottom:8px"><div class="field-label">Подкатегория</div>
+      <select class="field-select" id="opsFCat" onchange="onOpsCatChange()">${catOpts}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="field" style="margin:0"><div class="field-label">Категория</div>
+          <div class="field-input field-auto" id="opsFCatName" style="font-size:11px;color:var(--accent)">—</div></div>
+        <div class="field" style="margin:0"><div class="field-label">Характер</div>
+          <div class="field-input field-auto" id="opsFChar" style="font-size:11px;color:var(--accent)">—</div></div>
+      </div>` : ''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="field" style="margin-bottom:8px"><div class="field-label">Откуда</div>
         <select class="field-select" id="opsFFrom">${fromOpts}</select></div>
@@ -9336,7 +9344,7 @@ async function openOpsModal(tx) {
     if (document.getElementById('opsFNote'))   document.getElementById('opsFNote').value   = tx.note || '';
     if (document.getElementById('opsFFrom'))   document.getElementById('opsFFrom').value   = tx.account_from;
     if (document.getElementById('opsFTo'))     document.getElementById('opsFTo').value     = tx.account_to;
-    if (document.getElementById('opsFCat') && tx.category_id) document.getElementById('opsFCat').value = tx.category_id;
+    if (document.getElementById('opsFCat') && tx.category_id) { document.getElementById('opsFCat').value = tx.category_id; onOpsCatChange(); }
     const btn = document.getElementById('opsSubmitBtn');
     if (btn) { btn.textContent = 'Обновить'; btn.onclick = () => updateOpsTx(tx.id); }
   }
