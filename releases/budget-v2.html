@@ -1041,9 +1041,9 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="16.5" cy="13.5" r="1.1" fill="currentColor" stroke="none"/></svg>
     <span class="mob-nav-label">Бюджет</span>
   </div>
-  <div class="mob-nav-item" id="mnav-profile" onclick="mobileGo('profile')">
-    <span id="mnavAvatar" style="width:23px;height:23px;border-radius:50%;background:linear-gradient(135deg,#2AA7CC,#1FA497);display:grid;place-items:center;font-family:Sora,sans-serif;font-weight:600;color:#fff;font-size:11px;line-height:1">М</span>
-    <span class="mob-nav-label">Профиль</span>
+  <div class="mob-nav-item" id="mnav-more" onclick="mobileMore()">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    <span class="mob-nav-label">Ещё</span>
   </div>
 </nav>
 
@@ -8261,12 +8261,38 @@ function _mobShiftMonth(delta) {
 function mobileGo(screen) {
   _mobDetachScroll();
   _mobScreen = screen;
-  ['home', 'ops', 'budget', 'profile'].forEach(s =>
+  ['home', 'ops', 'budget', 'more'].forEach(s =>
     document.getElementById('mnav-' + s)?.classList.toggle('act', s === screen));
   if (screen === 'home') mobileHome();
   else if (screen === 'budget') mobileBudget();
   else if (screen === 'profile') loadProfile();
   else mobileFeed();
+}
+
+// ── Мобильное «Ещё» — шторка снизу: Информация / Справочники / Профиль ────────
+function mobileMore() {
+  if (document.getElementById('mobMoreSheet')) { mobileMoreClose(); return; }
+  const ic = p => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5E7088" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const item = (label, fn, svg) => `<button onclick="_mobMoreGo('${fn}')" style="display:flex;align-items:center;gap:14px;width:100%;padding:15px 20px;background:none;border:none;border-top:1px solid var(--border);font:inherit;font-size:15px;color:var(--text);cursor:pointer;text-align:left">${svg}<span>${label}</span></button>`;
+  document.body.insertAdjacentHTML('beforeend', `<div id="mobMoreSheet" onclick="if(event.target===this)mobileMoreClose()" style="position:fixed;inset:0;z-index:400;background:rgba(15,36,60,.35);display:flex;align-items:flex-end">
+    <div style="width:100%;background:#fff;border-radius:18px 18px 0 0;padding:6px 0 max(12px,env(safe-area-inset-bottom));box-shadow:0 -12px 40px -12px rgba(15,36,60,.4)">
+      <div style="width:38px;height:4px;border-radius:99px;background:rgba(15,36,60,.15);margin:8px auto 4px"></div>
+      ${item('Информация', 'loadHelp', ic('<circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/>'))}
+      ${item('Справочники', 'loadReferences', ic('<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>'))}
+      ${item('Профиль', 'loadProfile', ic('<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>'))}
+    </div>
+  </div>`);
+}
+function mobileMoreClose() { document.getElementById('mobMoreSheet')?.remove(); }
+function _mobMoreGo(fn) {
+  mobileMoreClose();
+  _mobDetachScroll();
+  ['home', 'ops', 'budget'].forEach(s => document.getElementById('mnav-' + s)?.classList.remove('act'));
+  document.getElementById('mnav-more')?.classList.add('act');
+  _mobScreen = 'more';
+  if (fn === 'loadHelp') loadHelp();
+  else if (fn === 'loadReferences') loadReferences();
+  else loadProfile();
 }
 
 function _mobFlow(t) {
