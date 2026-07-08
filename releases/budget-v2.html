@@ -5635,6 +5635,17 @@ async function loadProfile() {
         </div>
       </div>
 
+      ${window.MOBILE ? `<div class="card" style="margin-bottom:16px">
+        <div class="card-head"><span class="card-title">Счета и справочники</span></div>
+        <div class="card-body">
+          <div style="font-size:12.5px;color:var(--text2);line-height:1.5;margin-bottom:12px">Добавляй и редактируй счета, категории и участников.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="openAddAccount()">+ Добавить счёт</button>
+            <button class="btn-ghost" onclick="loadReferences()">Справочники →</button>
+          </div>
+        </div>
+      </div>` : ''}
+
       ${statsCard}
 
       ${subCard}
@@ -8124,8 +8135,9 @@ window.onload = async () => {
   await loadMeta();
   // Статус подписки/триала — один раз при загрузке (для баннера на Обзоре).
   window._acctStatus = await fetch('/api/account/status', { credentials: 'include' }).then(r => r.json()).catch(() => null);
-  // Новый пользователь без счетов — гайд первого запуска (категории уже посеяны).
-  if (!(accounts_cache && accounts_cache.length)) { showOnboarding(); return; }
+  // Новый пользователь без СВОИХ счетов — гайд первого запуска (Дебиторка сеется
+  // системно и «своим» счётом не считается, иначе онбординг пропускался у всех).
+  if (!(accounts_cache || []).some(isRealAccount)) { showOnboarding(); return; }
   // Мобильный режим (узкий экран) — capture-first лента, без десктоп-страниц.
   if (window.innerWidth < 768) { initMobile(); return; }
   let savedPage = localStorage.getItem('hz_page') || 'dashboard';
@@ -8133,6 +8145,13 @@ window.onload = async () => {
   if (savedPage === 'transactions') savedPage = 'operations'; // лист «Транзакции» снят → «Операции»
   loadPage(savedPage);
 };
+
+// Реальный (пользовательский) счёт — НЕ системный. Системные (Дебиторка/Обязательства)
+// и маг-строки (Доход/Расход/Поток) сеются автоматически и не считаются «своими»,
+// иначе онбординг пропускается у всех новых пользователей (у них уже есть Дебиторка).
+function isRealAccount(a) {
+  return !!a && a.account_type !== 'Поток' && !['Дебиторка', 'Обязательства', 'Доход', 'Расход'].includes(a.name);
+}
 
 // ── Онбординг первого запуска: добавить счета → старт ─────────────────────────
 function showOnboarding() {
@@ -8182,7 +8201,7 @@ async function addOnboardingAccount() {
 
 function renderOnboardingList() {
   const list = document.getElementById('onbList');
-  const accs = (accounts_cache || []).filter(a => a.account_type !== 'Поток');
+  const accs = (accounts_cache || []).filter(isRealAccount);
   if (list) {
     list.innerHTML = accs.length
       ? accs.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border)">
@@ -8201,7 +8220,7 @@ function renderOnboardingList() {
 }
 
 function finishOnboarding() {
-  if (!(accounts_cache && accounts_cache.filter(a => a.account_type !== 'Поток').length)) return;
+  if (!(accounts_cache || []).some(isRealAccount)) return;
   if (window.innerWidth < 768) { initMobile(); return; }
   loadPage('dashboard');
 }
