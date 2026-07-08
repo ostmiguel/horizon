@@ -8958,7 +8958,7 @@ async function loadOperations() {
       if (sub === name) sub = '';
       // character key (расход и долг)
       let charKey = null;
-      if ((type === 'expense' || type === 'debt') && c) {
+      if ((type === 'expense' || type === 'debt' || type === 'income') && c) {
         if (c.character === 'Эпизодический') charKey = 'episodic';
         else if (c.expense_type === 'fixed') charKey = 'fixed';
         else if (c.expense_type === 'variable') charKey = 'variable';
@@ -9033,7 +9033,7 @@ async function loadOperations() {
                 <th style="padding:11px 16px;text-align:left;font-size:10.5px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.06em">Операция</th>
                 <th style="padding:11px 14px;text-align:left;font-size:10.5px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.06em">Тип</th>
                 <th style="padding:11px 14px;text-align:left;font-size:10.5px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.06em" class="ops-hide">Характер</th>
-                <th style="padding:11px 14px;text-align:left;font-size:10.5px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.06em" class="ops-hide">Счёт</th>
+                <th style="padding:11px 14px;text-align:right;font-size:10.5px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.06em" class="ops-hide">Счёт</th>
                 <th style="padding:11px 14px;text-align:right;font-size:10.5px;font-weight:600;color:#64748B;text-transform:uppercase;letter-spacing:.06em">Сумма</th>
                 <th style="padding:11px 10px;width:40px"></th>
               </tr>
@@ -9165,12 +9165,14 @@ function renderOpsRows() {
   const accColorMap = {};
   (accounts_cache || []).forEach(a => { accColorMap[a.name] = a.color; });
   const opsAccCell = r => {
+    // Перевод/Долг — счёт не показываем (пользы мало). Столбец прижат вправо, к сумме.
     const acc = r.type === 'income' ? r.accTo : r.accFrom;
-    if (!acc || acc === 'Доход' || acc === 'Расход') {
-      return `<td class="ops-hide" style="padding:0 14px;vertical-align:middle;color:var(--text3);font-size:12px">—</td>`;
+    const hide = r.type === 'transfer' || r.type === 'debt' || !acc || acc === 'Доход' || acc === 'Расход';
+    if (hide) {
+      return `<td class="ops-hide" style="padding:0 14px;text-align:right;vertical-align:middle;color:var(--text3);font-size:12px">—</td>`;
     }
     const col = accColorMap[acc] || 'var(--text3)';
-    return `<td class="ops-hide" style="padding:0 14px;vertical-align:middle;max-width:150px">`
+    return `<td class="ops-hide" style="padding:0 14px;text-align:right;vertical-align:middle;max-width:160px">`
       + `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);max-width:100%;white-space:nowrap;overflow:hidden">`
       + `<span style="width:8px;height:8px;border-radius:50%;background:${esc(col)};flex:0 0 auto"></span>`
       + `<span style="overflow:hidden;text-overflow:ellipsis">${esc(acc)}</span></span></td>`;
