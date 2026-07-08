@@ -1453,6 +1453,15 @@ function esc(s) {
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+// Подпись подкатегории в селектах: « (Категория, Характер)». Характер делает
+// видимой скрытую механику (Фиксированный→правило, Эпизодический→разовый и т.д.).
+// Пустые части пропускаем, чтобы не было хвоста «(Еда, )».
+function _catMeta(c) {
+  const parts = [];
+  if (c && c.category)  parts.push(esc(c.category));
+  if (c && c.character) parts.push(esc(c.character));
+  return parts.length ? ' (' + parts.join(', ') + ')' : '';
+}
 function fmt(n) {
   if (n == null || isNaN(n)) return '—';
   return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(n) + ' ₽';
@@ -3304,7 +3313,7 @@ function setQmType(type) {
       if (type === 'obligation') return c.group_name === 'Обязательства' || c.group_name === 'Дебиторка';
       return false;
     });
-    const optHtmlQm = c => `<option value="${c.id}" data-cat="${c.category}">${c.subcategory}</option>`;
+    const optHtmlQm = c => `<option value="${c.id}" data-cat="${c.category}">${esc(c.subcategory)}${_catMeta(c)}</option>`;
     if (type === 'expense') {
       const { recent, frequent, rest } = getSmartCats(filtered);
       let html = '<option value="">— выбери —</option>';
@@ -6143,7 +6152,7 @@ function ruleFormHtml(r, kind, opts) {
   const catOpts = (cats || [])
     .filter(c => kind === 'income' ? c.group_name === 'Доходы' : c.group_name !== 'Доходы')
     .map(c => '<option value="' + c.id + '"' + (r && r.category_id === c.id ? ' selected' : '') + '>'
-      + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>')
+      + esc(c.subcategory) + _catMeta(c) + '</option>')
     .join('');
 
   // Откуда/Куда зависят от направления — лишние варианты не показываем:
@@ -9217,7 +9226,7 @@ function _buildOpsForm(type) {
   }).sort((a,b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
 
   // Та же умная сортировка, что в Транзакциях: для расхода — Недавние/Частые/Все
-  const optHtml = c => `<option value="${c.id}">${esc(c.subcategory)}</option>`;
+  const optHtml = c => `<option value="${c.id}">${esc(c.subcategory)}${_catMeta(c)}</option>`;
   let catInner;
   if (type === 'expense') {
     const { recent, frequent, rest } = getSmartCats(catsForType);
