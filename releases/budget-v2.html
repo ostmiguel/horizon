@@ -9281,6 +9281,12 @@ function _buildOpsForm(type) {
       <div class="field" style="margin-bottom:8px"><div class="field-label">Дата</div>
         <input class="field-input" type="date" id="opsFDate" value="${today}"></div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Откуда</div>
+        <select class="field-select" id="opsFFrom">${fromOpts}</select></div>
+      <div class="field" style="margin-bottom:8px"><div class="field-label">Куда</div>
+        <select class="field-select" id="opsFTo">${toOpts}</select></div>
+    </div>
     ${type !== 'transfer' ? `<div class="field" style="margin-bottom:8px"><div class="field-label">Подкатегория</div>
       <select class="field-select" id="opsFCat" onchange="onOpsCatChange()">${catOpts}</select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
@@ -9289,12 +9295,6 @@ function _buildOpsForm(type) {
         <div class="field" style="margin:0"><div class="field-label">Характер</div>
           <div class="field-input field-auto" id="opsFChar" style="font-size:11px;color:var(--accent)">—</div></div>
       </div>` : ''}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div class="field" style="margin-bottom:8px"><div class="field-label">Откуда</div>
-        <select class="field-select" id="opsFFrom">${fromOpts}</select></div>
-      <div class="field" style="margin-bottom:8px"><div class="field-label">Куда</div>
-        <select class="field-select" id="opsFTo">${toOpts}</select></div>
-    </div>
     <div class="field"><div class="field-label">Комментарий</div>
       <input class="field-input" type="text" id="opsFNote" placeholder="необязательно"></div>
     <div style="display:flex;gap:8px;margin-top:6px">
