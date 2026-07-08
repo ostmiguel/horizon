@@ -7606,7 +7606,16 @@ async function payReschedule(i) {
 async function _payPost(url, body) {
   try {
     const r = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.detail || 'Ошибка', false); return false; }
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      // FastAPI 422: detail — массив {loc,msg}; 4xx — строка. Показываем читаемо.
+      let msg = 'Ошибка';
+      if (typeof e.detail === 'string') msg = e.detail;
+      else if (Array.isArray(e.detail)) msg = e.detail.map(x => `${(x.loc || []).slice(-1)[0] || ''}: ${x.msg}`).join('; ');
+      console.error('payments', r.status, url, body, e);
+      toast(msg, false);
+      return false;
+    }
     return true;
   } catch (e) { toast('Ошибка сети', false); return false; }
 }
