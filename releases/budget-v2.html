@@ -3343,14 +3343,36 @@ function onQmSubcatChange() {
   }
 }
 
+// Направление операции «Долг» задаёт КАТЕГОРИЯ, а не порядок счетов в селектах.
+// Погашение/выдача (деньги уходят) → реальный счёт = Откуда, счёт-долг = Куда.
+// Заём/возврат мне (деньги приходят) → счёт-долг = Откуда, реальный счёт = Куда.
+// Без этого «Вернул долг»/«Кредиты-тело» мог создать плюсовую операцию (деньги
+// падали в остаток), т.к. остаток = Σ(to) − Σ(from) и от category_id не зависит.
+function _obligDir(catSub) {
+  const s = (catSub || '').trim();
+  if (['Вернул долг', 'Дал в долг'].includes(s) || /кредиты?\s*[-–—]\s*тело/i.test(s)) return 'out';
+  if (['Взял в долг', 'Взял кредит', 'Мне вернули'].includes(s)) return 'in';
+  return null; // незнакомая/кастомная категория — направление не навязываем
+}
+function _orientObligation(catSub, from, to) {
+  const dir = _obligDir(catSub);
+  if (!dir) return null;
+  const isDebt = n => isLiabilityAcc(n) || n === 'Дебиторка';
+  const fromDebt = isDebt(from), toDebt = isDebt(to);
+  if (fromDebt === toDebt) return { error: true }; // нужен ровно один счёт-долг
+  const debt = fromDebt ? from : to;
+  const real = fromDebt ? to : from;
+  return dir === 'out' ? { from: real, to: debt } : { from: debt, to: real };
+}
+
 async function saveQuickTx() {
   const btn = document.getElementById('qmSave');
   if (btn) btn.disabled = true;
   try {
     const amount = parseFloat(document.getElementById('qmAmount')?.value);
     const date   = document.getElementById('qmDate')?.value;
-    const from   = document.getElementById('qmFrom')?.value;
-    const to     = document.getElementById('qmTo')?.value;
+    let   from   = document.getElementById('qmFrom')?.value;
+    let   to     = document.getElementById('qmTo')?.value;
     const note   = document.getElementById('qmNote')?.value || null;
     const subcatEl = document.getElementById('qmSubcat');
     const catId  = subcatEl && subcatEl.value ? parseInt(subcatEl.value) : null;
@@ -3364,6 +3386,19 @@ async function saveQuickTx() {
       toast('Счёт откуда и куда не могут совпадать', false);
       if (btn) btn.disabled = false;
       return;
+    }
+
+    // «Долг»: направление задаёт категория — переориентируем счета под её смысл,
+    // чтобы знак в остатке был верным независимо от порядка выбора в селектах.
+    if (_qmType === 'obligation' && catId) {
+      const cat = cats.find(c => c.id === catId);
+      const oriented = _orientObligation(cat?.subcategory, from, to);
+      if (oriented && oriented.error) {
+        toast('Для «Долга» выбери один счёт-долг (кредит/займ/Дебиторка) и один обычный счёт', false);
+        if (btn) btn.disabled = false;
+        return;
+      }
+      if (oriented) { from = oriented.from; to = oriented.to; }
     }
 
     const row = { date, amount, account_from: from, account_to: to, note, source: 'manual' };
@@ -8358,8 +8393,13 @@ function _mobFlow(t) {
   const c = t.categories;
   const loan = c && (/Кредит/i.test(c.category || '') || /Кредит/i.test(c.subcategory || ''));
   if (t.account_to === 'Расход') return { sign: '−', color: loan ? '#C0741A' : '#bf7419' };
-  if (isLiabilityAcc(t.account_to) || t.account_from === 'Дебиторка') return { sign: '−', color: '#C0741A' };
-  if (isLiabilityAcc(t.account_from)) return { sign: '+', color: '#5E9B1E' };
+  // Долг/Дебиторка: счёт-долг как ИСТОЧНИК → деньги пришли (заняли / нам вернули) → +;
+  // счёт-долг как НАЗНАЧЕНИЕ → деньги ушли (погасили / дали в долг) → −. Согласовано
+  // с desktop-списком операций (isDebtAcc(account_from) ? received : paid).
+  const debtFrom = isLiabilityAcc(t.account_from) || t.account_from === 'Дебиторка';
+  const debtTo   = isLiabilityAcc(t.account_to)   || t.account_to   === 'Дебиторка';
+  if (debtFrom) return { sign: '+', color: '#5E9B1E' };
+  if (debtTo)   return { sign: '−', color: '#C0741A' };
   return { sign: '', color: 'var(--text2)' };
 }
 
