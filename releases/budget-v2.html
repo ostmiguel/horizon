@@ -1059,6 +1059,38 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 
 const API_BASE = '';  // пусто = тот же домен
 
+// ── Валюта отображения (моно-режим) ──────────────────────────────────────────
+// Быстрая реализация: в коде суммы с символом ₽; на границе рендера символ ₽
+// заменяется на выбранный (_CUR). Для рублёвых пользователей (_CUR='₽') — no-op,
+// нулевой оверхед. Конвертации нет — только символ. Настройка в Профиле.
+const CURRENCIES = [
+  { sym: '₽', name: 'Рубль' }, { sym: '$', name: 'Доллар' }, { sym: '€', name: 'Евро' },
+  { sym: '₸', name: 'Тенге' }, { sym: '₴', name: 'Гривна' }, { sym: '֏', name: 'Драм' },
+  { sym: '₾', name: 'Лари' }, { sym: '£', name: 'Фунт' }, { sym: '₺', name: 'Лира' },
+  { sym: '₹', name: 'Рупия' }, { sym: '¥', name: 'Юань / Иена' }, { sym: 'Br', name: 'Бел. рубль' },
+  { sym: 'сум', name: 'Сум' }, { sym: 'zł', name: 'Злотый' }, { sym: '₼', name: 'Манат' },
+];
+let _CUR = localStorage.getItem('hz_currency') || '₽';
+function setCurrency(sym) { localStorage.setItem('hz_currency', sym); location.reload(); }
+function _curNode(t) { if (t.nodeValue && t.nodeValue.indexOf('₽') !== -1) t.nodeValue = t.nodeValue.replace(/₽/g, _CUR); }
+function _applyCurrency(root) {
+  if (_CUR === '₽' || !root) return;
+  if (root.nodeType === 3) { _curNode(root); return; }
+  if (root.nodeType !== 1) return;
+  if (root.closest && root.closest('[data-cur-skip]')) return;   // не трогаем выбор валюты (там символ ₽ легитимен)
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: n => (n.parentElement && n.parentElement.closest('[data-cur-skip]')) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+  });
+  const arr = [];
+  while (w.nextNode()) if (w.currentNode.nodeValue.indexOf('₽') !== -1) arr.push(w.currentNode);
+  arr.forEach(_curNode);
+}
+if (_CUR !== '₽') {
+  new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) _applyCurrency(n); })
+    .observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', () => _applyCurrency(document.body));
+}
+
 class QueryBuilder {
   constructor(table, isPlan = false) {
     this._table    = table;
@@ -5632,6 +5664,16 @@ async function loadProfile() {
               <div style="font-size:12px;color:var(--text);font-variant-numeric:tabular-nums;text-align:right;max-width:280px;word-break:break-all">${value}</div>
             </div>`).join('')}
 
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px" data-cur-skip>
+        <div class="card-head"><span class="card-title">Валюта отображения</span></div>
+        <div class="card-body">
+          <select onchange="setCurrency(this.value)" style="width:100%;max-width:280px;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;font-size:13px;background:var(--bg2);color:var(--text);cursor:pointer">
+            ${CURRENCIES.map(c => `<option value="${c.sym}"${c.sym === _CUR ? ' selected' : ''}>${c.sym} — ${c.name}</option>`).join('')}
+          </select>
+          <div style="font-size:11.5px;color:var(--text3);margin-top:10px;line-height:1.5">Меняет только символ валюты по всему приложению. Суммы не конвертируются — это отображение для тех, кто ведёт учёт не в рублях.</div>
         </div>
       </div>
 
