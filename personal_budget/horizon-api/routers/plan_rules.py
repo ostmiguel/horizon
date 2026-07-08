@@ -46,9 +46,18 @@ async def get_plan_rules(request: Request):
         WHERE pr.user_id = $1
         ORDER BY pr.day_of_month NULLS LAST, pr.id
     """, user_id)
+    # Пропуски правил по месяцам — чтобы фронт мог показать «Пропущено в этом
+    # месяце» и не считать пропущенное правило в план-итогах.
+    skip_rows = await db.fetch(
+        "SELECT rule_id, year, month FROM plan_rule_skips WHERE user_id = $1", user_id)
+    skips_by_rule = {}
+    for s in skip_rows:
+        skips_by_rule.setdefault(s["rule_id"], []).append(
+            {"year": s["year"], "month": s["month"]})
     result = []
     for r in rows:
         d = dict(r)
+        d["skips"] = skips_by_rule.get(r["id"], [])
         if d.get("subcategory"):
             d["categories"] = {
                 "subcategory":  d.pop("subcategory"),
@@ -178,6 +187,24 @@ async def skip_rule_month(rule_id: int, request: Request,
         WHERE user_id=$1 AND source_rule_id=$2
           AND EXTRACT(YEAR FROM date)=$3 AND EXTRACT(MONTH FROM date)=$4
     """, user_id, rule_id, year, month)
+    return {"ok": True}
+
+
+@router.delete("/{rule_id}/skip-month")
+async def unskip_rule_month(rule_id: int, request: Request,
+                            year: int = Query(...), month: int = Query(...)):
+    """«Вернуть в этот месяц»: снимаем пропуск (правило, год, месяц) и перештамповываем
+    месяц, чтобы плановая строка правила вернулась. Обратное к skip-month."""
+    user_id = request.state.user_id
+    db = request.state.db
+    rule = await db.fetchrow("SELECT id FROM plan_rules WHERE id=$1 AND user_id=$2", rule_id, user_id)
+    if not rule:
+        raise HTTPException(404, "Rule not found")
+    await db.execute(
+        "DELETE FROM plan_rule_skips WHERE user_id=$1 AND rule_id=$2 AND year=$3 AND month=$4",
+        user_id, rule_id, year, month)
+    # Перештамповка месяца воссоздаёт плановую строку правила (идемпотентно для прочих).
+    await materialize_rules(db, user_id, year, month)
     return {"ok": True}
 
 

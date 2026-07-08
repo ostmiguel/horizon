@@ -5878,7 +5878,11 @@ async function loadBudget() {
     // Эффективная сумма правила за ОТОБРАЖАЕМЫЙ месяц: материализованная плановая
     // строка (в т.ч. правленная «только этот месяц») или дефолт правила. Используется
     // и в KPI-карточках, и в строках правил — чтобы правка суммы была всюду видна.
+    // Правило «пропущено» в отображаемом месяце (skip-month) — плановой строки нет,
+    // и в план-итог оно НЕ идёт (иначе Бюджет расходится с прогнозом/метриками).
+    const _bgtSkipped = rule => (rule.skips || []).some(s => +s.year === year && +s.month === month);
     const ruleEffAmt = rule => {
+      if (_bgtSkipped(rule)) return 0;
       const ents = planByRule[rule.id] || [];
       return ents.length ? ents.reduce((s, e) => s + (+e.amount || 0), 0) : +rule.amount || 0;
     };
@@ -5959,15 +5963,21 @@ async function loadBudget() {
       const sub = (rule.categories && (rule.categories.subcategory || rule.categories.category)) || '';
       const sched = rule.day_of_month ? rule.day_of_month + '-го · ежемесячно' : 'ежемесячно';
       const amtColor = sign === '+' ? '#5E9B1E' : '#bf7419';
+      const skipped = _bgtSkipped(rule);
       // Эффективная сумма за отображаемый месяц (см. ruleEffAmt) — чтобы правка суммы
-      // (в т.ч. «только этот месяц») была видна. Пилюли и статус убраны ранее.
+      // (в т.ч. «только этот месяц») была видна. Пропуск месяца показываем явно:
+      // бейдж + зачёркнутая сумма правила, чтобы «пустая» строка не выглядела активной.
       const eff = ruleEffAmt(rule);
-      return '<div class="bgt-frow">'
-        + '<div class="bgt-rn">' + esc(rule.name) + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
+      const badge = skipped ? '<span class="bgt-skip-badge">Пропущено</span>' : '';
+      const amtCell = skipped
+        ? '<span class="bgt-amt" style="color:var(--text3);text-decoration:line-through;font-weight:500">' + sign + f(+rule.amount || 0) + ' ₽</span>'
+        : '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(eff) + ' ₽</span>';
+      return '<div class="bgt-frow"' + (skipped ? ' style="opacity:.72"' : '') + '>'
+        + '<div class="bgt-rn">' + esc(rule.name) + badge + (sub ? '<div class="bgt-rsub">' + esc(sub) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + esc(sched) + '</span>'
-        + '<span class="bgt-amt" style="color:' + amtColor + '">' + sign + f(eff) + ' ₽</span>'
+        + amtCell
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
-          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();ruleMenu(this,' + rule.id + ')">⋮</button>'
+          + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();ruleMenu(this,' + rule.id + ',' + skipped + ')">⋮</button>'
         + '</div></div>';
     }
     function loanRow(p) {
@@ -6082,6 +6092,7 @@ async function loadBudget() {
       + '.bgt-cov{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap;justify-self:start}'
       + '.bgt-cov-ok{color:#167F73;background:rgba(31,164,151,.14)}'
       + '.bgt-cov-no{color:#9A6B12;background:rgba(231,178,62,.20)}'
+      + '.bgt-skip-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:6px;color:var(--text3);background:var(--bg);border:1px solid var(--border);white-space:nowrap;letter-spacing:.02em}'
       + '.bgt-amt{font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--text)}'
       + '.bgt-amt2{font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--text)}'
       + '.bgt-pbar{height:9px;background:var(--border);border-radius:99px;overflow:hidden}'
@@ -6328,15 +6339,27 @@ async function deleteRule(id) {
   loadBudget();
 }
 
-// «Удалить только этот месяц» — пропуск (rule×месяц): правило и другие месяцы целы.
+// «Пропустить только этот месяц» — пропуск (rule×месяц): правило и другие месяцы целы,
+// плановая строка месяца удаляется. В Бюджете строка помечается бейджем «Пропущено».
 async function deleteRuleThisMonth(id) {
   const { year, month } = window._bgtPeriod || {};
-  if (!confirm('Убрать это правило только в текущем месяце?')) return;
+  if (!confirm('Пропустить это правило в текущем месяце?\n\nПлановая строка месяца удалится, но само правило и другие месяцы останутся. Строка будет помечена «Пропущено» — вернуть можно там же.')) return;
   const res = await fetch(`${API_BASE}/api/plan-rules/${id}/skip-month?year=${year}&month=${month}`, {
     method: 'POST', credentials: 'include',
   });
   if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
-  toast('✓ Убрано в этом месяце');
+  toast('✓ Правило пропущено в этом месяце');
+  loadBudget();
+}
+
+// «Вернуть в этот месяц» — снять пропуск и перештамповать месяц (плановая строка вернётся).
+async function unskipRuleThisMonth(id) {
+  const { year, month } = window._bgtPeriod || {};
+  const res = await fetch(`${API_BASE}/api/plan-rules/${id}/skip-month?year=${year}&month=${month}`, {
+    method: 'DELETE', credentials: 'include',
+  });
+  if (!res.ok) { toast('Ошибка: ' + await res.text(), false); return; }
+  toast('✓ Правило возвращено в этот месяц');
   loadBudget();
 }
 
@@ -6510,12 +6533,12 @@ function openPeriodPicker(btn) {
   }, 0);
 }
 
-function ruleMenu(btn, id) {
-  bgtMenu(btn, [
-    { label: 'Редактировать', fn: () => openEditRule(id) },
-    { label: 'Удалить в этом месяце', fn: () => deleteRuleThisMonth(id) },
-    { label: 'Удалить все будущие', danger: true, fn: () => deleteRule(id) },
-  ]);
+function ruleMenu(btn, id, skipped) {
+  const items = [{ label: 'Редактировать', fn: () => openEditRule(id) }];
+  if (skipped) items.push({ label: 'Вернуть в этот месяц', fn: () => unskipRuleThisMonth(id) });
+  else         items.push({ label: 'Пропустить в этом месяце', fn: () => deleteRuleThisMonth(id) });
+  items.push({ label: 'Удалить все будущие', danger: true, fn: () => deleteRule(id) });
+  bgtMenu(btn, items);
 }
 function planMenu(btn, id) {
   bgtMenu(btn, [
