@@ -55,12 +55,12 @@ if [ -n "$DB_URL" ]; then
   echo "smoke: проверяю эндпоинты на новом коде…"
   if ! ( cd "$APP" && DATABASE_URL="$DB_URL" "$PY" smoke_test.py ); then
     echo "!!! SMOKE FAILED — рестарт ПРОПУЩЕН, прод остаётся на рабочем коде"
-    TG_TOKEN=$(grep -E '^TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2-)
-    TG_CHAT=$(grep -E '^TELEGRAM_CHAT_ID='  "$ENV_FILE" | head -1 | cut -d= -f2-)
-    [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && curl -s \
-      "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-      -d chat_id="$TG_CHAT" \
-      -d text="🚑 Horizon deploy: SMOKE упал — рестарт пропущен, прод на старом коде. Смотри Actions/journalctl." >/dev/null || true
+    # Алерт через Cloudflare relay (VPS не достаёт api.telegram.org напрямую).
+    RELAY_URL=$(grep -E '^TELEGRAM_RELAY_URL=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r"')
+    RELAY_SECRET=$(grep -E '^TELEGRAM_RELAY_SECRET=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r"')
+    [ -n "$RELAY_URL" ] && [ -n "$RELAY_SECRET" ] && curl -s -m 10 -X POST "$RELAY_URL" \
+      -H 'content-type: application/json' \
+      --data "{\"secret\":\"$RELAY_SECRET\",\"text\":\"🚑 Horizon deploy: SMOKE упал — рестарт пропущен, прод на старом коде. Смотри Actions/journalctl.\"}" >/dev/null || true
     exit 1
   fi
   echo "smoke: OK"

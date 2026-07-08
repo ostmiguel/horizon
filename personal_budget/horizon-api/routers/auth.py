@@ -18,24 +18,33 @@ MAILRU_CLIENT_ID     = os.getenv("MAILRU_CLIENT_ID")
 MAILRU_CLIENT_SECRET = os.getenv("MAILRU_CLIENT_SECRET")
 BASE_URL             = os.getenv("BASE_URL", "http://localhost:8000")
 
-# Telegram-уведомления о новых регистрациях (best-effort, не блокируют вход)
-TELEGRAM_BOT_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID     = os.getenv("TELEGRAM_CHAT_ID")
+# Telegram-уведомления о новых регистрациях (best-effort, не блокируют вход).
+# Прод-VPS не достаёт api.telegram.org напрямую → шлём через Cloudflare Worker relay
+# (см. cloudflare/telegram-relay-worker.js). Прямой Telegram остаётся как fallback.
+TELEGRAM_BOT_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_RELAY_URL    = os.getenv("TELEGRAM_RELAY_URL")
+TELEGRAM_RELAY_SECRET = os.getenv("TELEGRAM_RELAY_SECRET")
 
 
-async def notify_new_user(name: str, email: str, provider: str, total: int):
-    """Шлёт в Telegram уведомление о новой регистрации. Best-effort: любые
-    ошибки (нет токена, сеть, Telegram лежит) молча глотаем — регистрация важнее."""
-    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
-        print("[notify_new_user] TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID не заданы — уведомление пропущено", flush=True)
+async def send_telegram(text: str):
+    """Отправка в Telegram. Приоритет — relay (Cloudflare Worker, доступен из РФ);
+    иначе прямой api.telegram.org (работает не везде). Best-effort + лог причины."""
+    if TELEGRAM_RELAY_URL and TELEGRAM_RELAY_SECRET:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.post(
+                    TELEGRAM_RELAY_URL,
+                    json={"secret": TELEGRAM_RELAY_SECRET, "text": text},
+                )
+            if resp.status_code != 200:
+                print(f"[telegram] relay {resp.status_code}: {resp.text[:300]}", flush=True)
+        except Exception as e:
+            print(f"[telegram] relay error: {type(e).__name__}: {e}", flush=True)
         return
-    text = (
-        "🎉 Новый пользователь Horizon!\n\n"
-        f"👤 {name or '—'}\n"
-        f"✉️ {email or '—'}\n"
-        f"🔑 {provider}\n\n"
-        f"📊 Всего пользователей: {total}"
-    )
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        print("[telegram] ни relay, ни TELEGRAM_BOT_TOKEN/CHAT_ID не заданы — пропуск", flush=True)
+        return
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.post(
@@ -43,9 +52,20 @@ async def notify_new_user(name: str, email: str, provider: str, total: int):
                 json={"chat_id": TELEGRAM_CHAT_ID, "text": text},
             )
         if resp.status_code != 200:
-            print(f"[notify_new_user] Telegram ответил {resp.status_code}: {resp.text[:300]}", flush=True)
+            print(f"[telegram] api {resp.status_code}: {resp.text[:300]}", flush=True)
     except Exception as e:
-        print(f"[notify_new_user] ошибка отправки: {type(e).__name__}: {e}", flush=True)
+        print(f"[telegram] api error: {type(e).__name__}: {e}", flush=True)
+
+
+async def notify_new_user(name: str, email: str, provider: str, total: int):
+    """Уведомление о новой регистрации (через relay/api). Best-effort — не блокирует вход."""
+    await send_telegram(
+        "🎉 Новый пользователь Horizon!\n\n"
+        f"👤 {name or '—'}\n"
+        f"✉️ {email or '—'}\n"
+        f"🔑 {provider}\n\n"
+        f"📊 Всего пользователей: {total}"
+    )
 
 # ── Yandex OAuth ─────────────────────────────────────────────
 @router.get("/yandex")
