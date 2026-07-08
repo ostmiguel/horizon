@@ -8389,22 +8389,6 @@ async function mobDeleteOp(id) {
   mobileFeed();
 }
 
-async function mobileMore() {
-  const main = document.getElementById('mainContent');
-  let user = {};
-  try { user = await (await fetch('/api/auth/me', { credentials: 'include' })).json(); } catch (e) {}
-  main.innerHTML = `<div class="mfeed">
-    <div class="page-title" style="font-size:19px;margin-bottom:14px">Ещё</div>
-    <div class="card" style="padding:16px 18px;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:600">${esc(user.name || user.email || 'Профиль')}</div>
-      ${user.email ? `<div style="font-size:12px;color:var(--text3);margin-top:2px">${esc(user.email)}</div>` : ''}
-    </div>
-    <div class="card" style="padding:16px 18px;margin-bottom:12px;font-size:13px;color:var(--text2);line-height:1.55">
-      Аналитика, Бюджет и настройки — удобнее на компьютере.<br>Открой <b>horizonapp.ru</b> на десктопе.
-    </div>
-    <button class="btn-ghost" style="width:100%" onclick="fetch(API_BASE+'/api/auth/logout',{method:'POST',credentials:'include'}).then(()=>location.reload())">Выйти</button>
-  </div>`;
-}
 // ── Мобильные Обзор/Бюджет (по дизайну) ──────────────────────────────────────
 function _mobFmt(n) { return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(+n || 0))); }
 
