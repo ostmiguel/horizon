@@ -6059,10 +6059,11 @@ async function loadBudget() {
       const title = note || subcat || category || fl.label;
       let subLabel = subcat || category;
       if (subLabel === title) subLabel = (category && category !== title) ? category : '';
-      // Трата из резерва — подсказка в подписи.
-      if (fl.label === 'Расход' && reserveNames.has(p.account_from))
-        subLabel = (subLabel ? subLabel + ' · ' : '') + 'из резерва';
-      const badge = '<span class="oo-badge" style="color:' + fl.color + ';background:' + fl.bg + '">' + fl.label + '</span>';
+      // Трата из резерва — вместо типа показываем «обеспечено резервом» (как было).
+      const covered = fl.label === 'Расход' && reserveNames.has(p.account_from);
+      const badge = covered
+        ? '<span class="oo-badge" style="color:#167F73;background:rgba(31,164,151,.14)">обеспечено резервом</span>'
+        : '<span class="oo-badge" style="color:' + fl.color + ';background:' + fl.bg + '">' + fl.label + '</span>';
       return '<div class="bgt-evrow">'
         + '<div class="bgt-rn">' + esc(title) + (subLabel ? '<div class="bgt-rsub">' + esc(subLabel) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + d + '</span>' + badge
