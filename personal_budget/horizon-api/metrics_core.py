@@ -230,9 +230,12 @@ async def today_unrealized_planned(db, user_id: str, today: date,
             return True
         return at == "Расход" and (r["et"] == "fixed" or r["ch"] in EPISODIC_CHARS)
 
-    # доход поднимает «Свободно» только если приходит на операционный счёт
-    plan_inc = sum(float(r["amount"]) for r in plan if r["af"] == "Доход" and r["at"] in op_names)
-    fact_inc = sum(float(r["amount"]) for r in fact if r["af"] == "Доход" and r["at"] in op_names)
+    # «Свободно» поднимает приток на операционный счёт: доход ИЛИ изъятие из резерва
+    # (резерв→операционный) — иначе сегодняшнее «из резерва» не залечивало бы линию.
+    def _is_inflow(r):
+        return r["at"] in op_names and (r["af"] == "Доход" or r["af"] in reserve_names)
+    plan_inc = sum(float(r["amount"]) for r in plan if _is_inflow(r))
+    fact_inc = sum(float(r["amount"]) for r in fact if _is_inflow(r))
     plan_out = sum(float(r["amount"]) for r in plan if is_committed_out(r))
     fact_out = sum(float(r["amount"]) for r in fact if is_committed_out(r))
     return max(0.0, plan_inc - fact_inc), max(0.0, plan_out - fact_out)

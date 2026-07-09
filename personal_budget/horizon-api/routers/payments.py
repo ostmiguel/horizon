@@ -61,6 +61,12 @@ async def pending(request: Request):
           AND EXTRACT(MONTH FROM p.date)::int = $4
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
           AND p.account_from <> 'Доход'
+          -- Движения резерва (в резерв / из резерва на счёт) — это ПЛАН, а не платёж
+          -- к подтверждению: формируют прогноз, подтверждать их не нужно.
+          AND NOT COALESCE(a.is_reserve, false) AND NOT COALESCE(a.is_cushion, false)
+          AND NOT EXISTS (
+            SELECT 1 FROM accounts af WHERE af.user_id = p.user_id AND af.name = p.account_from
+              AND (af.is_reserve OR af.is_cushion) AND p.account_to <> 'Расход' )
           AND NOT EXISTS (
             SELECT 1 FROM plan_confirmations pc
             WHERE pc.user_id = p.user_id
@@ -141,6 +147,12 @@ async def status(request: Request, year: int, month: int):
           AND EXTRACT(MONTH FROM p.date)::int = $3
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
           AND p.account_from <> 'Доход'
+          -- Движения резерва (в резерв / из резерва на счёт) — это ПЛАН, а не платёж
+          -- к подтверждению: формируют прогноз, подтверждать их не нужно.
+          AND NOT COALESCE(a.is_reserve, false) AND NOT COALESCE(a.is_cushion, false)
+          AND NOT EXISTS (
+            SELECT 1 FROM accounts af WHERE af.user_id = p.user_id AND af.name = p.account_from
+              AND (af.is_reserve OR af.is_cushion) AND p.account_to <> 'Расход' )
           AND NOT EXISTS (
             SELECT 1 FROM plan_confirmations pc
             WHERE pc.user_id = p.user_id
