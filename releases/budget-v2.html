@@ -6126,7 +6126,7 @@ async function loadBudget() {
         + periodBtnHtml() + '</div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · план', f(incomeTotal + incomeEventsTotal) + ' ₽', incomeRules.length + ' регулярных' + (incomeEvents.length ? ' · ' + incomeEvents.length + ' разовых' : ''))
-        + bgtCard('#2AA7CC', 'Расходы · план', f(fixedTotal + envBudgetTotal + episTotal + loanInterest) + ' ₽', 'фикс. + повседневные + эпизод. + проценты')
+        + bgtCard('#2AA7CC', 'Расходы · план', f(fixedTotal + envBudgetTotal + episTotal + loanInterest) + ' ₽', 'фикс. + повседневные + разовые + проценты')
         + bgtCard('#C0741A', 'Кредиты · план', f(loanPrincipal) + ' ₽', 'погашение тела · проценты — в расходах')
         + bgtCard(plannedProfit >= 0 ? '#5E9B1E' : '#bf7419', 'Профит · план',
             '<span style="color:' + (plannedProfit >= 0 ? '#5E9B1E' : '#bf7419') + '">' + (plannedProfit < 0 ? '−' : '') + f(plannedProfit) + ' ₽</span>',
@@ -6135,7 +6135,7 @@ async function loadBudget() {
       + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
       + bgtBlock('#2AA7CC', 'Фиксированные', 'регулярные платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml)
       + bgtBlock('#1FA497', 'Повседневные', 'месячный бюджет против трат', '+ Добавить', 'openAddEnvelope()', envRowsHtml)
-      + bgtBlock('#8FBE1E', 'Эпизодические', 'запланированные разовые траты', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml);
+      + bgtBlock('#8FBE1E', 'Разовые', 'разовые операции месяца', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml);
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
