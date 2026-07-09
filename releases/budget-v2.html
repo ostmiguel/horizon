@@ -1569,7 +1569,9 @@ async function loadDashboard() {
     const obligation      = txs.filter(t => isLiabilityAcc(t.account_to)).reduce((s,t) => s + +t.amount, 0);
     const planObligation  = (plan||[]).filter(p => isLiabilityAcc(p.account_to)).reduce((s,p) => s + +p.amount, 0);
 
-    const delta = income - expense - obligation;
+    // Профит = Доходы − Расходы (проценты входят). Тело долга (obligation) — не расход,
+    // а погашение: капитал не меняется, в профит не входит. Показано отдельной пилюлей.
+    const delta = income - expense;
     const savingsRate = income > 0 ? savings / income * 100 : 0;
     const deltaIncome      = planIncome     > 0 ? (income      - planIncome)      / planIncome      * 100 : null;
     const deltaExpense     = planExpense    > 0 ? (expense     - planExpense)      / planExpense     * 100 : null;
@@ -5261,8 +5263,8 @@ async function loadSummary() {
   const incKeys = new Set([...Object.keys(b.incCat), ...Object.keys(PM[sel]?.incCat || {})]);
   let incFore = 0; incKeys.forEach(c => { incFore += Math.max(pIncC(sel, c), b.incCat[c] || 0); });
   if (!isCurrent) incFore = income;                       // завершённый месяц — чистый факт дохода
-  const profit = incFore - projEnd - oblFore;             // прогноз к концу месяца (долги из графика)
-  const profitFact = income - factSoFar - obligation;     // по факту на сегодня (долги — фактический отток)
+  const profit = incFore - projEnd;             // тело долга — не расход (погашение), в профит не входит
+  const profitFact = income - factSoFar;        // проценты уже в расходах; тело нейтрально
   const norm = incFore > 0 ? profit / incFore * 100 : 0;
   const overPace = plannedExp > 0 && projEnd > plannedExp;
 
@@ -5277,7 +5279,7 @@ async function loadSummary() {
   if (pb) {
     const cats = new Set([...Object.keys(b.expCat), ...Object.keys(pb.expCat)]);
     const movers = [...cats].map(c => ({ name: c, d: (b.expCat[c] || 0) - (pb.expCat[c] || 0) })).sort((a, c) => Math.abs(c.d) - Math.abs(a.d)).filter(x => Math.abs(x.d) > 500).slice(0, 5);
-    mom = { incD: income - pb.inc, expD: b.exp - pb.exp, profD: (income - b.exp - obligation) - (pb.inc - pb.exp - pb.obl), movers, maxMov: Math.max(...movers.map(x => Math.abs(x.d)), 1), label: MNG[(+prevYM.slice(5)) - 1] };
+    mom = { incD: income - pb.inc, expD: b.exp - pb.exp, profD: (income - b.exp) - (pb.inc - pb.exp), movers, maxMov: Math.max(...movers.map(x => Math.abs(x.d)), 1), label: MNG[(+prevYM.slice(5)) - 1] };
   }
 
   function burndown() {
@@ -5383,7 +5385,7 @@ async function loadSummary() {
     };
     const secHead = t => `<tr><td colspan="${mLab.length + 4}" style="padding:14px 12px 4px;font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5;position:sticky;left:0;background:#fff">${t}</td></tr>`;
     const oblFacts = yMonths.map(m => M[m].obl);
-    const profFacts = yMonths.map(m => M[m].inc - M[m].exp - M[m].obl);
+    const profFacts = yMonths.map(m => M[m].inc - M[m].exp);   // тело долга (obl) в профит не входит
     const profTot = profFacts.reduce((s, v) => s + v, 0);
     const oblRow = oblFacts.some(v => v) ? `<tr style="border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;position:sticky;left:0;background:#fff">Платежи по долгам</td>${oblFacts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(oblFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
     const savFacts = yMonths.map(m => M[m].sav);
@@ -5394,7 +5396,7 @@ async function loadSummary() {
       ${secHead('Расходы')}${expCats.map(n => rowFn(n, false)).join('')}${sumRow('Итого расходы', false)}
       ${oblRow}${profRow}${savRow}
     </tbody></table></div>
-    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы − Платежи по долгам. Сбережения — часть прибыли, переведённая в резервы (в профит не входят, показаны отдельной строкой). Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
+    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы (проценты входят). Тело долга и сбережения в профит НЕ входят (это не расходы — погашение и распределение), показаны отдельными строками. Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
   }
 
   const note = depth < 3
@@ -5411,13 +5413,13 @@ async function loadSummary() {
     ${kpi('Норма сбережений', norm.toFixed(0)+'%', projNote+' · ≥15% ок')}
   </div>
   <div style="${CARD};padding:13px 16px;margin-bottom:24px;font-size:12.5px;color:#5A6B82;line-height:1.7;font-variant-numeric:tabular-nums">
-    <div><b style="color:#0F243C">Прогноз к концу месяца:</b> доход ${fmtN(incFore)} − расход ${fmtN(projEnd)}${oblFore>0?` − долги ${fmtN(oblFore)}`:''} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)} ₽</b></div>
-    ${(isCurrent&&elapsed<daysInMonth)?`<div><b style="color:#0F243C">По факту на сегодня:</b> доход ${fmtN(income)} − потрачено ${fmtN(factSoFar)}${obligation>0?` − долги ${fmtN(obligation)}`:''} = <b style="color:${profitFact>=0?'#4E7D3A':'#B5564A'}">${(profitFact>=0?'+':'')+fmtN(profitFact)} ₽</b></div>`:''}
+    <div><b style="color:#0F243C">Прогноз к концу месяца:</b> доход ${fmtN(incFore)} − расход ${fmtN(projEnd)} = <b style="color:${profit>=0?'#4E7D3A':'#B5564A'}">${(profit>=0?'+':'')+fmtN(profit)} ₽</b></div>
+    ${(isCurrent&&elapsed<daysInMonth)?`<div><b style="color:#0F243C">По факту на сегодня:</b> доход ${fmtN(income)} − потрачено ${fmtN(factSoFar)} = <b style="color:${profitFact>=0?'#4E7D3A':'#B5564A'}">${(profitFact>=0?'+':'')+fmtN(profitFact)} ₽</b></div>`:''}
     <div style="color:#93A1B5;font-size:11.5px;line-height:1.6">Как считается прогноз к концу месяца:<br>
       <b>Доход</b> — по каждой категории берём большее из плана и уже полученного факта. Поэтому внезапный доход, которого не было в плане, поднимает прогноз, а зарплата, пришедшая раньше срока, не считается дважды.<br>
-      <b>Расход</b> — фиксированные (правила, события) по плану; повседневные — по среднему темпу трат за 30 дней с отсевом выбросов (тот же расчёт, что в Бюджете и Обзоре). Один крупный день не размазывается на весь месяц.<br>
-      <b>Долги</b> — плановые платежи из графика кредитов; только тело, проценты уже сидят в расходах.<br>
-      Профит = Доходы − Расходы − Платежи по телу долга — та же формула, что в Бюджете (план) и Операциях (факт).</div>
+      <b>Расход</b> — фиксированные (правила, события) по плану; повседневные — по среднему темпу трат за 30 дней с отсевом выбросов (тот же расчёт, что в Бюджете и Обзоре). Один крупный день не размазывается на весь месяц. Проценты по кредитам сюда входят.<br>
+      <b>Тело долга</b> — показано отдельно («Платежи по долгам»), но в профит НЕ входит: это не расход, а погашение (кэш уменьшился, долг уменьшился — капитал не изменился).<br>
+      Профит = Доходы − Расходы (включая проценты) — та же формула на всех страницах.</div>
   </div>
 
   <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin-bottom:24px;align-items:start">
@@ -5903,6 +5905,10 @@ async function loadBudget() {
     const fixedRules  = rules.filter(r => r.account_to === 'Расход' || isLiabilityAcc(r.account_to));
     const incomeTotal = incomeRules.reduce((s, r) => s + ruleEffAmt(r), 0);
     const fixedTotal  = fixedRules.reduce((s, r) => s + ruleEffAmt(r), 0);
+    // Тело долга (правило целится в счёт-Пассив) — это НЕ расход, а погашение: в профит
+    // не входит (только проценты). Делим фикс-правила на расходную и долговую части.
+    const fixedExpenseTotal   = fixedRules.filter(r => r.account_to === 'Расход').reduce((s, r) => s + ruleEffAmt(r), 0);
+    const fixedPrincipalTotal = fixedRules.filter(r => isLiabilityAcc(r.account_to)).reduce((s, r) => s + ruleEffAmt(r), 0);
 
     // ── конверты: только ПОВСЕДНЕВНАЯ часть категории (variable, не эпизод) ──
     // Эпизодические подкатегории той же категории (напр. «Автомобиль/ТО») идут
@@ -5966,8 +5972,10 @@ async function loadBudget() {
 
     // Плановый профит = Доходы − Фиксированные(вкл. кредиты) − Повседневные(бюджет) − Эпизодические.
     // (= Доходы − Расходы − Долги; сбережения — распределение, не вычитаем; как в Сводке.)
+    // Профит = Доходы − потребление − проценты. Тело долга (fixedPrincipal + loanPrincipal)
+    // и сбережения (резервы) — нейтральны, не вычитаются (не делают беднее, а гасят долг).
     const plannedProfit = (incomeTotal + incomeEventsTotal)
-      - (fixedTotal + loanTotal) - envBudgetTotal - oneoffExpenseTotal;
+      - (fixedExpenseTotal + loanInterest) - envBudgetTotal - oneoffExpenseTotal;
 
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
@@ -6141,11 +6149,11 @@ async function loadBudget() {
         + periodBtnHtml() + '</div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · план', f(incomeTotal + incomeEventsTotal) + ' ₽', incomeRules.length + ' регулярных' + (incomeEvents.length ? ' · ' + incomeEvents.length + ' разовых' : ''))
-        + bgtCard('#2AA7CC', 'Расходы · план', f(fixedTotal + envBudgetTotal + oneoffExpenseTotal + loanInterest) + ' ₽', 'фикс. + повседневные + разовые + проценты')
-        + bgtCard('#C0741A', 'Кредиты · план', f(loanPrincipal) + ' ₽', 'погашение тела · проценты — в расходах')
+        + bgtCard('#2AA7CC', 'Расходы · план', f(fixedExpenseTotal + envBudgetTotal + oneoffExpenseTotal + loanInterest) + ' ₽', 'фикс. + повседневные + разовые + проценты')
+        + bgtCard('#C0741A', 'Кредиты · план', f(loanPrincipal + fixedPrincipalTotal) + ' ₽', 'погашение тела · в профит не входит')
         + bgtCard(plannedProfit >= 0 ? '#5E9B1E' : '#bf7419', 'Профит · план',
             '<span style="color:' + (plannedProfit >= 0 ? '#5E9B1E' : '#bf7419') + '">' + (plannedProfit < 0 ? '−' : '') + f(plannedProfit) + ' ₽</span>',
-            'доходы − расходы − тело долга')
+            'доходы − расходы − проценты · тело нейтрально')
       + '</div>'
       + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
       + bgtBlock('#2AA7CC', 'Фиксированные', 'регулярные платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml)
