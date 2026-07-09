@@ -612,6 +612,8 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
                     add(d, -amt)
             elif af in op_set and at in reserve_names:
                 add(d, -amt)
+            elif af in reserve_names and at in op_set:
+                add(d, amt)   # приток «из резерва» → поднимает линию
         cur = date(cur.year + (1 if cur.month == 12 else 0), 1 if cur.month == 12 else cur.month + 1, 1)
 
     # 2) Разовые плановые события (эпизодические, ручные) — не из правил, не кредиты
@@ -634,6 +636,8 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
                 add(r["date"], -amt)
         elif af in op_set and at in reserve_names:
             add(r["date"], -amt)
+        elif af in reserve_names and at in op_set:
+            add(r["date"], amt)   # приток «из резерва» → поднимает линию
 
     # 3) График кредитов — тело+процент как отток (завершение кредита учтено само)
     loan_rows = await db.fetch("""
@@ -741,6 +745,7 @@ async def get_forecast(request: Request, range: str = "30"):
     plan_fixed_by_date: dict = {}
     F_before = 0.0   # оттоки до даты дохода → для trough = «Свободно» (как в safe_to_spend)
     R_before = 0.0
+    RW_before = 0.0  # приток «из резерва» до дохода → поднимает trough (зеркало R_before)
     for r in fut:
         d = r["date"]
         if d <= today or d > end_date:
@@ -761,6 +766,11 @@ async def get_forecast(request: Request, range: str = "30"):
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) - amount
             if d < next_income_date:
                 R_before += amount
+        elif af in reserve_names and at in op_names:
+            # приток «из резерва» на операционный счёт (мост до зарплаты) — поднимает линию
+            plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
+            if d < next_income_date:
+                RW_before += amount
 
     # trough = «Свободно» = КОНЕЦ дня ПЕРЕД доходом (в день зарплаты деньги
     # приходят, лишний день трат не считаем). Один день = одна точка на графике,
@@ -770,7 +780,7 @@ async def get_forecast(request: Request, range: str = "30"):
     inc_today, out_today = await today_unrealized_planned(
         db, user_id, today, liability_names, reserve_names, set(op_names))
     days_before = max(days_to_income - 1, 0)
-    trough_value = round(B0_now + inc_today - out_today - F_before - r_var * days_before - R_before)
+    trough_value = round(B0_now + inc_today - out_today - F_before - r_var * days_before - R_before + RW_before)
     trough_day = (next_income_date - timedelta(days=1)) if days_to_income > 0 else today
     trough_date = trough_day.isoformat()
 
