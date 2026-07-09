@@ -6119,9 +6119,6 @@ async function loadBudget() {
       + '.bgt-cov-no{color:#9A6B12;background:rgba(231,178,62,.20)}'
       + '.bgt-skip-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:6px;color:var(--text3);background:var(--bg);border:1px solid var(--border);white-space:nowrap;letter-spacing:.02em}'
       + '.oo-badge{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap;justify-self:start}'
-      + '.ro-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}'
-      + '.ro-tab{flex:1;min-width:72px;padding:8px 6px;font-size:12.5px;font-weight:600;border:1px solid var(--border);background:var(--bg);color:var(--text2);border-radius:8px;cursor:pointer}'
-      + '.ro-tab.active{background:#8FBE1E;border-color:#8FBE1E;color:#fff}'
       + '.bgt-amt{font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--text)}'
       + '.bgt-amt2{font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--text)}'
       + '.bgt-pbar{height:9px;background:var(--border);border-radius:99px;overflow:hidden}'
@@ -6858,18 +6855,21 @@ function _roFormBody(p) {
   return common + mid + noteField;
 }
 
+// Цвета типов — как в модалке Операций: Расход розовый (exp), Долг кирпичный (obl),
+// резерв — циановый (tr, семейство переводов).
+const _RO_ACTIVE = { expense: 'active-exp', reserve_in: 'active-tr', reserve_out: 'active-tr', debt: 'active-obl' };
 function _roTypeTabs() {
   const tabs = [['expense', 'Расход'], ['reserve_in', 'В резерв'], ['reserve_out', 'Из резерва'], ['debt', 'Долг']];
-  return '<div class="ro-tabs">' + tabs.map(t =>
-    '<button type="button" class="ro-tab' + (t[0] === _roType ? ' active' : '') + '" data-k="' + t[0]
-    + '" onclick="_roSetType(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
+  return '<div class="type-grid">' + tabs.map(t =>
+    '<button type="button" class="type-btn' + (t[0] === _roType ? ' ' + _RO_ACTIVE[t[0]] : '') + '"'
+    + ' onclick="_roSetType(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
 }
 
 function _roModalHtml(p) {
   const creating = !_roEditId;
   return '<div class="modal"><div class="modal-title">' + (creating ? 'Разовая операция' : 'Редактировать') + '</div>'
     + '<div style="font-size:11px;color:var(--text3);margin:-6px 0 12px">планируется в этом месяце</div>'
-    + (creating ? _roTypeTabs() : '')
+    + (creating ? '<div id="roTabs">' + _roTypeTabs() + '</div>' : '')
     + '<div id="roBody">' + _roFormBody(p) + '</div>'
     + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
     + '<button class="btn-primary" onclick="saveEpisodicEvent(this)">' + (creating ? 'Запланировать' : 'Сохранить') + '</button></div></div>';
@@ -6883,7 +6883,8 @@ function _roSetType(type) {
   if (body) body.innerHTML = _roFormBody(null);
   const set = (id, v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
   set('evDate', keep.d); set('evAmt', keep.a); set('evName', keep.n);
-  document.querySelectorAll('.ro-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-k') === type));
+  const tabsEl = document.getElementById('roTabs');
+  if (tabsEl) tabsEl.innerHTML = _roTypeTabs();
 }
 
 function _roDetectType(p) {
