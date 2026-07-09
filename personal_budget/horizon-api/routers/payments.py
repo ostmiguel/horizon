@@ -30,6 +30,11 @@ WINDOW_DAYS = 45   # не пилим о слишком старых платеж
 
 
 def _title(row) -> str:
+    # Движения резерва не имеют категории → даём осмысленное имя (иначе «Платёж»).
+    if row.get("to_reserve"):
+        return f"В резерв — {row.get('account_to')}"
+    if row.get("from_reserve") and row.get("account_to") != "Расход":
+        return f"Из резерва — {row.get('account_from')}"
     return (row.get("rule_name") or row.get("subcategory")
             or row.get("cat_cat") or row.get("note") or "Платёж")
 
@@ -50,23 +55,19 @@ async def pending(request: Request):
                p.note, p.source_rule_id,
                pr.name AS rule_name,
                c.subcategory, c.category AS cat_cat,
-               COALESCE(a.is_reserve, false) AS to_reserve
+               (COALESCE(a.is_reserve, false)  OR COALESCE(a.is_cushion, false))  AS to_reserve,
+               (COALESCE(af.is_reserve, false) OR COALESCE(af.is_cushion, false)) AS from_reserve
         FROM plan p
         LEFT JOIN plan_rules pr ON p.source_rule_id = pr.id
         LEFT JOIN categories c  ON p.category_id = c.id
         LEFT JOIN accounts   a  ON a.user_id = p.user_id AND a.name = p.account_to
+        LEFT JOIN accounts   af ON af.user_id = p.user_id AND af.name = p.account_from
         WHERE p.user_id = $1
           AND p.date <= $2
           AND EXTRACT(YEAR  FROM p.date)::int = $3
           AND EXTRACT(MONTH FROM p.date)::int = $4
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
           AND p.account_from <> 'Доход'
-          -- Движения резерва (в резерв / из резерва на счёт) — это ПЛАН, а не платёж
-          -- к подтверждению: формируют прогноз, подтверждать их не нужно.
-          AND NOT COALESCE(a.is_reserve, false) AND NOT COALESCE(a.is_cushion, false)
-          AND NOT EXISTS (
-            SELECT 1 FROM accounts af WHERE af.user_id = p.user_id AND af.name = p.account_from
-              AND (af.is_reserve OR af.is_cushion) AND p.account_to <> 'Расход' )
           AND NOT EXISTS (
             SELECT 1 FROM plan_confirmations pc
             WHERE pc.user_id = p.user_id
@@ -137,22 +138,18 @@ async def status(request: Request, year: int, month: int):
     plan_rows = await db.fetch("""
         SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.source_rule_id,
                p.note, pr.name AS rule_name, c.subcategory, c.category AS cat_cat,
-               COALESCE(a.is_reserve, false) AS to_reserve
+               (COALESCE(a.is_reserve, false)  OR COALESCE(a.is_cushion, false))  AS to_reserve,
+               (COALESCE(af.is_reserve, false) OR COALESCE(af.is_cushion, false)) AS from_reserve
         FROM plan p
         LEFT JOIN plan_rules pr ON p.source_rule_id = pr.id
         LEFT JOIN categories c  ON p.category_id = c.id
         LEFT JOIN accounts   a  ON a.user_id = p.user_id AND a.name = p.account_to
+        LEFT JOIN accounts   af ON af.user_id = p.user_id AND af.name = p.account_from
         WHERE p.user_id = $1
           AND EXTRACT(YEAR  FROM p.date)::int = $2
           AND EXTRACT(MONTH FROM p.date)::int = $3
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
           AND p.account_from <> 'Доход'
-          -- Движения резерва (в резерв / из резерва на счёт) — это ПЛАН, а не платёж
-          -- к подтверждению: формируют прогноз, подтверждать их не нужно.
-          AND NOT COALESCE(a.is_reserve, false) AND NOT COALESCE(a.is_cushion, false)
-          AND NOT EXISTS (
-            SELECT 1 FROM accounts af WHERE af.user_id = p.user_id AND af.name = p.account_from
-              AND (af.is_reserve OR af.is_cushion) AND p.account_to <> 'Расход' )
           AND NOT EXISTS (
             SELECT 1 FROM plan_confirmations pc
             WHERE pc.user_id = p.user_id
@@ -302,8 +299,13 @@ async def confirm(body: ResolveBody, request: Request):
     elif body.kind == "plan":
         occ = await db.fetchrow("""
             SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.category_id,
-                   p.note, NULL::text AS rule_name, c.subcategory, c.category AS cat_cat
-            FROM plan p LEFT JOIN categories c ON p.category_id = c.id
+                   p.note, NULL::text AS rule_name, c.subcategory, c.category AS cat_cat,
+                   (COALESCE(a.is_reserve, false)  OR COALESCE(a.is_cushion, false))  AS to_reserve,
+                   (COALESCE(af.is_reserve, false) OR COALESCE(af.is_cushion, false)) AS from_reserve
+            FROM plan p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN accounts a  ON a.user_id=p.user_id AND a.name=p.account_to
+            LEFT JOIN accounts af ON af.user_id=p.user_id AND af.name=p.account_from
             WHERE p.user_id=$1 AND p.id=$2
         """, user_id, body.ref_id)
     else:
