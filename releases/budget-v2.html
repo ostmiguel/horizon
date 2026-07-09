@@ -5945,15 +5945,18 @@ async function loadBudget() {
     const loanPrincipal = loanPlan.filter(p => isLiabilityAcc(p.account_to)).reduce((s, p) => s + (+p.amount || 0), 0);
     const loanInterest  = loanTotal - loanPrincipal;
 
-    // ── эпизодические: ВСЕ запланированные события месяца (резервы-цели — на «Цели») ──
+    // ── Разовые: ВСЕ одноразовые плановые операции месяца — не из правила, не из
+    // графика кредита, не доход. Единый дом: расход, в/из резерва, разовое погашение
+    // долга, перевод. Доход живёт в блоке «Доходы».
     const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
-    // Показываем все плановые эпизодические строки месяца (включая уже прошедшие даты),
-    // чтобы блок отражал полный план месяца, а не только «предстоящие».
-    const episEvents = planRows
-      .filter(p => p.categories && p.categories.character === 'Эпизодический'
-        && p.account_from !== 'Доход')   // эпизодический доход — в блоке «Доходы», не здесь
+    const oneoffEvents = planRows
+      .filter(p => !p.source_rule_id && p.source !== 'loan_schedule' && p.account_from !== 'Доход')
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const episTotal = episEvents.reduce((s, p) => s + (+p.amount || 0), 0);
+    // Профит уменьшает ТОЛЬКО расходная часть разовых (to='Расход'); переводы, движения
+    // резерва и тело долга профит не трогают (иначе занизим).
+    const oneoffExpenseTotal = oneoffEvents
+      .filter(p => p.account_to === 'Расход')
+      .reduce((s, p) => s + (+p.amount || 0), 0);
 
     // Разовый (эпизодический) доход — плановые строки дохода НЕ из правила.
     const incomeEvents = planRows
@@ -5964,7 +5967,7 @@ async function loadBudget() {
     // Плановый профит = Доходы − Фиксированные(вкл. кредиты) − Повседневные(бюджет) − Эпизодические.
     // (= Доходы − Расходы − Долги; сбережения — распределение, не вычитаем; как в Сводке.)
     const plannedProfit = (incomeTotal + incomeEventsTotal)
-      - (fixedTotal + loanTotal) - envBudgetTotal - episTotal;
+      - (fixedTotal + loanTotal) - envBudgetTotal - oneoffExpenseTotal;
 
     const periodLabel = MONTHS_S[month] + ' ' + year;
 
@@ -6029,22 +6032,33 @@ async function loadBudget() {
         + '</div>'
       + '</div>';
     }
+    // Тип разовой операции из ролей счетов (для бейджа/знака в блоке «Разовые»).
+    function _ooFlow(p) {
+      const to = p.account_to, from = p.account_from;
+      if (to === 'Расход') return { label: 'Расход', sign: '−', color: '#bf7419', bg: 'rgba(191,116,25,.12)' };
+      if (reserveNames.has(to))   return { label: 'В резерв',  sign: '−', color: '#167F73', bg: 'rgba(31,164,151,.14)' };
+      if (reserveNames.has(from)) return { label: 'Из резерва', sign: '+', color: '#5E9B1E', bg: 'rgba(94,155,30,.14)' };
+      if (isLiabilityAcc(to)   || to   === 'Дебиторка') return { label: 'Долг', sign: '−', color: '#C0741A', bg: 'rgba(192,116,26,.14)' };
+      if (isLiabilityAcc(from) || from === 'Дебиторка') return { label: 'Долг', sign: '+', color: '#5E9B1E', bg: 'rgba(94,155,30,.14)' };
+      return { label: 'Перевод', sign: '', color: 'var(--text2)', bg: 'var(--bg)' };
+    }
     function eventRow(p) {
       const dt = (p.date || ''); const d = dt.slice(8, 10) + '.' + dt.slice(5, 7);
       const note = (p.note || '').trim();
       const subcat = (p.categories && p.categories.subcategory) || '';
       const category = (p.categories && p.categories.category) || '';
-      const title = note || subcat || category || 'Событие';
-      // Подпись категории — как в Фиксированных (bgt-rsub). Если заголовок уже = подкатегория,
-      // показываем родительскую категорию, чтобы не дублировать.
+      const fl = _ooFlow(p);
+      const title = note || subcat || category || fl.label;
       let subLabel = subcat || category;
       if (subLabel === title) subLabel = (category && category !== title) ? category : '';
-      const covered = reserveNames.has(p.account_from);
-      const badge = covered ? '<span class="bgt-cov bgt-cov-ok">обеспечено резервом</span>' : '<span class="bgt-cov bgt-cov-no">нет резерва</span>';
+      // Трата из резерва — подсказка в подписи.
+      if (fl.label === 'Расход' && reserveNames.has(p.account_from))
+        subLabel = (subLabel ? subLabel + ' · ' : '') + 'из резерва';
+      const badge = '<span class="oo-badge" style="color:' + fl.color + ';background:' + fl.bg + '">' + fl.label + '</span>';
       return '<div class="bgt-evrow">'
         + '<div class="bgt-rn">' + esc(title) + (subLabel ? '<div class="bgt-rsub">' + esc(subLabel) + '</div>' : '') + '</div>'
         + '<span class="bgt-rule">' + d + '</span>' + badge
-        + '<span class="bgt-amt" style="color:#bf7419">−' + f(p.amount) + ' ₽</span>'
+        + '<span class="bgt-amt" style="color:' + fl.color + '">' + fl.sign + f(p.amount) + ' ₽</span>'
         + '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px">'
           + '<button class="bgt-dots" title="Действия" onclick="event.stopPropagation();eventMenu(this,' + p.id + ')">⋮</button>'
         + '</div></div>';
@@ -6089,7 +6103,7 @@ async function loadBudget() {
     const envRowsHtml = (envelopes.length || suggestions.length)
       ? envelopes.map((e, i) => envelopeRow(e, i)).join('') + suggBlock
       : emptyMsg('Нет повседневных — «+ Добавить».');
-    const eventRowsHtml   = episEvents.length  ? episEvents.map(eventRow).join('')             : emptyMsg('Нет запланированных трат.');
+    const eventRowsHtml   = oneoffEvents.length ? oneoffEvents.map(eventRow).join('')          : emptyMsg('Нет разовых операций.');
 
     main.innerHTML = '<style>'
       + '.bgt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
@@ -6104,6 +6118,10 @@ async function loadBudget() {
       + '.bgt-cov-ok{color:#167F73;background:rgba(31,164,151,.14)}'
       + '.bgt-cov-no{color:#9A6B12;background:rgba(231,178,62,.20)}'
       + '.bgt-skip-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:6px;color:var(--text3);background:var(--bg);border:1px solid var(--border);white-space:nowrap;letter-spacing:.02em}'
+      + '.oo-badge{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap;justify-self:start}'
+      + '.ro-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}'
+      + '.ro-tab{flex:1;min-width:72px;padding:8px 6px;font-size:12.5px;font-weight:600;border:1px solid var(--border);background:var(--bg);color:var(--text2);border-radius:8px;cursor:pointer}'
+      + '.ro-tab.active{background:#8FBE1E;border-color:#8FBE1E;color:#fff}'
       + '.bgt-amt{font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--text)}'
       + '.bgt-amt2{font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--text)}'
       + '.bgt-pbar{height:9px;background:var(--border);border-radius:99px;overflow:hidden}'
@@ -6126,7 +6144,7 @@ async function loadBudget() {
         + periodBtnHtml() + '</div>'
       + '<div class="bgt-cards">'
         + bgtCard('#5E9B1E', 'Доходы · план', f(incomeTotal + incomeEventsTotal) + ' ₽', incomeRules.length + ' регулярных' + (incomeEvents.length ? ' · ' + incomeEvents.length + ' разовых' : ''))
-        + bgtCard('#2AA7CC', 'Расходы · план', f(fixedTotal + envBudgetTotal + episTotal + loanInterest) + ' ₽', 'фикс. + повседневные + разовые + проценты')
+        + bgtCard('#2AA7CC', 'Расходы · план', f(fixedTotal + envBudgetTotal + oneoffExpenseTotal + loanInterest) + ' ₽', 'фикс. + повседневные + разовые + проценты')
         + bgtCard('#C0741A', 'Кредиты · план', f(loanPrincipal) + ' ₽', 'погашение тела · проценты — в расходах')
         + bgtCard(plannedProfit >= 0 ? '#5E9B1E' : '#bf7419', 'Профит · план',
             '<span style="color:' + (plannedProfit >= 0 ? '#5E9B1E' : '#bf7419') + '">' + (plannedProfit < 0 ? '−' : '') + f(plannedProfit) + ' ₽</span>',
@@ -6770,43 +6788,119 @@ async function saveReserveGoal(btn) {
   btn.closest('.modal-overlay').remove(); toast('✓ Резерв создан'); loadBudget();
 }
 
-// Поля модалки события — общие для создания и редактирования (p = существующая строка или null).
-function _eventModalFields(p) {
-  // Блок «Эпизодические» — только разовые РАСХОДЫ (доход вносится в «Доходах»):
-  // эпизодические категории, кроме доходных.
-  const subs = (cats || []).filter(c => c.character === 'Эпизодический' && c.group_name !== 'Доходы')
+// ── Модалка «Разовая операция» (план) — единый дом для всего одноразового не-дохода ──
+// Типы: expense (расход) | reserve_in (в резерв) | reserve_out (из резерва) | debt (долг).
+// Пишет в plan; режим задаёт поверхность (открыто из блока «Разовые» на Бюджете).
+let _roType = 'expense';
+let _roEditId = null;
+
+function _roAssets()   { return (accounts_cache || []).filter(a => a.account_type === 'Актив' && a.is_active !== false && a.name !== 'Дебиторка'); }
+function _roOpAccs()   { return _roAssets().filter(a => !a.is_reserve && !a.is_cushion); }
+function _roRsvAccs()  { return (accounts_cache || []).filter(a => (a.is_reserve || a.is_cushion) && a.is_active !== false); }
+function _roDebtAccs() { return (accounts_cache || []).filter(a => (a.account_type === 'Пассив' || a.name === 'Дебиторка') && a.is_active !== false); }
+
+function _roAccField(label, id, list, selName, reserveHint) {
+  const opts = (list || []).map(a =>
+    '<option value="' + esc(a.name) + '"' + (a.name === selName ? ' selected' : '') + '>'
+    + esc(a.name) + ((a.is_reserve || a.is_cushion) ? ' (резерв)' : '') + '</option>').join('');
+  const hint = reserveHint ? '<div class="field-note">резервный счёт → «обеспечено резервом»</div>' : '';
+  return '<div class="field"><div class="field-label">' + label + '</div>'
+    + '<select class="field-select" id="' + id + '">' + opts + '</select>' + hint + '</div>';
+}
+function _roCatField(p, kind) {
+  const subs = (cats || []).filter(c => kind === 'debt'
+      ? (c.group_name === 'Обязательства' || c.group_name === 'Дебиторка')
+      : (c.character === 'Эпизодический' && c.group_name !== 'Доходы'))
     .sort((a, b) => a.subcategory.localeCompare(b.subcategory, 'ru'));
-  const catOpts = '<option value="">— выбери —</option>'
-    + subs.map(c => '<option value="' + c.id + '"' + (p && +p.category_id === c.id ? ' selected' : '') + '>'
-        + esc(c.subcategory) + ' (' + esc(c.category) + ')</option>').join('');
-  const accs = (accounts_cache || []).filter(a => a.account_type === 'Актив');
-  const accOpts = accs.map(a => {
-    const sel = p ? (a.name === p.account_from) : a.is_reserve;
-    return '<option value="' + esc(a.name) + '"' + (sel ? ' selected' : '') + '>' + esc(a.name) + (a.is_reserve ? ' (резерв)' : '') + '</option>';
-  }).join('');
-  // Дата по умолчанию (только для создания) — в отображаемом месяце, иначе событие в будущем
-  // месяце попадёт в текущий и не появится в блоке. При редактировании берём дату строки.
+  const opts = '<option value="">— выбери —</option>' + subs.map(c =>
+    '<option value="' + c.id + '"' + (p && +p.category_id === c.id ? ' selected' : '') + '>'
+    + esc(c.subcategory) + '</option>').join('');
+  const label = kind === 'debt' ? 'Категория (направление долга)' : 'Подкатегория';
+  return '<div class="field"><div class="field-label">' + label + '</div>'
+    + '<select class="field-select" id="evCat">' + opts + '</select></div>';
+}
+
+function _roFormBody(p) {
   const now = new Date();
   const per = window._bgtPeriod || { year: now.getFullYear(), month: now.getMonth() + 1 };
   const isCur = per.year === now.getFullYear() && per.month === now.getMonth() + 1;
   const dateVal = p ? (p.date || '').slice(0, 10)
     : (isCur ? now.toISOString().split('T')[0] : per.year + '-' + String(per.month).padStart(2, '0') + '-01');
-  return '<div class="field"><div class="field-label">Название</div>'
-      + '<input class="field-input" id="evName" placeholder="Подарок / ремонт" value="' + (p && p.note ? esc(p.note) : '') + '"/></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-      + '<div class="field"><div class="field-label">Дата</div><input class="field-input" type="date" id="evDate" value="' + dateVal + '"/></div>'
-      + '<div class="field"><div class="field-label">Сумма, ₽</div><input class="field-input" type="number" id="evAmt" min="0" placeholder="0" value="' + (p ? +p.amount : '') + '"/></div>'
-    + '</div>'
-    + '<div class="field"><div class="field-label">Категория (эпизодическая)</div><select class="field-select" id="evCat">' + catOpts + '</select></div>'
-    + '<div class="field"><div class="field-label">Счёт списания</div><select class="field-select" id="evFrom">' + accOpts + '</select><div class="field-note">резервный счёт → «обеспечено резервом»</div></div>';
+  const amtVal  = p ? (+p.amount) : '';
+  const noteVal = p && p.note ? esc(p.note) : '';
+  const common = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    + '<div class="field"><div class="field-label">Дата</div><input class="field-input" type="date" id="evDate" value="' + dateVal + '"/></div>'
+    + '<div class="field"><div class="field-label">Сумма, ₽</div><input class="field-input" type="number" id="evAmt" min="0" placeholder="0" value="' + amtVal + '"/></div>'
+    + '</div>';
+  const noteField = '<div class="field"><div class="field-label">Комментарий</div>'
+    + '<input class="field-input" id="evName" placeholder="необязательно" value="' + noteVal + '"/></div>';
+  let mid = '';
+  if (_roType === 'expense') {
+    mid = _roCatField(p, 'episodic')
+        + _roAccField('Счёт списания', 'evFrom', _roAssets(), p ? p.account_from : (_roRsvAccs()[0] && _roRsvAccs()[0].name), true);
+  } else if (_roType === 'reserve_in') {
+    mid = _roAccField('Со счёта', 'evFrom', _roOpAccs(), p ? p.account_from : null)
+        + _roAccField('В резерв',  'evTo',   _roRsvAccs(), p ? p.account_to   : null);
+  } else if (_roType === 'reserve_out') {
+    mid = _roAccField('Из резерва', 'evFrom', _roRsvAccs(), p ? p.account_from : null)
+        + _roAccField('На счёт',    'evTo',   _roOpAccs(),  p ? p.account_to   : null);
+  } else if (_roType === 'debt') {
+    let realSel = null, debtSel = null;
+    if (p) {
+      const isDbt = n => _roDebtAccs().some(a => a.name === n);
+      realSel = isDbt(p.account_from) ? p.account_to : p.account_from;
+      debtSel = isDbt(p.account_from) ? p.account_from : p.account_to;
+    }
+    mid = _roCatField(p, 'debt')
+        + _roAccField('Счёт списания', 'evFrom', _roAssets(),   realSel)
+        + _roAccField('Обязательство', 'evTo',   _roDebtAccs(), debtSel);
+  }
+  return common + mid + noteField;
+}
+
+function _roTypeTabs() {
+  const tabs = [['expense', 'Расход'], ['reserve_in', 'В резерв'], ['reserve_out', 'Из резерва'], ['debt', 'Долг']];
+  return '<div class="ro-tabs">' + tabs.map(t =>
+    '<button type="button" class="ro-tab' + (t[0] === _roType ? ' active' : '') + '" data-k="' + t[0]
+    + '" onclick="_roSetType(\'' + t[0] + '\')">' + t[1] + '</button>').join('') + '</div>';
+}
+
+function _roModalHtml(p) {
+  const creating = !_roEditId;
+  return '<div class="modal"><div class="modal-title">' + (creating ? 'Разовая операция' : 'Редактировать') + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);margin:-6px 0 12px">планируется в этом месяце</div>'
+    + (creating ? _roTypeTabs() : '')
+    + '<div id="roBody">' + _roFormBody(p) + '</div>'
+    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
+    + '<button class="btn-primary" onclick="saveEpisodicEvent(this)">' + (creating ? 'Запланировать' : 'Сохранить') + '</button></div></div>';
+}
+
+function _roSetType(type) {
+  const g = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+  const keep = { d: g('evDate'), a: g('evAmt'), n: g('evName') };
+  _roType = type;
+  const body = document.getElementById('roBody');
+  if (body) body.innerHTML = _roFormBody(null);
+  const set = (id, v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
+  set('evDate', keep.d); set('evAmt', keep.a); set('evName', keep.n);
+  document.querySelectorAll('.ro-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-k') === type));
+}
+
+function _roDetectType(p) {
+  const to = p.account_to, from = p.account_from;
+  const isRsv = n => (accounts_cache || []).some(a => a.name === n && (a.is_reserve || a.is_cushion));
+  const isDbt = n => (accounts_cache || []).some(a => a.name === n && a.account_type === 'Пассив') || n === 'Дебиторка';
+  if (to === 'Расход') return 'expense';
+  if (isRsv(to))   return 'reserve_in';
+  if (isRsv(from)) return 'reserve_out';
+  if (isDbt(to) || isDbt(from)) return 'debt';
+  return 'expense';
 }
 
 function openEpisodicEvent() {
+  _roType = 'expense'; _roEditId = null;
   const mo = document.createElement('div'); mo.className = 'modal-overlay open';
-  mo.innerHTML = '<div class="modal"><div class="modal-title">Разовое событие</div>'
-    + _eventModalFields(null)
-    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
-    + '<button class="btn-primary" onclick="saveEpisodicEvent(this)">Создать</button></div></div>';
+  mo.innerHTML = _roModalHtml(null);
   document.body.appendChild(mo);
 }
 
@@ -6814,33 +6908,46 @@ async function openEditEvent(id) {
   const res = await fetch(`${API_BASE}/api/transactions/${id}?plan=true`, { credentials: 'include' });
   if (!res.ok) { toast('Ошибка загрузки', false); return; }
   const p = await res.json();
+  _roEditId = id; _roType = _roDetectType(p);
   const mo = document.createElement('div'); mo.className = 'modal-overlay open';
-  mo.innerHTML = '<div class="modal"><div class="modal-title">Редактировать событие</div>'
-    + _eventModalFields(p)
-    + '<div class="modal-btns"><button class="btn-ghost" onclick="this.closest(\'.modal-overlay\').remove()">Отмена</button>'
-    + '<button class="btn-primary" onclick="saveEpisodicEvent(this,' + id + ')">Сохранить</button></div></div>';
+  mo.innerHTML = _roModalHtml(p);
   document.body.appendChild(mo);
 }
 
-// btn — кнопка модалки; id передан → редактирование (PATCH), иначе создание (POST).
-async function saveEpisodicEvent(btn, id) {
-  const name = document.getElementById('evName')?.value.trim();
-  const date = document.getElementById('evDate')?.value;
-  const amt  = parseFloat(document.getElementById('evAmt')?.value);
-  const catId = +document.getElementById('evCat')?.value || null;
-  const from = document.getElementById('evFrom')?.value;
-  if (!date || !(amt > 0) || !from) { toast('Дата, сумма и счёт обязательны', false); return; }
-  if (!catId) { toast('Выбери эпизодическую категорию', false); return; }
+async function saveEpisodicEvent(btn) {
+  const g = id => document.getElementById(id) ? document.getElementById(id).value : '';
+  const date = g('evDate'); const amt = parseFloat(g('evAmt')); const note = g('evName').trim() || null;
+  if (!date || !(amt > 0)) { toast('Дата и сумма обязательны', false); return; }
+  let from, to, catId = null;
+  if (_roType === 'expense') {
+    catId = +g('evCat') || null; from = g('evFrom'); to = 'Расход';
+    if (!from) { toast('Выбери счёт списания', false); return; }
+    if (!catId) { toast('Выбери категорию', false); return; }
+  } else if (_roType === 'reserve_in' || _roType === 'reserve_out') {
+    from = g('evFrom'); to = g('evTo');
+    if (!from || !to) { toast('Выбери оба счёта', false); return; }
+    if (from === to) { toast('Счета не могут совпадать', false); return; }
+  } else if (_roType === 'debt') {
+    catId = +g('evCat') || null; from = g('evFrom'); to = g('evTo');
+    if (!from || !to) { toast('Выбери счёт и обязательство', false); return; }
+    if (!catId) { toast('Выбери категорию (направление долга)', false); return; }
+    const cat = (cats || []).find(c => c.id === catId);
+    const oriented = _orientObligation(cat && cat.subcategory, from, to);
+    if (oriented && oriented.error) { toast('Нужен один счёт-долг и один обычный счёт', false); return; }
+    if (oriented) { from = oriented.from; to = oriented.to; }
+  }
   btn.disabled = true;
-  const body = { date, amount: amt, account_from: from, account_to: 'Расход', category_id: catId, note: name || null };
-  const url  = id ? `${API_BASE}/api/transactions/${id}?plan=true` : `${API_BASE}/api/transactions?plan=true`;
+  const body = { date, amount: amt, account_from: from, account_to: to, note };
+  if (catId) body.category_id = catId;
+  const id = _roEditId;
   if (!id) body.source = 'manual';
+  const url = id ? `${API_BASE}/api/transactions/${id}?plan=true` : `${API_BASE}/api/transactions?plan=true`;
   const res = await fetch(url, {
     method: id ? 'PATCH' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) { toast('Ошибка: ' + await res.text(), false); btn.disabled = false; return; }
-  btn.closest('.modal-overlay').remove(); toast(id ? '✓ Событие сохранено' : '✓ Событие добавлено'); loadBudget();
+  btn.closest('.modal-overlay').remove(); toast(id ? '✓ Сохранено' : '✓ Разовая операция добавлена'); loadBudget();
 }
 
 // ── PURE SVG CHART UTILITIES (no library) ────────────────────────────────────
