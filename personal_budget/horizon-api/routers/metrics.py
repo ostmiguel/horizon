@@ -933,3 +933,98 @@ async def get_affordability(request: Request):
         "monthly_fc_sigma": round(sigma_fc),
         "goals":            goals,
     }
+
+
+# ── /api/metrics/backtest — точность прогноза повседневных на истории ──────────
+def _rate_from_window(win_vals):
+    """r_var + σ из массива дневных сумм (та же MAD-логика, что flow_daily_rate)."""
+    daily = list(win_vals)
+    pos = [x for x in daily if x > 0]
+    if len(pos) >= 2:
+        med = statistics.median(pos)
+        mad = statistics.median([abs(x - med) for x in pos])
+        threshold = med + 3 * 1.4826 * mad
+        daily = [x if x <= threshold else 0.0 for x in daily]
+    rate = sum(daily) / len(daily) if daily else 0.0
+    return rate, robust_sigma(daily)
+
+
+@router.get("/backtest")
+async def backtest(request: Request):
+    """Бэктест точности прогноза ПОВСЕДНЕВНЫХ на истории пользователя.
+
+    Для каждого дня каждого ЗАВЕРШЁННОГО месяца пересобираем r_var (окно 30 дней
+    до дня, как в проде) и сравниваем прогноз итога месяца (факт-к-дню + r_var×дней-
+    осталось) с фактическим итогом месяца. Так видно, как ежедневный прогноз сходится
+    к правде и насколько систематически мажет.
+    """
+    user_id = request.state.user_id
+    db = request.state.db
+    rows = await db.fetch("""
+        SELECT t.date AS d, SUM(t.amount) AS total
+        FROM transactions t LEFT JOIN categories c ON t.category_id = c.id
+        WHERE t.user_id = $1 AND t.account_to = 'Расход'
+          AND c.expense_type = 'variable' AND c.character <> 'Эпизодический'
+        GROUP BY t.date ORDER BY t.date
+    """, user_id)
+    daily = {r["d"]: float(r["total"]) for r in rows}
+    if not daily:
+        return {"months": [], "overall": None}
+
+    WINDOW = 30
+    today = date.today()
+    first = min(daily)
+    last_complete = date(today.year, today.month, 1)   # текущий месяц не завершён
+    months = []
+    cur = date(first.year, first.month, 1)
+    while cur < last_complete:
+        dim = monthrange(cur.year, cur.month)[1]
+        mdays = [date(cur.year, cur.month, dd) for dd in range(1, dim + 1)]
+        actual = sum(daily.get(d, 0.0) for d in mdays)
+        if actual > 0:
+            per_day, fact_mtd = [], 0.0
+            for d in mdays:
+                fact_mtd += daily.get(d, 0.0)
+                win = [daily.get(d - timedelta(days=WINDOW - i), 0.0) for i in range(WINDOW)]
+                r_var, sig = _rate_from_window(win)
+                d_left = dim - d.day
+                forecast = fact_mtd + r_var * d_left
+                err = forecast - actual
+                band = Z_80 * (sig * math.sqrt(d_left) if d_left > 0 else 0.0)
+                per_day.append({
+                    "day": d.day, "err": err,
+                    "err_pct": round(err / actual * 100, 1),
+                    "in_band": abs(err) <= band,
+                })
+            errs = [p["err"] for p in per_day]
+            bias = sum(errs) / len(errs)
+            confident = per_day[-1]["day"]
+            for i, p in enumerate(per_day):
+                if all(abs(q["err_pct"]) <= 10 for q in per_day[i:]):
+                    confident = p["day"]; break
+            months.append({
+                "year": cur.year, "month": cur.month,
+                "actual": round(actual),
+                "start_err_pct": per_day[0]["err_pct"],
+                "mid_err_pct":   per_day[len(per_day) // 2]["err_pct"],
+                "bias":     round(bias),
+                "bias_pct": round(bias / actual * 100, 1),
+                "confident_day": confident,
+                "coverage": round(sum(1 for p in per_day if p["in_band"]) / len(per_day) * 100),
+                "curve": [p["err_pct"] for p in per_day],
+            })
+        cur = date(cur.year + (1 if cur.month == 12 else 0),
+                   1 if cur.month == 12 else cur.month + 1, 1)
+
+    overall = None
+    if months:
+        cd = [m["confident_day"] for m in months if m["confident_day"]]
+        overall = {
+            "n_months": len(months),
+            "bias_pct":  round(sum(m["bias_pct"] for m in months) / len(months), 1),
+            "abs_start": round(sum(abs(m["start_err_pct"]) for m in months) / len(months), 1),
+            "abs_mid":   round(sum(abs(m["mid_err_pct"]) for m in months) / len(months), 1),
+            "coverage":  round(sum(m["coverage"] for m in months) / len(months)),
+            "confident_day": round(sum(cd) / len(cd)) if cd else None,
+        }
+    return {"months": months, "overall": overall}

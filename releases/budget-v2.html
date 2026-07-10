@@ -8073,208 +8073,97 @@ async function deleteGoal(id) {
 async function loadLab() {
   const mc = document.getElementById('mainContent');
   mc.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-
-  const { year, month } = getPeriod();
-  const today = new Date();
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const dayOfMonth = today.getDate();
-
   try {
-    // Load data across all years for runway calculation
-    const [{ data: accs }, { data: txsCur }, { data: planCur }, { data: allTxDates }] = await Promise.all([
-      sb.from('accounts').select('*'),
-      sb.from('transactions').select('date,amount,account_from,account_to,categories(subcategory,category,group_name,expense_type,character)').eq('year', year).eq('month', month),
-      sb.from('plan').select('date,amount,account_from,account_to,categories(subcategory,category,group_name,expense_type,character)').eq('year', year).eq('month', month),
-      sb.from('transactions').select('date'),
-    ]);
+    const bt = await fetch(`${API_BASE}/api/metrics/backtest`, { credentials: 'include' }).then(r => r.json());
+    const months = (bt.months || []).slice().reverse();   // свежие месяцы сверху
+    const ov = bt.overall;
+    const f = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(Math.abs(+n || 0)));
+    const MN = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    const sp = v => (v > 0 ? '+' : (v < 0 ? '−' : '')) + Math.abs(v);
+    const ec = v => Math.abs(v) <= 10 ? '#5E9B1E' : (Math.abs(v) <= 25 ? '#C0741A' : '#C24D3E');
+    const CARD = 'background:#fff;border:1px solid rgba(15,36,60,.08);border-radius:14px';
+    const P = 'font-size:13px;line-height:1.6;color:#5A6B82';
+    const CAP = 'font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#93A1B5';
 
-    // Get all years available
-    const years = [...new Set((allTxDates||[]).map(r => +r.date.substring(0,4)))].filter(y => y > 2000).sort();
+    // Спарклайн ошибки по дням: нулевая линия = идеальное попадание, кривая сходится к 0.
+    const spark = curve => {
+      if (!curve || curve.length < 2) return '<span style="color:var(--text3)">—</span>';
+      const W = 130, H = 30, pad = 4;
+      const maxA = Math.max(20, ...curve.map(v => Math.abs(v)));
+      const X = i => pad + i * (W - 2 * pad) / (curve.length - 1);
+      const Y = v => H / 2 - (v / maxA) * (H / 2 - pad);
+      const pts = curve.map((v, i) => X(i).toFixed(1) + ',' + Y(v).toFixed(1)).join(' ');
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:' + W + 'px;height:' + H + 'px;vertical-align:middle">'
+        + '<line x1="' + pad + '" y1="' + (H / 2) + '" x2="' + (W - pad) + '" y2="' + (H / 2) + '" stroke="#E2E8F0" stroke-width="1"/>'
+        + '<polyline points="' + pts + '" fill="none" stroke="#2AA7CC" stroke-width="1.5"/></svg>';
+    };
 
-    // Load all transactions for behavioral runway
-    const allTxs = [];
-    for (const y of years) {
-      const { data: ytxs } = await sb.from('transactions')
-        .select('date,amount,account_from,account_to,categories(subcategory,category,group_name,expense_type)')
-        .eq('year', y);
-      if (ytxs) allTxs.push(...ytxs);
+    const card = (label, val, sub, color) => '<div style="' + CARD + ';padding:14px 16px">'
+      + '<div style="' + CAP + '">' + label + '</div>'
+      + '<div style="font-family:Sora,sans-serif;font-weight:700;font-size:22px;margin-top:4px;color:' + (color || '#0F243C') + '">' + val + '</div>'
+      + '<div style="font-size:11px;color:#93A1B5;margin-top:2px">' + sub + '</div></div>';
+
+    let html = '<div style="padding:20px 24px 64px;max-width:920px">'
+      + '<div class="page-title">Лаборатория</div>'
+      + '<div style="font-size:12px;color:var(--text3);margin:2px 0 18px">Точность прогноза повседневных — как модель попадает в факт</div>';
+
+    if (!months.length) {
+      html += '<div style="' + CARD + ';padding:20px;' + P + '">Пока нет завершённых месяцев с повседневными тратами для анализа. Таблица появится, когда наберётся хотя бы один полный месяц.</div></div>';
+      mc.innerHTML = html;
+      return;
     }
 
-    // ── Current balance (same as dashboard) ──
-    // Reload accounts with current_balance
-    const { data: accsLive } = await sb.from('accounts').select('*');
-    const oblCurrent = (accsLive||[]).filter(a => a.account_type === 'Пассив' && a.is_active !== false)
-      .reduce((s,a) => s + Math.abs(+(a.current_balance ?? a.initial_balance ?? 0)), 0);
-    const operAccs = (accsLive||[]).filter(a => a.include_in_balance && a.account_type === 'Актив');
-    const assetsCurrent = operAccs.reduce((s,a) => s + +(a.current_balance ?? a.initial_balance), 0);
-    const netWorth = assetsCurrent - oblCurrent;
-    const totalBalance = assetsCurrent;
+    html += '<div style="' + CARD + ';padding:16px 18px;margin-bottom:18px;' + P + '">'
+      + 'Каждый день модель прогнозирует итог повседневных трат за месяц: <b style="color:#0F243C">потрачено-к-дню + дневная ставка × дней осталось</b>. '
+      + 'Здесь для каждого завершённого месяца прогноз прогнан по дням и сравнён с реальным итогом — видно, насколько и в какую сторону модель мажет.'
+      + '</div>';
 
-    // ── Credit Load ──
-    const planOblChange = (planCur||[]).reduce((s,p) => {
-      if (isLiabilityAcc(p.account_to)) return s - +p.amount;
-      if (isLiabilityAcc(p.account_from)) return s + +p.amount;
-      return s;
-    }, 0);
-    const factOblChange = (txsCur||[]).reduce((s,t) => {
-      if (isLiabilityAcc(t.account_to)) return s - +t.amount;
-      if (isLiabilityAcc(t.account_from)) return s + +t.amount;
-      return s;
-    }, 0);
-    const creditGap = factOblChange - planOblChange;
+    if (ov) {
+      html += '<div style="' + CAP + ';margin:0 2px 8px">В среднем по ' + ov.n_months + ' мес.</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px">'
+        + card('Смещение', sp(ov.bias_pct) + '%', ov.bias_pct >= 0 ? 'в среднем завышаем' : 'в среднем занижаем', ec(ov.bias_pct))
+        + card('Промах на старте', ov.abs_start + '%', 'прогноз на 1-е число', ec(ov.abs_start))
+        + card('Промах в середине', ov.abs_mid + '%', 'прогноз на ~15-е', ec(ov.abs_mid))
+        + card('Покрытие ±80%', ov.coverage + '%', 'факт в σ-коридоре · норма ~80', Math.abs(ov.coverage - 80) <= 15 ? '#5E9B1E' : '#C0741A')
+        + (ov.confident_day ? card('День уверенности', ov.confident_day + '-е', '±10% и держится', '#0F243C') : '')
+        + '</div>';
+    }
 
-    // ── Runway calculations ──
-    // totalBalance = operative assets (already set above)
-    // Include obligations monthly change in expenses
-    const planMonthlyExp = (planCur||[])
-      .filter(p => p.account_to === 'Расход')
-      .reduce((s,p) => s + +p.amount, 0);
-    const planMonthlyObl = (planCur||[])
-      .filter(p => isLiabilityAcc(p.account_to))
-      .reduce((s,p) => s + +p.amount, 0); // planned debt repayments
-    const planMonthlyIncObl = (planCur||[])
-      .filter(p => isLiabilityAcc(p.account_from))
-      .reduce((s,p) => s + +p.amount, 0); // new obligations (credit spending)
-    const planMonthlyInc = (planCur||[])
-      .filter(p => p.account_from === 'Доход')
-      .reduce((s,p) => s + +p.amount, 0);
-
-    // Net monthly cash flow (negative = burning money)
-    // Expenses + new obligations - income - debt repayments from assets
-    const planTotalOut = planMonthlyExp + planMonthlyIncObl; // money leaving assets
-    const planTotalIn  = planMonthlyInc + planMonthlyObl;    // money coming to assets
-    const planNetFlow  = planTotalIn - planTotalOut;
-
-    // Runway = days until balance hits zero
-    // If net flow is negative, runway = balance / |net flow per day|
-    const planRunwayDays = planNetFlow >= 0
-      ? 999 // covers itself
-      : Math.max(0, Math.round(totalBalance / Math.abs(planNetFlow) * 30));
-
-    // ── Runway 2: Поведенческий ──
-    const monthlyVarExp = {};
-    allTxs.filter(t => t.account_to === 'Расход' && t.categories?.expense_type === 'variable').forEach(t => {
-      const key = t.date.substring(0,7);
-      monthlyVarExp[key] = (monthlyVarExp[key]||0) + +t.amount;
+    html += '<div style="' + CARD + ';overflow-x:auto;margin-bottom:22px">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:640px">'
+      + '<thead><tr style="background:#F1F5F9">'
+      + ['Месяц', 'Факт итог', 'Старт', 'Середина', 'Смещение', 'Увер.', '±80%', 'Сходимость']
+        .map((h, i) => '<th style="padding:10px 12px;text-align:' + (i === 0 ? 'left' : (i === 7 ? 'center' : 'right')) + ';' + CAP + '">' + h + '</th>').join('')
+      + '</tr></thead><tbody>';
+    months.forEach(m => {
+      html += '<tr style="border-top:1px solid #F1F5F9">'
+        + '<td style="padding:10px 12px;font-weight:600;color:#0F243C;white-space:nowrap">' + MN[m.month] + ' ' + m.year + '</td>'
+        + '<td style="padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums">' + f(m.actual) + ' ₽</td>'
+        + '<td style="padding:10px 12px;text-align:right;font-weight:600;color:' + ec(m.start_err_pct) + '">' + sp(m.start_err_pct) + '%</td>'
+        + '<td style="padding:10px 12px;text-align:right;font-weight:600;color:' + ec(m.mid_err_pct) + '">' + sp(m.mid_err_pct) + '%</td>'
+        + '<td style="padding:10px 12px;text-align:right;color:' + ec(m.bias_pct) + '">' + sp(m.bias_pct) + '%</td>'
+        + '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (m.confident_day ? m.confident_day + '-е' : '—') + '</td>'
+        + '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + m.coverage + '%</td>'
+        + '<td style="padding:6px 12px;text-align:center">' + spark(m.curve) + '</td>'
+        + '</tr>';
     });
-    const varMonths = Object.values(monthlyVarExp);
-    const avgVarExp = varMonths.length > 0 ? varMonths.reduce((s,v)=>s+v,0) / varMonths.length : 0;
+    html += '</tbody></table></div>';
 
-    const planFixedExp = (planCur||[])
-      .filter(p => p.account_to === 'Расход' && p.categories?.expense_type === 'fixed')
-      .reduce((s,p) => s + +p.amount, 0);
+    const leg = [
+      ['Смещение (bias)', 'Среднее отклонение прогноза от факта со знаком. <b>+</b> — модель систематически <b>завышает</b> траты (значит «Свободно» перестраховано). <b>−</b> — <b>занижает</b> (значит «Свободно» завышено — это опаснее, риск перерасхода).'],
+      ['Старт / Середина', 'Насколько прогноз промахнулся, если смотреть на 1-е и ~15-е число месяца (%). Ранний прогноз самый трудный: о самом месяце данных ещё нет, ставка тянется из прошлых 30 дней.'],
+      ['День уверенности', 'С какого дня месяца прогноз держится в пределах ±10% от факта и больше не выходит за них. Чем раньше — тем раньше цифре можно доверять.'],
+      ['Покрытие ±80%', 'Как часто факт попадал в наш σ-коридор (уверенность 80%). Хорошо около 80%: сильно меньше — коридор узкий (модель слишком уверена), сильно больше — широкий (перестраховка).'],
+      ['Сходимость', 'Кривая ошибки по дням (в %). Нулевая линия — идеальное попадание. Видно, как прогноз сходится к факту по мере месяца.'],
+    ];
+    html += '<div style="' + CAP + ';margin:0 2px 8px">Как читать метрики</div>'
+      + '<div style="' + CARD + ';padding:4px 18px 8px">'
+      + leg.map(l => '<div style="padding:12px 0;border-top:1px solid rgba(15,36,60,.06)"><div style="font-weight:600;font-size:13px;color:#0F243C;margin-bottom:3px">' + l[0] + '</div><div style="' + P + ';font-size:12.5px">' + l[1] + '</div></div>').join('')
+      + '</div>';
 
-    const behavMonthlyExp = planFixedExp + avgVarExp;
-    const behavTotalOut   = behavMonthlyExp + planMonthlyIncObl;
-    const behavTotalIn    = planMonthlyInc + planMonthlyObl;
-    const behavNetFlow    = behavTotalIn - behavTotalOut;
-    const behavRunwayDays = behavNetFlow >= 0
-      ? 999
-      : Math.max(0, Math.round(totalBalance / Math.abs(behavNetFlow) * 30));
-
-    // ── Colors ──
-    const netColor = netWorth >= 0 ? 'var(--income)' : 'var(--expense)';
-    const creditColor = creditGap > 5000 ? 'var(--expense)' : creditGap > 0 ? '#E65100' : 'var(--income)';
-    const runwayColor = d => d >= 999 ? 'var(--income)' : d > 180 ? 'var(--income)' : d > 90 ? '#E65100' : 'var(--expense)';
-    const runwayLabel = d => d >= 999 ? '∞' : d + ' дней';
-    const runwayNote = (d, flow) => d >= 999
-      ? 'доходы покрывают расходы'
-      : 'чистый поток: −' + fmtAmt(Math.abs(flow)) + ' ₽/мес';
-    const fmtAmt = n => new Intl.NumberFormat('ru-RU').format(Math.round(Math.abs(n)));
-    const fmtSign = n => (n >= 0 ? '+' : '−') + fmtAmt(n);
-
-    mc.innerHTML = `
-<div style="padding:20px 24px;max-width:960px">
-  <div class="topbar" style="margin-bottom:24px">
-    <div>
-      <div class="page-title">Лаборатория</div>
-      <div class="page-sub">Экспериментальная аналитика · только для тебя</div>
-    </div>
-    ${periodBtnHtml()}
-  </div>
-
-    ${(()=>{
-    if (month === 0) return '';
-    const isCurrent = year===today.getFullYear() && month===today.getMonth()+1;
-    const isPast = year < today.getFullYear() || (year===today.getFullYear() && month < today.getMonth()+1);
-    const dP = isCurrent ? today.getDate() : isPast ? daysInMonth : 0;
-    const dL = daysInMonth - dP;
-    const isExp=t=>t.account_to==='Расход';
-    const notEpis=t=>t.categories?.character!=='Эпизодический';
-    const notUncat=t=>t.categories?.subcategory!=='Не учтено';
-    const isVar=t=>t.categories?.expense_type==='variable';
-    const isFixed=t=>t.categories?.expense_type==='fixed';
-    const isEpis=t=>t.categories?.character==='Эпизодический';
-    const f=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Math.round(Math.abs(n)));
-    const tip=text=>'<span class="has-tooltip" style="display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:50%;border:1px solid var(--border2);font-size:9px;color:var(--text3);cursor:help;flex-shrink:0;margin-left:3px">?<span class="tooltip-text">'+text+'</span></span>';
-    const varFact=(txsCur||[]).filter(t=>isExp(t)&&isVar(t)&&notEpis(t)&&notUncat(t)).reduce((s,t)=>s+ +t.amount,0);
-    const varPerDay=dP>0?varFact/dP:0;
-    const cutoff=new Date(today); cutoff.setDate(cutoff.getDate()-30);
-    const var30=(allTxs||[]).filter(t=>isExp(t)&&isVar(t)&&notEpis(t)&&notUncat(t)&&new Date(t.date)>=cutoff&&new Date(t.date)<today).reduce((s,t)=>s+ +t.amount,0);
-    const normPerDay=var30>0?var30/30:varPerDay;
-    const weight=Math.min(dP/21,1);
-    const blendedPerDay=varPerDay*weight+normPerDay*(1-weight);
-    const varMonthlyBlended=blendedPerDay*daysInMonth;
-    const pctVsNorm=normPerDay>0?Math.round((varPerDay-normPerDay)/normPerDay*100):0;
-    const fixPlan=(planCur||[]).filter(p=>(isExp(p)&&isFixed(p)&&notEpis(p)&&notUncat(p))||isLiabilityAcc(p.account_to)).reduce((s,p)=>s+ +p.amount,0);
-    const operPlan=(planCur||[]).filter(p=>(isExp(p)&&notEpis(p)&&notUncat(p))||isLiabilityAcc(p.account_to)).reduce((s,p)=>s+ +p.amount,0);
-    const operForecast=varMonthlyBlended+fixPlan;
-    const operDiff=operForecast-operPlan;
-    const operDiffPct=operPlan>0?Math.round(operForecast/operPlan*100):0;
-    const operColor=operDiff<=0?'var(--income)':'var(--expense)';
-    const operBg=operDiff<=0?'rgba(5,150,105,0.1)':'rgba(220,38,38,0.1)';
-    const episItems=(planCur||[]).filter(p=>isExp(p)&&isEpis(p));
-    const episTotal=episItems.reduce((s,p)=>s+ +p.amount,0);
-    const episByCat={};
-    episItems.forEach(p=>{const k=p.categories?.subcategory||'Прочее';episByCat[k]=(episByCat[k]||0)+ +p.amount;});
-    const episRows=Object.entries(episByCat).map(([sub,amt])=>'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);padding:2px 0"><span>'+sub+'</span><span>'+f(amt)+' ₽</span></div>').join('');
-    const paceColor=pctVsNorm<=0?'var(--income)':'var(--expense)';
-    const paceBg=pctVsNorm<=0?'rgba(5,150,105,0.1)':'rgba(220,38,38,0.1)';
-    const paceIcon=pctVsNorm<=0?'↓':'↑';
-    const totalIfAll=operForecast+episTotal;
-    window._labTxs=txsCur; window._labPlan=planCur;
-    return '<div class="card" style="margin-bottom:14px;padding:16px 20px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><span class="card-title">Прогноз расходов</span><span style="font-size:11px;color:var(--text3)">'+(isCurrent ? dP+' дней прошло из '+daysInMonth : isPast ? 'месяц завершён' : 'будущий месяц')+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:0.5px solid var(--border)">'
-        +'<div><div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text)">Повседневные переменные'+tip('Экстраполяция фактического темпа на оставшиеся дни')+'<button onclick="openLabModalVar(window._labTxs)" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-family:inherit">детали →</button></div>'
-        +'<div style="margin-top:4px;display:flex;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text3)">Темп: '+f(varPerDay)+' ₽/день</span>'
-        +'<span style="font-size:11px;font-weight:500;color:'+paceColor+';background:'+paceBg+';padding:1px 6px;border-radius:20px">'+paceIcon+Math.abs(pctVsNorm)+'% vs норма</span></div>'
-        +'<div style="font-size:11px;color:var(--text3);margin-top:2px">Норма: '+f(normPerDay)+' ₽/день · вес месяца: '+Math.round(weight*100)+'%'+(weight<1?' (смешанный прогноз)':'')+' </div></div>'
-        +'<div style="text-align:right;flex-shrink:0;padding-left:16px"><div style="font-size:16px;font-weight:500;color:var(--text)">'+f(varMonthlyBlended)+' ₽</div><div style="font-size:11px;color:var(--text3)">к концу месяца</div></div>'
-      +'</div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:0.5px solid var(--border)">'
-        +'<div><div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text)">Фиксированные и обязательства'+tip('Плановые фиксированные расходы и обязательства за месяц')+'<button onclick="openLabModalFix(window._labPlan)" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-family:inherit">детали →</button></div>'
-        +'<div style="font-size:11px;color:var(--text3);margin-top:4px">По плану — гарантированы</div></div>'
-        +'<div style="text-align:right;flex-shrink:0;padding-left:16px"><div style="font-size:16px;font-weight:500;color:var(--text)">'+f(fixPlan)+' ₽</div><div style="font-size:11px;color:var(--text3)">по плану</div></div>'
-      +'</div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0'+(episTotal>0?';border-bottom:0.5px solid var(--border)':'')+'">'
-        +'<div><div style="font-size:14px;font-weight:500;color:var(--text)">Операционный прогноз</div>'
-        +'<div style="display:flex;align-items:center;gap:6px;margin-top:3px"><span style="font-size:11px;color:var(--text3)">план: '+f(operPlan)+' ₽</span>'
-        +'<span style="font-size:11px;font-weight:500;color:'+operColor+';background:'+operBg+';padding:1px 6px;border-radius:20px">'+operDiffPct+'% от плана</span></div></div>'
-        +'<div style="font-size:20px;font-weight:500;color:var(--text)">'+f(operForecast)+' ₽</div>'
-      +'</div>'
-      +(episTotal>0?'<div style="background:var(--bg2);border-radius:var(--radius-sm);padding:10px 12px;margin-top:2px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-          +'<div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text)">Эпизодические'+tip('Запланированные разовые расходы — могут случиться или нет')+'<button onclick="openLabModalEpis(window._labPlan)" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;font-family:inherit">детали →</button></div>'
-          +'<div style="font-size:11px;color:var(--text3);margin-top:3px">Запланированы, но могут не случиться</div>'
-          +'<div style="margin-top:8px">'+episRows+'</div></div>'
-          +'<div style="text-align:right;flex-shrink:0;padding-left:16px"><div style="font-size:16px;font-weight:500;color:var(--text3)">'+f(episTotal)+' ₽</div>'
-          +'<div style="font-size:11px;color:var(--text3)">ожидаемые</div></div>'
-        +'</div></div>'
-        +'<div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px">'
-          +'<span style="font-size:12px;color:var(--text3)">Итого если всё случится</span>'
-          +'<span style="font-size:14px;font-weight:500;color:var(--text3)">'+f(totalIfAll)+' ₽</span>'
-        +'</div>':'')
-    +'</div>';
-  })()}
-
-  <div style="font-size:11px;color:var(--text3);padding:8px 0;line-height:1.6">
-    ⚗ Экспериментальная страница. Следующие блоки: Pattern Detector, Scenario Simulator, Точность прогноза.
-  </div>
-
-</div>`;
-
-  } catch(e) {
+    html += '</div>';
+    mc.innerHTML = html;
+  } catch (e) {
     mc.innerHTML = '<div style="padding:20px;color:var(--expense)">Ошибка: ' + e.message + '</div>';
     console.error(e);
   }
