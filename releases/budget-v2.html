@@ -8139,8 +8139,8 @@ async function loadLab() {
       html += '<tr style="border-top:1px solid #F1F5F9">'
         + '<td style="padding:10px 12px;font-weight:600;color:#0F243C;white-space:nowrap">' + MN[m.month] + ' ' + m.year + '</td>'
         + '<td style="padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums">' + f(m.actual) + ' ₽</td>'
-        + '<td style="padding:10px 12px;text-align:right;font-weight:600;color:' + ec(m.start_err_pct) + '">' + sp(m.start_err_pct) + '%</td>'
-        + '<td style="padding:10px 12px;text-align:right;font-weight:600;color:' + ec(m.mid_err_pct) + '">' + sp(m.mid_err_pct) + '%</td>'
+        + '<td style="padding:10px 12px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums"><div style="font-weight:600;color:#0F243C">' + f(m.start_forecast) + ' ₽</div><div style="font-size:11px;font-weight:600;color:' + ec(m.start_err_pct) + '">' + sp(m.start_err_pct) + '%</div></td>'
+        + '<td style="padding:10px 12px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums"><div style="font-weight:600;color:#0F243C">' + f(m.mid_forecast) + ' ₽</div><div style="font-size:11px;font-weight:600;color:' + ec(m.mid_err_pct) + '">' + sp(m.mid_err_pct) + '%</div></td>'
         + '<td style="padding:10px 12px;text-align:right;color:' + ec(m.bias_pct) + '">' + sp(m.bias_pct) + '%</td>'
         + '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + (m.confident_day ? m.confident_day + '-е' : '—') + '</td>'
         + '<td style="padding:10px 12px;text-align:right;color:var(--text2)">' + m.coverage + '%</td>'
@@ -8151,7 +8151,7 @@ async function loadLab() {
 
     const leg = [
       ['Смещение (bias)', 'Среднее отклонение прогноза от факта со знаком. <b>+</b> — модель систематически <b>завышает</b> траты (значит «Свободно» перестраховано). <b>−</b> — <b>занижает</b> (значит «Свободно» завышено — это опаснее, риск перерасхода).'],
-      ['Старт / Середина', 'Насколько прогноз промахнулся, если смотреть на 1-е и ~15-е число месяца (%). Ранний прогноз самый трудный: о самом месяце данных ещё нет, ставка тянется из прошлых 30 дней.'],
+      ['Старт / Середина', 'Сам прогноз итога месяца (₽) на 1-е и ~15-е число, и под ним промах от факта (%). Ранний прогноз самый трудный: о самом месяце данных ещё нет, ставка тянется из прошлых 30 дней.'],
       ['День уверенности', 'С какого дня месяца прогноз держится в пределах ±10% от факта и больше не выходит за них. Чем раньше — тем раньше цифре можно доверять.'],
       ['Покрытие ±80%', 'Как часто факт попадал в наш σ-коридор (уверенность 80%). Хорошо около 80%: сильно меньше — коридор узкий (модель слишком уверена), сильно больше — широкий (перестраховка).'],
       ['Сходимость', 'Кривая ошибки по дням (в %). Нулевая линия — идеальное попадание. Видно, как прогноз сходится к факту по мере месяца.'],

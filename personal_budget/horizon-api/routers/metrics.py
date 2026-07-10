@@ -992,7 +992,7 @@ async def backtest(request: Request):
                 err = forecast - actual
                 band = Z_80 * (sig * math.sqrt(d_left) if d_left > 0 else 0.0)
                 per_day.append({
-                    "day": d.day, "err": err,
+                    "day": d.day, "err": err, "forecast": round(forecast),
                     "err_pct": round(err / actual * 100, 1),
                     "in_band": abs(err) <= band,
                 })
@@ -1005,6 +1005,8 @@ async def backtest(request: Request):
             months.append({
                 "year": cur.year, "month": cur.month,
                 "actual": round(actual),
+                "start_forecast": per_day[0]["forecast"],
+                "mid_forecast":   per_day[len(per_day) // 2]["forecast"],
                 "start_err_pct": per_day[0]["err_pct"],
                 "mid_err_pct":   per_day[len(per_day) // 2]["err_pct"],
                 "bias":     round(bias),
