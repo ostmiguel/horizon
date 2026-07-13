@@ -336,14 +336,25 @@ async def confirm(body: ResolveBody, request: Request):
           occ_date=$6, title=$7, amount=$8, resolution=$9, tx_id=$10, created_at=NOW()
     """, user_id, body.kind, body.ref_id, yy, mm, occ_d, title, amount, body.resolution, tx_id)
 
-    # снять материализованную occurrence, чтобы STS/прогноз не задваивали
-    if body.kind == "rule":
+    # Плановую строку НЕ удаляем — она нужна Аналитике/Сводке как «что планировалось».
+    # Из прогноза/«Свободно» она исключается фильтром NOT_CONFIRMED (по plan_confirmations),
+    # так что задвоения план+факт нет. Для правила-occurrence при paid/manual ставим
+    # pinned=true, чтобы перештамповка (materialize) её не снесла. skip — это отмена,
+    # там строку по-прежнему убираем.
+    if body.resolution == "skip":
+        if body.kind == "rule":
+            await db.execute("""
+                DELETE FROM plan WHERE user_id=$1 AND source_rule_id=$2
+                  AND EXTRACT(YEAR FROM date)::int=$3 AND EXTRACT(MONTH FROM date)::int=$4
+            """, user_id, body.ref_id, yy, mm)
+        else:
+            await db.execute("DELETE FROM plan WHERE user_id=$1 AND id=$2", user_id, body.ref_id)
+    elif body.kind == "rule":
         await db.execute("""
-            DELETE FROM plan WHERE user_id=$1 AND source_rule_id=$2
+            UPDATE plan SET pinned=true WHERE user_id=$1 AND source_rule_id=$2
               AND EXTRACT(YEAR FROM date)::int=$3 AND EXTRACT(MONTH FROM date)::int=$4
         """, user_id, body.ref_id, yy, mm)
-    else:
-        await db.execute("DELETE FROM plan WHERE user_id=$1 AND id=$2", user_id, body.ref_id)
+    # kind='plan', paid/manual: строку оставляем как есть (materialize её не трогает).
 
     return {"ok": True, "tx_id": tx_id}
 
