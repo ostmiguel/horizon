@@ -10,6 +10,7 @@ from metrics_core import (
     account_balances, flow_daily_rate, monthly_income_sum,
     monthly_fixed_income_sum, monthly_planned_fixed_income, monthly_expense_sum,
     plan_remaining, plan_window, safe_to_spend, today_unrealized_planned,
+    NOT_CONFIRMED,
 )
 from plan_materialize import ensure_materialized, current_and_next_month
 
@@ -142,13 +143,14 @@ async def get_metrics(request: Request):
 
     # Плановый runway: liquid / (F_remain_month_full + V_plan_month)
     # F_remain_month_full = все плановые обязательные за месяц (не только остаток)
-    plan_month_all = await db.fetch("""
+    plan_month_all = await db.fetch(f"""
         SELECT p.account_to, c.expense_type AS cat_expense_type, c.character AS cat_character,
                SUM(p.amount) AS total
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1
           AND EXTRACT(YEAR FROM p.date)=$2 AND EXTRACT(MONTH FROM p.date)=$3
+          {NOT_CONFIRMED}
         GROUP BY p.account_to, c.expense_type, c.character
     """, user_id, year, month)
     plan_fixed_month = sum(
@@ -275,7 +277,7 @@ async def get_metrics(request: Request):
         # график кредита), включая тело долга (Обязательства) и процент (Расход).
         # Правила — основа плана: есть план → показываем его, иначе поведение/факт.
         # Считаем по (категория, характер), чтобы фронт корректно суммировал плечи.
-        plan_cat_total = float(await db.fetchval("""
+        plan_cat_total = float(await db.fetchval(f"""
             SELECT COALESCE(SUM(p.amount), 0)
             FROM plan p
             JOIN categories c ON p.category_id = c.id
@@ -286,6 +288,7 @@ async def get_metrics(request: Request):
               AND (p.account_to = 'Расход'
                    OR p.account_to IN (SELECT name FROM accounts
                                        WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
+              {NOT_CONFIRMED}
         """, user_id, year, month, r["category"], r["cat_char"]) or 0)
 
         if is_variable_everyday and d_left > 0:
@@ -340,7 +343,7 @@ async def get_metrics(request: Request):
 
     # Категории с планом (правила/график кредита), но без факта в этом месяце —
     # оба плеча: тело долга (Обязательства) и процент/расход (Расход).
-    plan_extra_cats = await db.fetch("""
+    plan_extra_cats = await db.fetch(f"""
         SELECT c.category, c.character AS cat_char, c.expense_type AS cat_expense_type,
                SUM(p.amount) AS plan_total
         FROM plan p
@@ -351,6 +354,7 @@ async def get_metrics(request: Request):
           AND (p.account_to = 'Расход'
                OR p.account_to IN (SELECT name FROM accounts
                                    WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
+          {NOT_CONFIRMED}
         GROUP BY c.category, c.character, c.expense_type
     """, user_id, year, month)
     for r in plan_extra_cats:
@@ -617,7 +621,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
         cur = date(cur.year + (1 if cur.month == 12 else 0), 1 if cur.month == 12 else cur.month + 1, 1)
 
     # 2) Разовые плановые события (эпизодические, ручные) — не из правил, не кредиты
-    oneoffs = await db.fetch("""
+    oneoffs = await db.fetch(f"""
         SELECT p.date, p.amount, p.account_from, p.account_to,
                c.expense_type AS et, c.character AS ch
         FROM plan p
@@ -625,6 +629,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
         WHERE p.user_id=$1 AND p.date > $2 AND p.date <= $3
           AND p.source_rule_id IS NULL
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
+          {NOT_CONFIRMED}
     """, user_id, today, horizon_end)
     for r in oneoffs:
         amt = float(r["amount"]); af = r["account_from"]; at = r["account_to"]

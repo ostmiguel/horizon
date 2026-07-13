@@ -17,6 +17,16 @@ FLOW_CHARS     = ('flow', 'Повседневный')        # повседне�
 EPISODIC_CHARS = ('episodic', 'Эпизодический')   # эпизодические (variable по типу, но отделены)
 FIXED_CHARS    = ('fixed', 'Фиксированный')
 
+# Плановая строка «подтверждена» (реальная операция уже её представляет), если для
+# неё есть запись в plan_confirmations. ПРОГНОЗНЫЕ чтения плана её ИСКЛЮЧАЮТ — иначе
+# задвоение план+факт. Требует алиас p с полями id, source_rule_id, date, user_id.
+# (Аналитика/Сводка читают plan напрямую БЕЗ этого фильтра — им план нужен целиком.)
+NOT_CONFIRMED = """AND NOT EXISTS (SELECT 1 FROM plan_confirmations pc WHERE pc.user_id = p.user_id
+            AND ((pc.kind = 'plan' AND pc.ref_id = p.id)
+              OR (pc.kind = 'rule' AND pc.ref_id = p.source_rule_id
+                  AND pc.year = EXTRACT(YEAR FROM p.date)::int
+                  AND pc.month = EXTRACT(MONTH FROM p.date)::int)))"""
+
 
 # ── Чистые помощники ──────────────────────────────────────────────────────────
 def month_context(d=None):
@@ -153,7 +163,7 @@ async def monthly_planned_fixed_income(db, user_id: str, year: int, month: int) 
     """Плановый (бюджетный) фиксированный доход месяца — из plan-строк дохода с
     character='Фиксированный'. Для DSR: у кого зарплата приходит частями, факт в
     первой половине месяца неполный и завышает нагрузку; бюджетная сумма стабильна."""
-    val = await db.fetchval("""
+    val = await db.fetchval(f"""
         SELECT COALESCE(SUM(p.amount), 0) FROM plan p
         JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1
@@ -161,6 +171,7 @@ async def monthly_planned_fixed_income(db, user_id: str, year: int, month: int) 
           AND EXTRACT(MONTH FROM p.date)=$3
           AND p.account_from = 'Доход'
           AND c.character = 'Фиксированный'
+          {NOT_CONFIRMED}
     """, user_id, year, month)
     return float(val)
 
@@ -174,11 +185,12 @@ async def remaining_planned_income_by_cat(db, user_id: str, year: int, month: in
     он уже в балансе (B0). Один источник и для пилюли «Доходы» (сумма), и для её
     детализации по клику (список) — чтобы не расходились.
     """
-    plan_rows = await db.fetch("""
+    plan_rows = await db.fetch(f"""
         SELECT COALESCE(c.category, '') AS cat, COALESCE(SUM(p.amount), 0) AS amt
         FROM plan p LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1 AND EXTRACT(YEAR FROM p.date)=$2 AND EXTRACT(MONTH FROM p.date)=$3
           AND p.account_from = 'Доход'
+          {NOT_CONFIRMED}
         GROUP BY COALESCE(c.category, '')
     """, user_id, year, month)
     fact_rows = await db.fetch("""
@@ -209,11 +221,12 @@ async def today_unrealized_planned(db, user_id: str, today: date,
     проводки факта вклад стал 0 (без двойного счёта). Повседневное сюда не входит —
     оно в r_var.
     """
-    plan = await db.fetch("""
+    plan = await db.fetch(f"""
         SELECT p.account_from AS af, p.account_to AS at, p.amount,
                c.expense_type AS et, c.character AS ch
         FROM plan p LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1 AND p.date=$2
+          {NOT_CONFIRMED}
     """, user_id, today)
     fact = await db.fetch("""
         SELECT t.account_from AS af, t.account_to AS at, t.amount,
@@ -256,7 +269,7 @@ async def monthly_expense_sum(db, user_id: str, year: int, month: int) -> float:
 
 
 async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -> list:
-    rows = await db.fetch("""
+    rows = await db.fetch(f"""
         SELECT p.date, p.amount, p.account_from, p.account_to,
                c.category AS cat_category,
                c.character AS cat_character,
@@ -267,6 +280,7 @@ async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -
           AND EXTRACT(YEAR  FROM p.date)=$2
           AND EXTRACT(MONTH FROM p.date)=$3
           AND p.date > $4
+          {NOT_CONFIRMED}
     """, user_id, year, month, today)
     return [dict(r) for r in rows]
 
@@ -274,7 +288,7 @@ async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -
 async def plan_window(db, user_id: str, after: date, until: date) -> list:
     """Плановые строки в (after, until] — для расчёта «до следующего дохода».
     Окно может выходить за границу месяца (план следующего месяца)."""
-    rows = await db.fetch("""
+    rows = await db.fetch(f"""
         SELECT p.date, p.amount, p.account_from, p.account_to,
                c.category AS cat_category,
                c.character AS cat_character,
@@ -282,6 +296,7 @@ async def plan_window(db, user_id: str, after: date, until: date) -> list:
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1 AND p.date > $2 AND p.date <= $3
+          {NOT_CONFIRMED}
         ORDER BY p.date
     """, user_id, after, until)
     return [dict(r) for r in rows]
