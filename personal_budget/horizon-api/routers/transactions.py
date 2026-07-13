@@ -122,10 +122,24 @@ async def get_transactions(
         conditions.append(f"EXTRACT(MONTH FROM t.date) = ${i}")
         params.append(month); i += 1
 
+    # Для плановых строк прицепляем статус подтверждения (paid|manual|skip|None),
+    # чтобы Бюджет отличал уже проведённые события от предстоящих. Только для plan —
+    # у transactions нет source_rule_id.
+    conf_select = ""
+    if plan:
+        conf_select = """,
+               (SELECT pc.resolution FROM plan_confirmations pc
+                WHERE pc.user_id = t.user_id
+                  AND ((pc.kind = 'plan' AND pc.ref_id = t.id)
+                    OR (pc.kind = 'rule' AND pc.ref_id = t.source_rule_id
+                        AND pc.year = EXTRACT(YEAR FROM t.date)::int
+                        AND pc.month = EXTRACT(MONTH FROM t.date)::int))
+                LIMIT 1) AS confirmation"""
+
     where = " AND ".join(conditions)
     rows = await db.fetch(f"""
         SELECT t.*,
-               c.group_name, c.category, c.subcategory, c.character, c.expense_type
+               c.group_name, c.category, c.subcategory, c.character, c.expense_type{conf_select}
         FROM {table} t
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE {where}
