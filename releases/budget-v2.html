@@ -9418,8 +9418,8 @@ async function saveOpsTx() {
   try {
     const date  = document.getElementById('opsFDate')?.value;
     const amt   = evalAmountExpr(document.getElementById('opsFAmount')?.value);
-    const from  = document.getElementById('opsFFrom')?.value;
-    const to    = document.getElementById('opsFTo')?.value;
+    let   from  = document.getElementById('opsFFrom')?.value;
+    let   to    = document.getElementById('opsFTo')?.value;
     const note  = document.getElementById('opsFNote')?.value || null;
     const catId = parseInt(document.getElementById('opsFCat')?.value) || null;
 
@@ -9429,6 +9429,17 @@ async function saveOpsTx() {
     if (from === to) {
       toast('Счёт откуда и куда не могут совпадать', false); if (btn) btn.disabled = false; return;
     }
+
+    if (_opsFormType === 'obligation' && catId) {
+      const cat = cats.find(c => c.id === catId);
+      const oriented = _orientObligation(cat && cat.subcategory, from, to);
+      if (oriented && oriented.error) {
+        toast('Для «Долга» выбери один счёт-долг (кредит/займ/Дебиторка) и один обычный счёт', false);
+        if (btn) btn.disabled = false; return;
+      }
+      if (oriented) { from = oriented.from; to = oriented.to; }
+    }
+
     const res = await fetch('/api/transactions', {
       method: 'POST', credentials: 'include',
       headers: {'Content-Type':'application/json'},
@@ -9451,14 +9462,25 @@ async function updateOpsTx(id) {
   try {
     const date  = document.getElementById('opsFDate')?.value;
     const amt   = evalAmountExpr(document.getElementById('opsFAmount')?.value);
-    const from  = document.getElementById('opsFFrom')?.value;
-    const to    = document.getElementById('opsFTo')?.value;
+    let   from  = document.getElementById('opsFFrom')?.value;
+    let   to    = document.getElementById('opsFTo')?.value;
     const note  = document.getElementById('opsFNote')?.value || null;
     const catId = parseInt(document.getElementById('opsFCat')?.value) || null;
 
     if (!date || !amt || amt <= 0) {
       toast('Заполни обязательные поля', false); if (btn) btn.disabled = false; return;
     }
+
+    if (_opsFormType === 'obligation' && catId) {
+      const cat = cats.find(c => c.id === catId);
+      const oriented = _orientObligation(cat && cat.subcategory, from, to);
+      if (oriented && oriented.error) {
+        toast('Для «Долга» выбери один счёт-долг (кредит/займ/Дебиторка) и один обычный счёт', false);
+        if (btn) btn.disabled = false; return;
+      }
+      if (oriented) { from = oriented.from; to = oriented.to; }
+    }
+
     const res = await fetch('/api/transactions/' + id, {
       method: 'PATCH', credentials: 'include',
       headers: {'Content-Type':'application/json'},
