@@ -9430,7 +9430,7 @@ async function saveOpsTx() {
       toast('Счёт откуда и куда не могут совпадать', false); if (btn) btn.disabled = false; return;
     }
 
-    if (_opsFormType === 'obligation' && catId) {
+    if (_opsFormType === 'debt' && catId) {
       const cat = cats.find(c => c.id === catId);
       const oriented = _orientObligation(cat && cat.subcategory, from, to);
       if (oriented && oriented.error) {
@@ -9471,7 +9471,7 @@ async function updateOpsTx(id) {
       toast('Заполни обязательные поля', false); if (btn) btn.disabled = false; return;
     }
 
-    if (_opsFormType === 'obligation' && catId) {
+    if (_opsFormType === 'debt' && catId) {
       const cat = cats.find(c => c.id === catId);
       const oriented = _orientObligation(cat && cat.subcategory, from, to);
       if (oriented && oriented.error) {
