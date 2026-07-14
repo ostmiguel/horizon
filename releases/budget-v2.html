@@ -8964,8 +8964,14 @@ async function loadOperations() {
       // Долговые операции (вкл. кредиты) — направленные: долговой счёт-ИСТОЧНИК →
       //   деньги приходят (заняли/вернули нам) → +;  иначе деньги уходят (тело/процент/выдал) → −
       if (type === 'obligation') {
-        type = 'debt';
-        debtDir = isDebtAcc(t.account_from) ? 'received' : 'paid';
+        // Долг ↔ долг (перекредитование, ошибка ввода) — деньги не двигались:
+        // это перекладывание обязательства, в доход/расход дня попадать не должно.
+        if (isDebtAcc(t.account_from) && isDebtAcc(t.account_to)) {
+          type = 'transfer';
+        } else {
+          type = 'debt';
+          debtDir = isDebtAcc(t.account_from) ? 'received' : 'paid';
+        }
       } else if (type === 'transfer' && reserveNames.has(t.account_to)) {
         reserve = true;
       }
