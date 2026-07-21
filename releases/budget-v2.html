@@ -7758,7 +7758,11 @@ async function renderPendingPayments() {
     return;
   }
 
-  const payAccs = (accounts_cache || []).filter(a => a.account_type === 'Актив' && a.used_for_payment !== false && a.is_active !== false);
+  // Платить можно с любого счёта, помеченного как платёжный, — включая кредитки
+  // (Пассив): оплата с кредитки увеличивает долг, это законный расход. Фильтр
+  // держим таким же, как в форме расхода на Операциях, иначе счёт виден там, но
+  // недоступен здесь.
+  const payAccs = (accounts_cache || []).filter(a => a.account_type !== 'Поток' && a.used_for_payment !== false && a.is_active !== false);
 
   const rows = items.map((it, i) => {
     const rsv = it.is_reserve;
@@ -7842,8 +7846,11 @@ function _payBody(i, withEdits) {
   const s = document.getElementById('payAcc-' + i);
   if (s && s.value) body.account_from = s.value;
   if (it.kind === 'loan' && !body.account_from) {
-    const payAccs = (accounts_cache || []).filter(x => x.account_type === 'Актив' && x.used_for_payment !== false && x.is_active !== false);
-    body.account_from = (payAccs[0] && payAccs[0].name) || null;
+    // умолчание: сначала обычный счёт (гасить кредит с кредитки молча не стоит),
+    // но если платёжным помечен только пассивный — берём его, чем падать с ошибкой
+    const pay = (accounts_cache || []).filter(x => x.account_type !== 'Поток' && x.used_for_payment !== false && x.is_active !== false);
+    const first = pay.find(x => x.account_type === 'Актив') || pay[0];
+    body.account_from = (first && first.name) || null;
     if (!body.account_from) { toast('Нет счёта для оплаты', false); return null; }
   }
   return body;
