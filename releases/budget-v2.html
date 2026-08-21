@@ -1896,7 +1896,9 @@ async function loadDashboard() {
     const totalLiabilities = (accs||[])
       .filter(a => a.account_type === 'Пассив' && a.is_active !== false)
       .reduce((s,a) => s + +a.current_balance, 0);
-    const totalBalance = totalAssets - Math.abs(totalLiabilities);
+    // Обязательства хранятся отрицательными (должен → минус), поэтому капитал =
+    // активы + знаковые пассивы. abs() ломался бы на переплаченном (плюсовом) долге.
+    const totalBalance = totalAssets + totalLiabilities;
 
     // Store both values globally for KPI toggle
     window._balValues = { operative: operativeBalance, total: totalBalance };
@@ -4534,7 +4536,10 @@ function debtMenu(btn, id) {
 // Остаток обязательства из его счёта-Пассива (ledger), если счёт создан; иначе null.
 function oblOwed(name) {
   const a = (accounts_cache || []).find(x => x.name === name && x.account_type === 'Пассив');
-  return a ? Math.abs(+a.current_balance || 0) : null;
+  // Долг = отрицательный баланс Пассива. Остаток = сколько ещё должен, ≥ 0.
+  // При полном возврате/переплате баланс достигает 0 или уходит в плюс —
+  // остаток тогда 0 (переплату abs НЕ должен показывать как новый долг).
+  return a ? Math.max(0, -(+a.current_balance || 0)) : null;
 }
 
 // Единый «текущий остаток» обязательства — им живут карточка, KPI, симуляция
@@ -4610,8 +4615,8 @@ function repayDebt(id) {
   mo.className = 'modal-overlay open';
   mo.innerHTML = `<div class="modal">
     <div class="modal-title">Погасить долг — ${esc(debt.name)}</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Остаток: ${fmt(+debt.current_balance)}</div>
-    <div class="field" style="margin-bottom:12px"><div class="field-label">Сумма погашения, ₽</div><input class="field-input" type="number" id="rdAmount" placeholder="${Math.round(+debt.current_balance)}"></div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Остаток: ${fmt(oblRemaining(debt))}</div>
+    <div class="field" style="margin-bottom:12px"><div class="field-label">Сумма погашения, ₽</div><input class="field-input" type="number" id="rdAmount" placeholder="${Math.round(oblRemaining(debt))}"></div>
     <div class="field" style="margin-bottom:8px"><div class="field-label">Списать со счёта</div><select class="field-input" id="rdAccount">${opts}</select></div>
     <div class="modal-btns">
       <button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Отмена</button>
@@ -4627,12 +4632,14 @@ async function saveRepayDebt(id, btn) {
   const acc = document.getElementById('rdAccount').value;
   if (!debt || isNaN(amount) || amount <= 0 || !acc) { toast('Укажи сумму и счёт', false); return; }
   const today = new Date().toISOString().split('T')[0];
+  // Кредитуем САМ счёт-долг (Пассив), а не ретайренный пул «Обязательства»:
+  // карта → счёт-долг, тогда его леджер-баланс растёт к 0 и остаток обновляется.
   const { error } = await sb.from('transactions').insert({
-    date: today, amount, account_from: acc, account_to: 'Обязательства',
+    date: today, amount, account_from: acc, account_to: debt.name,
     note: 'Погашение долга: ' + debt.name, source: 'manual', use_in_forecast: true
   });
   if (error) { toast('Ошибка: ' + error.message, false); return; }
-  const newBal = Math.max(0, (+debt.current_balance) - amount);
+  const newBal = Math.max(0, oblRemaining(debt) - amount);
   await sb.from('loans').update({ current_balance: newBal }).eq('id', id);
   btn.closest('.modal-overlay').remove();
   toast('✓ Погашение внесено');
