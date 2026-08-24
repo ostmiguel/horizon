@@ -59,6 +59,28 @@ def _rate_ok(key: str, limit: int, window: int):
     return True, 0
 
 
+# ── Базовые защитные HTTP-заголовки на ВСЕ ответы ────────────────────────────
+# Регистрируется внешним слоем (последним в main.py) → оборачивает и ранние
+# 401/429/403 из AuthMiddleware. CSP пока НЕ включаем: SPA инлайнит JS/CSS и
+# тянет внешние шрифты/иконки — строгая политика без self-host обесценится
+# 'unsafe-inline'. Вводим CSP после переноса шрифтов/иконок на self-host.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=(), payment=(), usb=()",
+    "Strict-Transport-Security": "max-age=15768000; includeSubDomains",
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        for k, v in SECURITY_HEADERS.items():
+            response.headers.setdefault(k, v)
+        return response
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
