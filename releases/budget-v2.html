@@ -7566,11 +7566,15 @@ async function loadDashboardNew() {
       ? `<div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:100%;background:${C[nc.status]};border-radius:2px"></div></div>`
       : `<div class="kpi-sub" style="color:#5E9B1E">▲ гасишь тело ~${f(dsr.monthly_payments)}/мес → растёт</div>`;
 
-    const dsrW     = Math.min(Math.round(dsr.value / 50 * 100), 100);
+    // status 'unknown' — дохода нет нигде, а платежи есть: доля не определена.
+    // Показывать «0% / Комфортно» опасно, поэтому — «—» и нейтральный «нет данных».
+    const dsrUnknown = dsr.status === 'unknown';
+    const dsrW     = dsrUnknown ? 0 : Math.min(Math.round(dsr.value / 50 * 100), 100);
     const dsrOk    = dsr.status === 'green';
-    const dsrColor = dsrOk ? '#0F243C' : '#B0492A';
-    const dsrSubText = dsrOk ? 'Комфортно · ниже 30%' : 'Высокая · норма ниже 30%';
-    const dsrSubColor = dsrOk ? '#5e9b1d' : '#B0492A';
+    const dsrColor = dsrUnknown ? '#93A1B5' : (dsrOk ? '#0F243C' : '#B0492A');
+    const dsrValTxt = dsrUnknown ? '—' : dsr.value + '%';
+    const dsrSubText = dsrUnknown ? 'Нет данных · укажи доход' : (dsrOk ? 'Комфортно · ниже 30%' : 'Высокая · норма ниже 30%');
+    const dsrSubColor = dsrUnknown ? '#93A1B5' : (dsrOk ? '#5e9b1d' : '#B0492A');
 
     const runPlan  = Math.min(Math.round(run.planned_months   / 12 * 100), 100);
     const runBeh   = Math.min(Math.round(run.behavioral_months / 12 * 100), 100);
@@ -7693,7 +7697,7 @@ async function loadDashboardNew() {
         </div>
         <div class="card">
           <div class="kpi-label">Кредитная нагрузка</div>
-          <div class="kpi-val" style="font-size:22px;color:${dsrColor}">${dsr.value}%</div>
+          <div class="kpi-val" style="font-size:22px;color:${dsrColor}">${dsrValTxt}</div>
           <div class="kpi-sub" style="margin-bottom:4px">${f(dsr.monthly_payments)} ₽/мес · ${dsr.income_kind === 'total' ? 'от общего дохода' : 'от фикс. дохода'}</div>
           <div style="font-size:11.5px;color:${dsrSubColor};font-weight:600;margin-bottom:8px">${dsrSubText}</div>
           <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
@@ -8707,6 +8711,7 @@ async function mobileHome() {
   const ncVal = +nc.value || 0, ncNeg = ncVal < 0;
   const ncDisp = (ncNeg ? '−' : '') + (Math.abs(ncVal) >= 1e6 ? (Math.abs(ncVal) / 1e6).toFixed(2).replace('.', ',') + ' млн' : f(ncVal) + ' ₽');
   const dsrV = +dsr.value || 0, resV = +res.value || 0;
+  const dsrUnk = dsr.status === 'unknown';   // дохода нет → доля не определена
   const ncD = (typeof nc.delta_pct === 'number') ? nc.delta_pct : null;
 
   const CARD = 'flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:11px 11px 12px;min-height:90px;display:flex;flex-direction:column';
@@ -8714,7 +8719,7 @@ async function mobileHome() {
   const VAL  = c => `font-family:Sora,sans-serif;font-weight:600;font-size:18px;color:${c};letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums;white-space:nowrap`;
   // Чистый капитал — без прогресс-бара (непонятно «прогресс от чего»); вместо него — динамика за месяц.
   const ncCard = `<div style="${CARD}"><div style="${LBL}">Чистый капитал</div><div style="${VAL(ncNeg ? '#A8472F' : 'var(--text)')}">${ncDisp}</div>${ncD === null ? '' : `<div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${ncD >= 0 ? '#5E9B1E' : '#A8472F'}">${ncD >= 0 ? '▲' : '▼'} ${Math.abs(ncD).toFixed(0)}% за месяц</div>`}</div>`;
-  const dsrCard = `<div style="${CARD}"><div style="${LBL}">Кредитная нагрузка</div><div style="${VAL(dsrV > 30 ? '#A8472F' : 'var(--text)')}">${dsrV} %</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:auto;overflow:hidden"><div style="height:100%;width:${Math.min(dsrV, 100)}%;border-radius:99px;background:${dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)'}"></div></div></div>`;
+  const dsrCard = `<div style="${CARD}"><div style="${LBL}">Кредитная нагрузка</div><div style="${VAL(dsrUnk ? '#93A1B5' : (dsrV > 30 ? '#A8472F' : 'var(--text)'))}">${dsrUnk ? '—' : dsrV + ' %'}</div><div style="height:5px;border-radius:99px;background:rgba(15,36,60,.08);margin-top:auto;overflow:hidden"><div style="height:100%;width:${dsrUnk ? 0 : Math.min(dsrV, 100)}%;border-radius:99px;background:${dsrV > 30 ? 'linear-gradient(90deg,#C98A3A,#B4472E)' : 'linear-gradient(90deg,#1FA497,#9FC22A)'}"></div></div></div>`;
   const resLbl = resV >= 7 ? 'Высокая' : resV >= 4 ? 'Средняя' : 'Низкая';
   const resLblCol = resV >= 7 ? '#5E9B1E' : resV >= 4 ? '#C98A3A' : '#B4472E';
   const resCard = `<div style="${CARD}"><div style="${LBL}">Устойчивость</div><div style="display:flex;align-items:flex-start;justify-content:space-between;margin-top:7px"><div style="font-family:Sora,sans-serif;font-weight:600;font-size:18px;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums">${resV.toFixed(1).replace('.', ',')}</div><div style="width:38px;height:38px;border-radius:50%;margin-top:-6px;background:conic-gradient(${resV >= 7 ? '#9FC22A' : resV >= 4 ? '#C98A3A' : '#B4472E'} ${Math.round(Math.min(resV, 10) * 10)}%,rgba(15,36,60,.1) 0);display:grid;place-items:center;flex:none"><div style="width:28px;height:28px;border-radius:50%;background:var(--bg2)"></div></div></div><div style="font-size:10.5px;font-weight:600;margin-top:auto;padding-top:8px;color:${resLblCol}">${resLbl}</div></div>`;

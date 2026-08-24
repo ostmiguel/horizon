@@ -121,13 +121,20 @@ async def get_metrics(request: Request):
     # Если фиксированный доход нигде не размечен — деградируем к общему доходу,
     # чтобы не показывать обманчивые 0%/«зелёный» при наличии долговых платежей.
     dsr_base = dsr_income if dsr_income > 0 else cur_income
-    dsr = monthly_payments / dsr_base if dsr_base > 0 else 0.0
-    if dsr < 0.30:
-        dsr_status = "green"
-    elif dsr <= 0.45:
-        dsr_status = "yellow"
+    if dsr_base > 0:
+        dsr = monthly_payments / dsr_base
+        if dsr < 0.30:
+            dsr_status = "green"
+        elif dsr <= 0.45:
+            dsr_status = "yellow"
+        else:
+            dsr_status = "red"
     else:
-        dsr_status = "red"
+        # Дохода нет нигде → доля не определена. С платежами по долгам показывать
+        # «0% / зелёный» опасно (обманчиво спокойно): отдаём статус 'unknown',
+        # фронт покажет «нет данных». Без платежей 0% честно — обслуживать нечего.
+        dsr = 0.0
+        dsr_status = "green" if monthly_payments <= 0 else "unknown"
 
     # ── §4.7 Runway (behavioral + planned) ───────────────────────────────────
     liquid = B0 + reserve_balance
