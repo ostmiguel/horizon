@@ -1782,7 +1782,7 @@ async function loadDashboard() {
                     <div class="acc-left">
                       <div class="acc-dot" style="background:${a.color||'#888'}"></div>
                       <div>
-                        <div class="acc-name">${a.name}</div>
+                        <div class="acc-name">${esc(a.name)}</div>
                         <div style="font-size:9px;color:var(--text3)">${a.account_type}</div>
                       </div>
                     </div>
@@ -2204,7 +2204,7 @@ async function loadDashboard() {
               const [cat, amt] = sortedCats[idx];
               const pct = expense > 0 ? (amt/expense*100).toFixed(1) : 0;
               center.innerHTML = `
-                <div style="font-size:9px;color:var(--text3);text-align:center;padding:0 8px;line-height:1.3">${cat}</div>
+                <div style="font-size:9px;color:var(--text3);text-align:center;padding:0 8px;line-height:1.3">${esc(cat)}</div>
                 <div style="font-size:14px;font-weight:600;color:var(--text);font-family:Sora,sans-serif">${fmt(amt)}</div>
                 <div style="font-size:11px;color:var(--text3)">${pct}%</div>`;
             } else {
@@ -2476,7 +2476,7 @@ function showCalDay(day, year, month) {
     const type = getFlowType(t.account_from, t.account_to);
     const color = type==='income'?'var(--income)':type==='obligation'?'#E65100':'var(--expense)';
     const cat = t.categories?.subcategory || t.account_to;
-    html += `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:12px;color:var(--text2)">${cat}</span><span style="font-size:12px;font-weight:500;color:${color}">${fmt2(t.amount)} ₽</span></div>`;
+    html += `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border)"><span style="font-size:12px;color:var(--text2)">${esc(cat)}</span><span style="font-size:12px;font-weight:500;color:${color}">${fmt2(t.amount)} ₽</span></div>`;
   });
   det.innerHTML = html;
 }
@@ -2569,7 +2569,7 @@ async function loadReferences() {
             <thead><tr><th>Имя</th><th style="text-align:center">По умолч.</th><th></th></tr></thead>
             <tbody>
               ${(parts||[]).map(p=>`<tr>
-                <td><span class="color-dot" style="background:${p.color||'#888'}"></span>${p.name}</td>
+                <td><span class="color-dot" style="background:${p.color||'#888'}"></span>${esc(p.name)}</td>
                 <td style="text-align:center">
                   <label class="toggle">
                     <input type="checkbox" ${p.is_default?'checked':''} onchange="toggleParticipantDefault(${p.id},this.checked)">
@@ -2651,7 +2651,7 @@ function renderAccRows(rows) {
     ondragleave="onAccDragLeave(event)"
     ondrop="onAccDrop(event,${a.id})">
     <td style="width:24px;padding:0 4px"><span class="drag-handle" title="Перетащи для сортировки">⠿</span></td>
-    <td><span class="color-dot" style="background:${a.color||'#888'}"></span>${a.name}</td>
+    <td><span class="color-dot" style="background:${a.color||'#888'}"></span>${esc(a.name)}</td>
     <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--text3)">${fmt(a.initial_balance)}</td>
     ${balCell}
     <td style="text-align:center">
@@ -2697,8 +2697,8 @@ async function togglePayment(id, val) {
 function renderCatRows(rows) {
   if (!rows.length) return '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Нет категорий</td></tr>';
   return rows.map(c => `<tr data-cat-id="${c.id}">
-    <td>${c.category}</td>
-    <td style="color:var(--text2)">${c.subcategory}${c.role?' <span class="tag" style="font-size:9px;color:var(--text3)" title="Системная категория — используется приложением, удаление запрещено">сист.</span>':''}</td>
+    <td>${esc(c.category)}</td>
+    <td style="color:var(--text2)">${esc(c.subcategory)}${c.role?' <span class="tag" style="font-size:9px;color:var(--text3)" title="Системная категория — используется приложением, удаление запрещено">сист.</span>':''}</td>
     <td><span class="tag">${c.group_name}</span></td>
     <td>${c.character?`<span class="tag">${c.character}</span>`:'—'}</td>
     <td style="text-align:right">
@@ -2867,7 +2867,7 @@ async function editAccount(id) {
     <div class="modal-title">Редактировать счёт</div>
     ${isRenameOnly ? '<div style="font-size:11px;color:var(--accent);padding:6px 0 10px">Системный счёт — можно изменить только название и цвет</div>' : ''}
     ${isSystemAcc && !isRenameOnly ? '<div style="font-size:11px;color:var(--text3);padding:6px 0 10px">Системный счёт — редактирование ограничено</div>' : ''}
-    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eAccName" value="${acc.name}" ${isSystemAcc && !isRenameOnly ? 'disabled' : ''}/></div>
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eAccName" value="${esc(acc.name)}" ${isSystemAcc && !isRenameOnly ? 'disabled' : ''}/></div>
     ${!isSystemAcc ? `<div class="field"><div class="field-label">Начальный остаток</div><input class="field-input" type="number" id="eAccBal" value="${acc.initial_balance}"/></div>` : `<input type="hidden" id="eAccBal" value="${acc.initial_balance}">`}
     <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="eAccColor" value="${acc.color||'#0E7490'}"/></div>
     ${!isSystemAcc ? `<div class="field"><div class="field-label">В оперативный баланс</div>
@@ -2987,8 +2987,8 @@ function editCat(id) {
   if (!targetRow) return;
 
   targetRow.innerHTML = `
-    <td><input class="field-input" id="eCat_${id}" value="${c.category}" style="padding:4px 8px;font-size:12px;width:130px"></td>
-    <td><input class="field-input" id="eSub_${id}" value="${c.subcategory}" style="padding:4px 8px;font-size:12px;width:140px"></td>
+    <td><input class="field-input" id="eCat_${id}" value="${esc(c.category)}" style="padding:4px 8px;font-size:12px;width:130px"></td>
+    <td><input class="field-input" id="eSub_${id}" value="${esc(c.subcategory)}" style="padding:4px 8px;font-size:12px;width:140px"></td>
     <td><input class="field-input" id="eGrp_${id}" value="${c.group_name}" style="padding:4px 8px;font-size:12px;width:130px"></td>
     <td><select class="field-select" id="eChr_${id}" style="padding:4px 8px;font-size:12px;width:140px">
       ${['Повседневный','Фиксированный','Эпизодический'].map(v=>`<option${c.character===v?' selected':''}>${v}</option>`).join('')}
@@ -3166,7 +3166,7 @@ function buildBalanceHint(factData, planData, lineLabels, plan, txs, today, peri
     const daysLeft = Math.round((new Date(p.date) - today) / 86400000);
     const when = daysLeft === 1 ? 'Завтра' : `${pd.getDate()} ${monthNames2[pd.getMonth()+1]}`;
     const subcat = p.categories?.subcategory || p.account_to;
-    lines.push({cls:'bell', text: `${when} плановый платёж: ${subcat} ${fmt(p.amount)} — убедись что деньги на счёте`});
+    lines.push({cls:'bell', text: `${when} плановый платёж: ${esc(subcat)} ${fmt(p.amount)} — убедись что деньги на счёте`});
   }
 
   // ── Check 3: today's spending vs daily limit ──
@@ -3270,7 +3270,7 @@ function setQmType(type) {
   const fromSel   = document.getElementById('qmFrom');
   const toSel     = document.getElementById('qmTo');
 
-  const makeOpts = (list) => list.map(a => `<option value="${a.name}">${a.name}</option>`).join('');
+  const makeOpts = (list) => list.map(a => `<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
 
   if (type === 'income') {
     fromSel.innerHTML = '<option value="Доход">Доход</option>';
@@ -3308,7 +3308,7 @@ function setQmType(type) {
       if (type === 'obligation') return c.group_name === 'Обязательства' || c.group_name === 'Дебиторка';
       return false;
     });
-    const optHtmlQm = c => `<option value="${c.id}" data-cat="${c.category}">${esc(c.subcategory)}</option>`;
+    const optHtmlQm = c => `<option value="${c.id}" data-cat="${esc(c.category)}">${esc(c.subcategory)}</option>`;
     if (type === 'expense') {
       const { recent, frequent, rest } = getSmartCats(filtered);
       let html = '<option value="">— выбери —</option>';
@@ -4735,9 +4735,9 @@ function openEditLoan(id) {
   if (!loan) return;
   document.getElementById('mainContent').innerHTML = `
 <div style="padding:20px 24px;max-width:560px">
-  <div class="page-title" style="margin-bottom:18px">Редактировать — ${loan.name}</div>
+  <div class="page-title" style="margin-bottom:18px">Редактировать — ${esc(loan.name)}</div>
   <div class="g2" style="gap:12px;margin-bottom:12px">
-    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eName" value="${loan.name}"></div>
+    <div class="field"><div class="field-label">Название</div><input class="field-input" id="eName" value="${esc(loan.name)}"></div>
     <div class="field"><div class="field-label">Цвет</div><input class="field-input" type="color" id="eColor" value="${loan.color||'#e24b4a'}"></div>
   </div>
   <div class="g2" style="gap:12px;margin-bottom:12px">
@@ -7316,7 +7316,7 @@ function renderWaterfall(steps) {
     const sign = it.type === 'add' ? '+' : it.type === 'sub' ? '−' : '';
     const lblColor = (it.type === 'start' || it.type === 'end') ? '#0F243C' : it.type === 'add' ? '#6FA01A' : '#2E8FA8';
     lbls += `<text x="${cx}" y="${(+barT - 7).toFixed(0)}" fill="${lblColor}" font-size="12.5" font-weight="600" text-anchor="middle" font-family="Sora,sans-serif">${sign}${fmt(it.value)}</text>`;
-    xLbl += `<text x="${cx}" y="${VH - 8}" fill="#93A1B5" font-size="11" text-anchor="middle">${it.label}</text>`;
+    xLbl += `<text x="${cx}" y="${VH - 8}" fill="#93A1B5" font-size="11" text-anchor="middle">${esc(it.label)}</text>`;
 
     if (i < items.length - 1) {
       const nextBx = pL + (i + 1) * colW + bOff;
@@ -7421,7 +7421,7 @@ window.anDonutHover = function(id, i) {
   const meta = (window._anDonut || {})[id]; if (!meta) return;
   const seg = meta.rows[i]; if (!seg) return;
   const c = document.getElementById(id + '-c');
-  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:${seg.color};line-height:1.2;max-width:98px;word-break:break-word">${seg.name}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#0F243C;font-variant-numeric:tabular-nums;margin-top:1px">${seg.val.toLocaleString('ru-RU')}</div><div style="font-size:11px;color:#93A1B5">${seg.pct}%</div>`;
+  if (c) c.innerHTML = `<div style="font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:${seg.color};line-height:1.2;max-width:98px;word-break:break-word">${esc(seg.name)}</div><div style="font-family:Sora,sans-serif;font-weight:700;font-size:16px;color:#0F243C;font-variant-numeric:tabular-nums;margin-top:1px">${seg.val.toLocaleString('ru-RU')}</div><div style="font-size:11px;color:#93A1B5">${seg.pct}%</div>`;
   // Подсветка без сдвига: наведённый сегмент яркий, остальные приглушены (не двигаем геометрию → нет мигания на границе).
   (meta.rows || []).forEach((_, j) => { const el = document.getElementById(id + '-s' + j); if (el) el.style.opacity = j === i ? '1' : '.4'; });
 };
@@ -7617,7 +7617,7 @@ async function loadDashboardNew() {
         : `<span style="font-size:12.5px;font-family:Sora,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap"><b style="color:${col}">${f(c.rem)} ₽</b> <span style="color:var(--text3)">осталось</span>${c.behind ? ' <span style="color:#B0492A;font-weight:700" title="тратишь быстрее плана">⚠</span>' : ''}</span>`;
       return `<div onclick="openCatDrill('${esc(c.name)}','${_ostYm}','expense')" style="padding:9px 0;cursor:pointer${i ? ';border-top:1px solid rgba(15,36,60,.05)' : ''}">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px">
-          <span style="font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name}</span>${right}
+          <span style="font-size:12.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</span>${right}
         </div>
         <div style="position:relative;height:6px;background:#EDF1F6;border-radius:99px">
           <div style="position:absolute;left:0;top:0;height:100%;width:${c.over ? 0 : (c.remPct * 100).toFixed(1)}%;background:${col};border-radius:99px"></div>
@@ -7642,7 +7642,7 @@ async function loadDashboardNew() {
           : `<span style="color:var(--text3)">Срок появится, когда месяц выйдет в плюс.</span>`;
         stepHtml = `<div class="step">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Следующий шаг</div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${goal.name}</div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${esc(goal.name)}</div>
           <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${etaText}</div>
           <div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:4px">
             <div style="height:100%;width:${goal.pct}%;background:linear-gradient(90deg,var(--accent),var(--lm));border-radius:4px"></div>
@@ -7967,12 +7967,12 @@ function wfPillClick(type) {
   if (type === 'balance') {
     const accs = m.safe_to_spend?.b0_accounts || [];
     html = accs.length
-      ? accs.map(a => `<div class="wf-det-row"><span>${a.name}</span><span style="font-weight:600;color:${a.balance < 0 ? '#B0492A' : 'var(--text)'}">${a.balance < 0 ? '−' : ''}${fv(a.balance)} ₽</span></div>`).join('')
+      ? accs.map(a => `<div class="wf-det-row"><span>${esc(a.name)}</span><span style="font-weight:600;color:${a.balance < 0 ? '#B0492A' : 'var(--text)'}">${a.balance < 0 ? '−' : ''}${fv(a.balance)} ₽</span></div>`).join('')
       : '<div class="wf-det-hint">Нет операционных счетов</div>';
   } else if (type === 'income') {
     const items = det.income_items || [];
     html = items.length
-      ? items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:#5E9B1E">+${fv(it.amount)} ₽</span></div>`).join('')
+      ? items.map(it => `<div class="wf-det-row"><span>${esc(it.category)}</span><span style="font-weight:600;color:#5E9B1E">+${fv(it.amount)} ₽</span></div>`).join('')
       : '<div class="wf-det-hint">Плановых поступлений до конца месяца нет</div>';
   } else if (type === 'fixed') {
     const items = det.fixed_items || [];
@@ -7981,7 +7981,7 @@ function wfPillClick(type) {
     } else {
       const fixed    = items.filter(it => it.type === 'fixed');
       const episodic = items.filter(it => it.type === 'episodic');
-      const row = it => `<div class="wf-det-row"><span>${it.category}</span><span style="font-weight:600;color:#B0492A">−${fv(it.amount)} ₽</span></div>`;
+      const row = it => `<div class="wf-det-row"><span>${esc(it.category)}</span><span style="font-weight:600;color:#B0492A">−${fv(it.amount)} ₽</span></div>`;
       if (fixed.length)    html += `<div class="wf-det-section">Фиксированные</div>` + fixed.map(row).join('');
       if (episodic.length) html += `<div class="wf-det-section">Эпизодические</div>` + episodic.map(row).join('');
     }
@@ -7989,12 +7989,12 @@ function wfPillClick(type) {
     const items = det.reserve_topup_items || [];
     html = items.length
       ? `<div class="wf-det-hint">Плановые пополнения резервных счетов до конца месяца:</div>` +
-        items.map(it => `<div class="wf-det-row"><span>${it.name}</span><span style="font-weight:600;color:#2F8FD4">−${fv(it.amount)} ₽</span></div>`).join('')
+        items.map(it => `<div class="wf-det-row"><span>${esc(it.name)}</span><span style="font-weight:600;color:#2F8FD4">−${fv(it.amount)} ₽</span></div>`).join('')
       : '<div class="wf-det-hint">Плановых пополнений резерва до конца месяца нет</div>';
   } else if (type === 'cushion') {
     const accs = det.cushion_accounts || [];
     html = `<div class="wf-det-hint">Неснижаемая подушка безопасности — вычитается из «Свободно», чтобы эти деньги никогда не тратились в текущем потоке.</div>`;
-    if (accs.length) html += accs.map(a => `<div class="wf-det-row"><span>${a.name}</span><span style="font-weight:600;color:#2F8FD4">${fv(a.balance)} ₽</span></div>`).join('');
+    if (accs.length) html += accs.map(a => `<div class="wf-det-row"><span>${esc(a.name)}</span><span style="font-weight:600;color:#2F8FD4">${fv(a.balance)} ₽</span></div>`).join('');
   } else if (type === 'variable') {
     const rate  = det.v_daily_rate || 0;
     const dLeft = det.d_left || 0;
@@ -8002,7 +8002,7 @@ function wfPillClick(type) {
     html = `<div class="wf-det-hint">Прогноз: ~${fv(rate)} ₽/день × ${dLeft} дней — по среднему за последние 30 дней</div>`;
     if (items.length) {
       html += '<div class="wf-det-section">Прогноз по категориям до конца месяца</div>';
-      html += items.map(it => `<div class="wf-det-row"><span>${it.category}</span><span style="color:#5E7088">−${fv(it.amount)} ₽</span></div>`).join('');
+      html += items.map(it => `<div class="wf-det-row"><span>${esc(it.category)}</span><span style="color:#5E7088">−${fv(it.amount)} ₽</span></div>`).join('');
     }
   }
 
@@ -9310,24 +9310,24 @@ function _buildOpsForm(type) {
   let fromOpts = '', toOpts = '';
   if (type === 'income') {
     fromOpts = `<option value="Доход">Доход</option>`;
-    toOpts   = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    toOpts   = realAccs.map(a => `<option>${esc(a.name)}</option>`).join('');
   } else if (type === 'expense') {
     // Только платёжные инструменты (used_for_payment): карты/наличные/резервы/кредитки.
     const payAccs = accounts_cache.filter(a => a.account_type !== 'Поток' && a.is_active !== false && a.used_for_payment !== false);
-    fromOpts = payAccs.map(a => `<option>${a.name}</option>`).join('');
+    fromOpts = payAccs.map(a => `<option>${esc(a.name)}</option>`).join('');
     toOpts   = `<option value="Расход">Расход</option>`;
   } else if (type === 'debt') {
     // «Долг» покрывает 4 действия (обязательства + дебиторка): взял/вернул/дал/
     // мне вернули. Направление задаёт КАТЕГОРИЯ, счета выбираешь сам — поэтому
     // Откуда/Куда открыты (пассивы + активы + Расход), без жёсткой привязки.
     const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
-    const liabOpts = liabs.map(a => `<option>${a.name}</option>`).join('');
-    const assetOpts = realAccs.map(a => `<option>${a.name}</option>`).join('');
+    const liabOpts = liabs.map(a => `<option>${esc(a.name)}</option>`).join('');
+    const assetOpts = realAccs.map(a => `<option>${esc(a.name)}</option>`).join('');
     fromOpts = liabOpts + assetOpts;
     toOpts   = liabOpts + `<option value="Расход">Расход</option>` + assetOpts;
   } else {
-    fromOpts = allAccs.map(a => `<option>${a.name}</option>`).join('');
-    toOpts   = allAccs.map(a => `<option>${a.name}</option>`).join('');
+    fromOpts = allAccs.map(a => `<option>${esc(a.name)}</option>`).join('');
+    toOpts   = allAccs.map(a => `<option>${esc(a.name)}</option>`).join('');
   }
 
   const typeBtns = [
