@@ -6181,9 +6181,9 @@ async function loadBudget() {
             'доходы − расходы − проценты · тело нейтрально')
       + '</div>'
       + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
-      + bgtBlock('#2AA7CC', 'Регулярные', 'повторяющиеся платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml)
-      + bgtBlock('#1FA497', 'Повседневные', 'месячный бюджет против трат', '+ Добавить', 'openAddEnvelope()', envRowsHtml)
-      + bgtBlock('#8FBE1E', 'Разовые', 'разовые операции месяца', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml);
+      + bgtBlock('#2AA7CC', 'Расходы · Регулярные', 'повторяющиеся платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml)
+      + bgtBlock('#1FA497', 'Расходы · Повседневные', 'месячный бюджет против трат', '+ Добавить', 'openAddEnvelope()', envRowsHtml)
+      + bgtBlock('#8FBE1E', 'Расходы · Разовые', 'разовые операции месяца', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml);
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
