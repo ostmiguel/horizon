@@ -604,7 +604,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
             if af == "Доход" and at in op_set:
                 add(d, amt)
             elif af in op_set and (at == "Расход" or at in liability_names):
-                is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
+                is_var = (at == "Расход" and r["ch"] == "Повседневный")
                 if not is_var:
                     add(d, -amt)
             elif af in op_set and at in reserve_names:
@@ -629,7 +629,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
         if af == "Доход" and at in op_set:
             add(r["date"], amt)
         elif af in op_set and (at == "Расход" or at in liability_names):
-            is_var = (at == "Расход" and r["et"] == "variable" and r["ch"] not in EPISODIC_CHARS)
+            is_var = (at == "Расход" and r["ch"] == "Повседневный")
             if not is_var:
                 add(r["date"], -amt)
         elif af in op_set and at in reserve_names:
