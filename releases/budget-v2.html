@@ -3571,8 +3571,18 @@ function calcWhatIf(loans, sorted, extraMonthly) {
   const base = simPayoff(0);
   const wx   = simPayoff(extraMonthly);
 
-  // Экономия месяцев — разница одного движка (≥ 0). Дата с допом = график − экономия.
-  const savedMonths = Math.max(0, base.lastMonths - wx.lastMonths);
+  // График вводится вручную из банковского → симуляция аннуитетом с ним не совпадает
+  // (дрейф). Поэтому экономию берём как ДОЛЮ ускорения (base−wx)/base — дрейф в этом
+  // отношении сокращается — и прикладываем к РЕАЛЬНОМУ сроку графика. Тогда дата с
+  // допом = график − доля·срок и всегда в диапазоне [сегодня, график].
+  const now = new Date();
+  const schedMonths = withoutDate
+    ? Math.max(0, (withoutDate.getFullYear() - now.getFullYear()) * 12 + (withoutDate.getMonth() - now.getMonth()))
+    : base.lastMonths;
+  const savedFrac = base.lastMonths > 0
+    ? Math.min(1, Math.max(0, (base.lastMonths - wx.lastMonths) / base.lastMonths))
+    : 0;
+  const savedMonths = Math.round(schedMonths * savedFrac);
   let withDate = withoutDate ? new Date(withoutDate) : new Date();
   withDate.setMonth(withDate.getMonth() - savedMonths);
 
