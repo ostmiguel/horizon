@@ -3516,13 +3516,12 @@ function calcInterestPaid(loans) {
 }
 
 function calcWhatIf(loans, sorted, extraMonthly) {
-  // Simulate payoff with extra payment using actual schedule balance data
-  // Returns { closeDateWith, closeDateWithout, savedMonths, savedInterest, steps }
+  // Возвращает { withDate, withoutDate, savedMonths, savedInterest, instrSteps, series }
   if (!extraMonthly || extraMonthly <= 0) return null;
 
-  const rate = (l) => +l.rate / 12;
-
-  // Without extra: use last row date from each loan
+  // База «свободен от кредитов» — из графика амортизации (истина, совпадает с
+  // таблицей платежей). Симуляцию НЕ используем как базу: у неё плоский платёж и
+  // она дрейфует от графика, из-за чего доп. платёж мог «отдалять» дату.
   let withoutDate = null;
   loans.forEach(l => {
     if (l._lastRow?.date) {
@@ -3531,66 +3530,59 @@ function calcWhatIf(loans, sorted, extraMonthly) {
     }
   });
 
-  // With extra: simulate month by month using current balances
-  const steps = [];
-  let extraPool = extraMonthly;
-  let maxEndDate = null;
-
-  const simLoans = sorted.map(l => ({
-    id: l.id, name: l.name, color: l.color||'#888',
-    bal: oblRemaining(l), rate: +l.rate/12,
-    pmt: +(l._nextRow?.payment || l.monthly_payment),
-    done: false, monthsDone: 0
-  }));
-
-  // Find the one that gets the extra payment (first in sorted order)
-  let targetIdx = simLoans.findIndex(l => !l.done);
-  let totalInterestWith = 0;
-  let month = 0;
-  // Помесячная суммарная траектория остатка (для графика). [0] = сейчас.
-  const series = [ simLoans.reduce((s,l) => s + l.bal, 0) ];
-
-  while (simLoans.some(l => !l.done) && month < 600) {
-    month++;
-    // Pay minimum on all, extra on target
-    simLoans.forEach((l, i) => {
-      if (l.done) return;
-      const intP = l.bal * l.rate;
-      const extra = (i === targetIdx) ? extraPool : 0;
-      const pmt = Math.min(l.pmt + extra, l.bal + intP);
-      const princ = pmt - intP;
-      totalInterestWith += intP;
-      l.bal = Math.max(0, l.bal - princ);
-      if (l.bal < 1) {
-        l.done = true;
-        l.monthsDone = month;
-        // When this loan closes, add its payment to the pool
-        if (i === targetIdx) {
-          extraPool += l.pmt;
-          targetIdx = simLoans.findIndex(sl => !sl.done);
+  // Один движок симуляции — прогоняем и с extra=0 (база), и с допом. «Экономия»
+  // = ЧЕСТНАЯ разница месяцев/процентов одного метода (а не сравнение разных).
+  const simPayoff = (extra0) => {
+    const simLoans = sorted.map(l => ({
+      id: l.id, bal: oblRemaining(l), rate: +l.rate/12,
+      pmt: +(l._nextRow?.payment || l.monthly_payment),
+      done: false, monthsDone: 0
+    }));
+    let extraPool = extra0;
+    let targetIdx = simLoans.findIndex(l => !l.done);
+    let totalInterest = 0, month = 0;
+    const series = [ simLoans.reduce((s,l) => s + l.bal, 0) ];
+    while (simLoans.some(l => !l.done) && month < 600) {
+      month++;
+      simLoans.forEach((l, i) => {
+        if (l.done) return;
+        const intP = l.bal * l.rate;
+        const extra = (i === targetIdx) ? extraPool : 0;
+        const pmt = Math.min(l.pmt + extra, l.bal + intP);
+        const princ = pmt - intP;
+        totalInterest += intP;
+        l.bal = Math.max(0, l.bal - princ);
+        if (l.bal < 1) {
+          l.done = true; l.monthsDone = month;
+          if (i === targetIdx) {
+            extraPool += l.pmt;
+            targetIdx = simLoans.findIndex(sl => !sl.done);
+          }
         }
-      }
-    });
-    series.push(simLoans.reduce((s,l) => s + (l.done ? 0 : l.bal), 0));
-  }
+      });
+      series.push(simLoans.reduce((s,l) => s + (l.done ? 0 : l.bal), 0));
+    }
+    const lastMonths = Math.max(0, ...simLoans.map(l => l.monthsDone));
+    const monthsById = {};
+    simLoans.forEach(l => { monthsById[l.id] = l.monthsDone; });
+    return { lastMonths, totalInterest, series, monthsById };
+  };
 
-  const withDate = new Date();
-  const lastMonths = Math.max(...simLoans.map(l => l.monthsDone));
-  withDate.setMonth(withDate.getMonth() + lastMonths);
+  const base = simPayoff(0);
+  const wx   = simPayoff(extraMonthly);
 
-  const savedMonths = withoutDate
-    ? Math.round((withoutDate - withDate) / (1000*60*60*24*30))
-    : 0;
+  // Экономия месяцев — разница одного движка (≥ 0). Дата с допом = график − экономия.
+  const savedMonths = Math.max(0, base.lastMonths - wx.lastMonths);
+  let withDate = withoutDate ? new Date(withoutDate) : new Date();
+  withDate.setMonth(withDate.getMonth() - savedMonths);
 
-  const interestWithout = calcInterestRemaining(loans);
-  const savedInterest = Math.max(0, interestWithout - totalInterestWith);
+  const savedInterest = Math.max(0, base.totalInterest - wx.totalInterest);
 
-  // Build step-by-step instructions
+  // Пошаговые инструкции: относительные месяцы закрытия из траектории с допом.
   const instrSteps = [];
   let runningExtra = extraMonthly;
   sorted.forEach((loan, idx) => {
-    const sim = simLoans.find(s => s.id === loan.id);
-    const closeMonth = sim?.monthsDone || 0;
+    const closeMonth = wx.monthsById[loan.id] || 0;
     const closeD = new Date(); closeD.setMonth(closeD.getMonth() + closeMonth);
     instrSteps.push({
       loan, idx, extra: runningExtra, closeDate: closeD,
@@ -3599,9 +3591,8 @@ function calcWhatIf(loans, sorted, extraMonthly) {
     runningExtra += +(loan._nextRow?.payment || loan.monthly_payment);
   });
 
-  return { withDate, withoutDate, savedMonths, savedInterest, instrSteps, series };
+  return { withDate, withoutDate, savedMonths, savedInterest, instrSteps, series: wx.series };
 }
-
 function renderWhatIfBlock(loans, sorted) {
   const extra = window._loanExtra || 0;
   const result = extra > 0 ? calcWhatIf(loans, sorted, extra) : null;
@@ -3922,14 +3913,20 @@ function renderLoansChart(loans, sorted) {
   let whatif = null, wi = null;
   if (extra > 0) {
     wi = calcWhatIf(_loansData, sorted || credits, extra);
-    if (wi && wi.series && wi.series.length) {
+    if (wi && wi.series && wi.series.length && wi.withDate) {
       const t0 = new Date(todayStr + 'T00:00:00');
-      // Серия помесячная → раскладываем по датам оси через число прошедших месяцев
-      // (у кредитов разные дни платежа, поэтому индекс ≠ месяц).
+      // Кривую с допом РАСТЯГИВАЕМ на диапазон [сегодня, withDate], чтобы она
+      // достигала нуля ровно на исправленной дате закрытия (withDate = график −
+      // экономия), а не на сим-месяцах — иначе кривая противоречила бы подписи.
+      const span = wi.withDate - t0;
+      const lastI = wi.series.length - 1;
       whatif = dates.map((d, i) => {
         if (i < todayIdx) return null;
-        const mo = Math.round((new Date(d + 'T00:00:00') - t0) / (1000*60*60*24*30.44));
-        return wi.series[Math.min(Math.max(mo, 0), wi.series.length - 1)];
+        const dd = new Date(d + 'T00:00:00');
+        if (dd >= wi.withDate) return 0;
+        const f = span > 0 ? (dd - t0) / span : 0;
+        const idx = Math.round(f * lastI);
+        return wi.series[Math.min(Math.max(idx, 0), lastI)];
       });
     }
   }
