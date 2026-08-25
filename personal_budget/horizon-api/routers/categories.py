@@ -15,14 +15,12 @@ class CategoryCreate(BaseModel):
     category: str
     subcategory: str
     character: Optional[str] = None
-    expense_type: Optional[str] = None  # игнорируется: выводится из character
 
 class CategoryUpdate(BaseModel):
     group_name: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
     character: Optional[str] = None
-    expense_type: Optional[str] = None  # игнорируется: выводится из character
 
 @router.get("")
 async def get_categories(request: Request):

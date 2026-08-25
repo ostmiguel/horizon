@@ -50,7 +50,7 @@ async def _category_monthly_totals(db, user_id, category: str, max_months: int =
             SELECT COALESCE(SUM(t.amount), 0)
             FROM transactions t JOIN categories c ON t.category_id = c.id
             WHERE t.user_id=$1 AND c.category=$2 AND t.account_to='Расход'
-              AND c.expense_type='variable' AND c.character != 'Эпизодический'
+              AND c.character = 'Повседневный'
               AND EXTRACT(YEAR FROM t.date)=$3 AND EXTRACT(MONTH FROM t.date)=$4
         """, user_id, category, y, m)
         totals.append(float(v))
@@ -78,7 +78,7 @@ async def suggestions(request: Request, year: int = Query(...), month: int = Que
         SELECT DISTINCT c.category
         FROM transactions t JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1 AND t.account_to='Расход'
-          AND c.expense_type='variable' AND c.character != 'Эпизодический'
+          AND c.character = 'Повседневный'
           AND t.date >= (CURRENT_DATE - INTERVAL '6 months')
     """, user_id)
     result = []

@@ -151,26 +151,25 @@ async def get_metrics(request: Request):
     # Плановый runway: liquid / (F_remain_month_full + V_plan_month)
     # F_remain_month_full = все плановые обязательные за месяц (не только остаток)
     plan_month_all = await db.fetch(f"""
-        SELECT p.account_to, c.expense_type AS cat_expense_type, c.character AS cat_character,
+        SELECT p.account_to, c.character AS cat_character,
                SUM(p.amount) AS total
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1
           AND EXTRACT(YEAR FROM p.date)=$2 AND EXTRACT(MONTH FROM p.date)=$3
           {NOT_CONFIRMED}
-        GROUP BY p.account_to, c.expense_type, c.character
+        GROUP BY p.account_to, c.character
     """, user_id, year, month)
     plan_fixed_month = sum(
         float(r["total"]) for r in plan_month_all
         if r["account_to"] in liability_names
-        or r["cat_expense_type"] == "fixed"
+        or r["cat_character"] == "Фиксированный"
         or r["cat_character"] == "Эпизодический"
     )
     plan_variable_month = sum(
         float(r["total"]) for r in plan_month_all
         if r["account_to"] == "Расход"
-        and r["cat_expense_type"] == "variable"
-        and r["cat_character"] != "Эпизодический"
+        and r["cat_character"] == "Повседневный"
     )
     e_plan = plan_fixed_month + plan_variable_month
     planned_runway = max(liquid / e_plan if e_plan > 0 else 99.0, 0.0)
@@ -191,7 +190,7 @@ async def get_metrics(request: Request):
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
           AND t.account_to = 'Расход'
-          AND c.expense_type = 'fixed'
+          AND c.character = 'Фиксированный'
     """, user_id, year, month))
 
     cur_expenses = float(await db.fetchval("""
@@ -246,7 +245,7 @@ async def get_metrics(request: Request):
 
     # ── §4.6 Categories ───────────────────────────────────────────────────────
     cat_rows = await db.fetch("""
-        SELECT c.category, c.character AS cat_char, c.expense_type AS cat_expense_type,
+        SELECT c.category, c.character AS cat_char,
                SUM(t.amount) AS total
         FROM transactions t
         JOIN categories c ON t.category_id = c.id
@@ -256,7 +255,7 @@ async def get_metrics(request: Request):
           AND (t.account_to = 'Расход'
                OR t.account_to IN (SELECT name FROM accounts
                                    WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
-        GROUP BY c.category, c.character, c.expense_type
+        GROUP BY c.category, c.character
         ORDER BY total DESC
     """, user_id, year, month)
 
@@ -277,8 +276,7 @@ async def get_metrics(request: Request):
         fact = float(r["total"])
         cat_remaining = 0.0  # поведенческий остаток до конца месяца (только повседневные)
         is_variable_everyday = (
-            r["cat_expense_type"] == "variable"
-            and r["cat_char"] not in EPISODIC_CHARS
+            r["cat_char"] == "Повседневный"
         )
         # План категории за месяц = сумма материализованных плановых строк (правила +
         # график кредита), включая тело долга (Обязательства) и процент (Расход).
@@ -341,7 +339,6 @@ async def get_metrics(request: Request):
         categories.append({
             "category":        r["category"],
             "character":       r["cat_char"],
-            "expense_type":    r["cat_expense_type"],
             "amount_fact":     round(fact),
             "amount_forecast": round(forecast),
             "amount_plan":     round(plan_cat_total + env_amt),
@@ -351,7 +348,7 @@ async def get_metrics(request: Request):
     # Категории с планом (правила/график кредита), но без факта в этом месяце —
     # оба плеча: тело долга (Обязательства) и процент/расход (Расход).
     plan_extra_cats = await db.fetch(f"""
-        SELECT c.category, c.character AS cat_char, c.expense_type AS cat_expense_type,
+        SELECT c.category, c.character AS cat_char,
                SUM(p.amount) AS plan_total
         FROM plan p
         JOIN categories c ON p.category_id = c.id
@@ -362,11 +359,11 @@ async def get_metrics(request: Request):
                OR p.account_to IN (SELECT name FROM accounts
                                    WHERE user_id=$1 AND account_type='Пассив' AND is_active=true))
           {NOT_CONFIRMED}
-        GROUP BY c.category, c.character, c.expense_type
+        GROUP BY c.category, c.character
     """, user_id, year, month)
     for r in plan_extra_cats:
         if (r["category"], r["cat_char"]) not in seen_cat_chars:
-            is_var = r["cat_expense_type"] == "variable" and r["cat_char"] not in EPISODIC_CHARS
+            is_var = r["cat_char"] == "Повседневный"
             env_amt = 0.0
             if is_var and r["category"] in env_by_cat and r["category"] not in env_seen:
                 env_amt = env_by_cat[r["category"]]
@@ -374,8 +371,7 @@ async def get_metrics(request: Request):
             categories.append({
                 "category":        r["category"],
                 "character":       r["cat_char"],
-                "expense_type":    r["cat_expense_type"],
-                "amount_fact":     0,
+                    "amount_fact":     0,
                 "amount_forecast": round(float(r["plan_total"])),
                 "amount_plan":     round(float(r["plan_total"]) + env_amt),
                 "flow_remaining":  0,
@@ -388,7 +384,6 @@ async def get_metrics(request: Request):
             categories.append({
                 "category":        cat,
                 "character":       "Повседневный",
-                "expense_type":    "variable",
                 "amount_fact":     0,
                 "amount_forecast": round(bud),
                 "amount_plan":     round(bud),
@@ -404,8 +399,7 @@ async def get_metrics(request: Request):
           AND EXTRACT(YEAR  FROM t.date)=$2
           AND EXTRACT(MONTH FROM t.date)=$3
           AND t.account_to = 'Расход'
-          AND c.expense_type = 'variable'
-          AND c.character != 'Эпизодический'
+          AND c.character = 'Повседневный'
     """, user_id, year, month))
 
     # ── Waterfall detail (pill breakdowns) ───────────────────────────────────
@@ -418,7 +412,7 @@ async def get_metrics(request: Request):
     fixed_by_cat: dict[tuple, float] = {}
     for r in plan_rows:
         if r.get("account_to") == "Расход" and (
-            r.get("cat_expense_type") == "fixed"
+            r.get("cat_character") == "Фиксированный"
             or r.get("cat_character") in EPISODIC_CHARS
         ):
             cat  = r.get("cat_category") or "Расходы"
@@ -447,8 +441,7 @@ async def get_metrics(request: Request):
     var_remaining = [
         {"category": c["category"], "amount": float(c.get("flow_remaining", 0))}
         for c in categories
-        if c.get("expense_type") == "variable"
-        and c.get("character") not in EPISODIC_CHARS
+        if c.get("character") == "Повседневный"
         and c.get("flow_remaining", 0) > 0
     ]
     sum_remaining = sum(x["amount"] for x in var_remaining)
@@ -590,7 +583,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
     # 1) Регулярные правила → раскладываем по месяцам
     rules = await db.fetch("""
         SELECT pr.id AS rule_id, pr.amount, pr.account_from, pr.account_to, pr.day_of_month,
-               c.expense_type AS et, c.character AS ch
+               c.character AS ch
         FROM plan_rules pr
         LEFT JOIN categories c ON pr.category_id = c.id
         WHERE pr.user_id=$1 AND pr.is_active=true
@@ -623,7 +616,7 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
     # 2) Разовые плановые события (эпизодические, ручные) — не из правил, не кредиты
     oneoffs = await db.fetch(f"""
         SELECT p.date, p.amount, p.account_from, p.account_to,
-               c.expense_type AS et, c.character AS ch
+               c.character AS ch
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1 AND p.date > $2 AND p.date <= $3
@@ -755,8 +748,8 @@ async def get_forecast(request: Request, range: str = "30"):
         if d <= today or d > end_date:
             continue
         amount = float(r["amount"]); af = r.get("account_from", ""); at = r.get("account_to", "")
-        cat_et = r.get("cat_expense_type"); cat_ch = r.get("cat_character", "")
-        is_var = (at == "Расход" and cat_et == "variable" and cat_ch not in EPISODIC_CHARS)
+        cat_ch = r.get("cat_character", "")
+        is_var = (at == "Расход" and cat_ch == "Повседневный")
         if af == "Доход" and at in op_names:
             plan_fixed_by_date[d] = plan_fixed_by_date.get(d, 0) + amount
         elif af in op_names and (at == "Расход" or at in liability_names):
@@ -968,7 +961,7 @@ async def backtest(request: Request):
         SELECT t.date AS d, SUM(t.amount) AS total
         FROM transactions t LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id = $1 AND t.account_to = 'Расход'
-          AND c.expense_type = 'variable' AND c.character <> 'Эпизодический'
+          AND c.character = 'Повседневный'
         GROUP BY t.date ORDER BY t.date
     """, user_id)
     daily = {r["d"]: float(r["total"]) for r in rows}

@@ -5173,7 +5173,7 @@ async function loadSummary() {
     metrics.categories.forEach(c => {
       mFcByCat[c.category] = (mFcByCat[c.category] || 0) + (+c.amount_forecast || 0);
       mSumForecast += (+c.amount_forecast || 0);
-      if (c.expense_type === 'variable' && c.character !== 'Эпизодический') mVarCats.add(c.category);
+      if (c.character === 'Повседневный') mVarCats.add(c.category);
     });
   }
   const savAcc  = new Set((accs||[]).filter(a => a.account_type === 'Актив' && !a.include_in_balance).map(a => a.name));
@@ -5932,7 +5932,7 @@ async function loadBudget() {
     // ── конверты: только ПОВСЕДНЕВНАЯ часть категории (variable, не эпизод) ──
     // Эпизодические подкатегории той же категории (напр. «Автомобиль/ТО») идут
     // в блок «Эпизодические» (события), а не в конверт.
-    const isFlow = cc => !!(cc && cc.expense_type === 'variable' && cc.character !== 'Эпизодический');
+    const isFlow = cc => !!(cc && cc.character === 'Повседневный');
     // факт повседневной части по категории за ОТОБРАЖАЕМЫЙ месяц
     const factByCat = {};
     txs.filter(t => t.account_to === 'Расход' && isFlow(t.categories)).forEach(t => {
@@ -5941,7 +5941,7 @@ async function loadBudget() {
     });
     // прогноз повседневной части из метрики (агрегируем строки variable/не-эпизод по категории)
     const flowByCat = {};
-    metricCats.filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический').forEach(c => {
+    metricCats.filter(c => c.character === 'Повседневный').forEach(c => {
       flowByCat[c.category] = (flowByCat[c.category] || 0) + (+c.amount_forecast || 0);
     });
     const envelopes = budgets.map(b => {
@@ -6697,7 +6697,7 @@ async function deleteEnvelope(i) {
 // ── Конверты (повседневные бюджеты, уровень КАТЕГОРИИ) ───────────────────────
 function openAddEnvelope() {
   const existing = new Set((window._bgtEnvelopes || []).map(e => e.name));
-  const catNames = [...new Set((cats || []).filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический').map(c => c.category))]
+  const catNames = [...new Set((cats || []).filter(c => c.character === 'Повседневный').map(c => c.category))]
     .filter(c => c && !existing.has(c)).sort((a, b) => a.localeCompare(b, 'ru'));
   const opts = '<option value="">— выбери —</option>' + catNames.map(c => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
   const mo = document.createElement('div'); mo.className = 'modal-overlay open';
@@ -7602,7 +7602,7 @@ async function loadDashboardNew() {
     const _ostYm = _now.getFullYear() + '-' + String(_now.getMonth() + 1).padStart(2, '0');
     const remColor = (remPct, over) => over ? '#B0492A' : remPct > 0.35 ? '#1FA497' : remPct > 0.15 ? '#C0741A' : '#B0492A';
     const everyday = Object.values(catMap)
-      .filter(c => c.expense_type === 'variable' && c.character !== 'Эпизодический' && (c.amount_plan || 0) > 0)
+      .filter(c => c.character === 'Повседневный' && (c.amount_plan || 0) > 0)
       .map(c => {
         const budget = c.amount_plan || 0, spent = c.amount_fact || 0, rem = budget - spent;
         const over = rem < 0, remPct = Math.max(rem / budget, 0), usedPct = Math.min(spent / budget, 1);
@@ -8833,12 +8833,12 @@ function openLabModalPF(title, rows, note) {
 
 function openLabModalVar(txsCur) {
   const factMap = {};
-  (txsCur||[]).filter(t => t.account_to==='Расход' && t.categories?.expense_type==='variable' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено').forEach(t => {
+  (txsCur||[]).filter(t => t.account_to==='Расход' && t.categories?.character==='Повседневный' && t.categories?.subcategory!=='Не учтено').forEach(t => {
     const k = t.categories?.subcategory || 'Прочее';
     if (!factMap[k]) factMap[k] = {sub:k, fact:0, plan:0, count:0};
     factMap[k].fact += +t.amount; factMap[k].count++;
   });
-  (window._labPlan||[]).filter(p => p.account_to==='Расход' && p.categories?.expense_type==='variable' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено').forEach(p => {
+  (window._labPlan||[]).filter(p => p.account_to==='Расход' && p.categories?.character==='Повседневный' && p.categories?.subcategory!=='Не учтено').forEach(p => {
     const k = p.categories?.subcategory || 'Прочее';
     if (!factMap[k]) factMap[k] = {sub:k, fact:0, plan:0, count:0};
     factMap[k].plan += +p.amount;
@@ -8848,12 +8848,12 @@ function openLabModalVar(txsCur) {
 
 function openLabModalFix(planCur) {
   const planMap = {};
-  (planCur||[]).filter(p => (p.account_to==='Расход' && p.categories?.expense_type==='fixed' && p.categories?.character!=='Эпизодический' && p.categories?.subcategory!=='Не учтено') || isLiabilityAcc(p.account_to)).forEach(p => {
+  (planCur||[]).filter(p => (p.account_to==='Расход' && p.categories?.character==='Фиксированный' && p.categories?.subcategory!=='Не учтено') || isLiabilityAcc(p.account_to)).forEach(p => {
     const k = p.categories?.subcategory || 'Прочее';
     if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
     planMap[k].plan += +p.amount;
   });
-  (window._labTxs||[]).filter(t => (t.account_to==='Расход' && t.categories?.expense_type==='fixed' && t.categories?.character!=='Эпизодический' && t.categories?.subcategory!=='Не учтено') || isLiabilityAcc(t.account_to)).forEach(t => {
+  (window._labTxs||[]).filter(t => (t.account_to==='Расход' && t.categories?.character==='Фиксированный' && t.categories?.subcategory!=='Не учтено') || isLiabilityAcc(t.account_to)).forEach(t => {
     const k = t.categories?.subcategory || 'Прочее';
     if (!planMap[k]) planMap[k] = {sub:k, fact:0, plan:0, count:0};
     planMap[k].fact += +t.amount;
@@ -8999,8 +8999,8 @@ async function loadOperations() {
       let charKey = null;
       if ((type === 'expense' || type === 'debt' || type === 'income') && c) {
         if (c.character === 'Эпизодический') charKey = 'episodic';
-        else if (c.expense_type === 'fixed') charKey = 'fixed';
-        else if (c.expense_type === 'variable') charKey = 'variable';
+        else if (c.character === 'Фиксированный') charKey = 'fixed';
+        else if (c.character === 'Повседневный') charKey = 'variable';
       }
       const catName = c?.category || (type === 'income' ? 'Доход' : null);
       const subName = c?.subcategory || null;

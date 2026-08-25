@@ -32,8 +32,7 @@ async def plan_cleanup(request: Request,
               WHERE p.category_id = c.id
                 AND p.user_id = $1
                 AND p.account_to = 'Расход'
-                AND c.expense_type = 'variable'
-                AND c.character != 'Эпизодический'
+                AND c.character = 'Повседневный'
               RETURNING 1
             ) SELECT count(*) FROM d
         """, user_id)

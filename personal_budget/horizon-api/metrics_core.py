@@ -109,8 +109,7 @@ async def flow_daily_rate(db, user_id: str, today: date) -> tuple[float, float]:
         LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1 AND t.date >= $2 AND t.date < $3
           AND t.account_to = 'Расход'
-          AND c.expense_type = 'variable'
-          AND c.character != 'Эпизодический'
+          AND c.character = 'Повседневный'
         GROUP BY t.date ORDER BY t.date
     """, user_id, cutoff, today)
 
@@ -221,14 +220,14 @@ async def today_unrealized_planned(db, user_id: str, today: date,
     """
     plan = await db.fetch(f"""
         SELECT p.account_from AS af, p.account_to AS at, p.amount,
-               c.expense_type AS et, c.character AS ch
+               c.character AS ch
         FROM plan p LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1 AND p.date=$2
           {NOT_CONFIRMED}
     """, user_id, today)
     fact = await db.fetch("""
         SELECT t.account_from AS af, t.account_to AS at, t.amount,
-               c.expense_type AS et, c.character AS ch
+               c.character AS ch
         FROM transactions t LEFT JOIN categories c ON t.category_id = c.id
         WHERE t.user_id=$1 AND t.date=$2
     """, user_id, today)
@@ -239,7 +238,7 @@ async def today_unrealized_planned(db, user_id: str, today: date,
         at = r["at"]
         if at in liability_names or at in reserve_names:
             return True
-        return at == "Расход" and (r["et"] == "fixed" or r["ch"] in EPISODIC_CHARS)
+        return at == "Расход" and (r["ch"] == "Фиксированный" or r["ch"] in EPISODIC_CHARS)
 
     # «Свободно» поднимает приток на операционный счёт: доход ИЛИ изъятие из резерва
     # (резерв→операционный) — иначе сегодняшнее «из резерва» не залечивало бы линию.
@@ -270,8 +269,7 @@ async def plan_remaining(db, user_id: str, year: int, month: int, today: date) -
     rows = await db.fetch(f"""
         SELECT p.date, p.amount, p.account_from, p.account_to,
                c.category AS cat_category,
-               c.character AS cat_character,
-               c.expense_type AS cat_expense_type
+               c.character AS cat_character
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1
@@ -289,8 +287,7 @@ async def plan_window(db, user_id: str, after: date, until: date) -> list:
     rows = await db.fetch(f"""
         SELECT p.date, p.amount, p.account_from, p.account_to,
                c.category AS cat_category,
-               c.character AS cat_character,
-               c.expense_type AS cat_expense_type
+               c.character AS cat_character
         FROM plan p
         LEFT JOIN categories c ON p.category_id = c.id
         WHERE p.user_id=$1 AND p.date > $2 AND p.date <= $3
@@ -338,7 +335,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     F_remain = sum(
         float(r["amount"]) for r in plan_rows
         if r.get("account_to") == "Расход" and (
-            r.get("cat_expense_type") == "fixed"
+            r.get("cat_character") == "Фиксированный"
             or r.get("cat_character") in EPISODIC_CHARS
         )
     )
@@ -372,7 +369,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     F_before = sum(
         float(r["amount"]) for r in win
         if r.get("account_from") in op_names and r.get("account_to") == "Расход" and (
-            r.get("cat_expense_type") == "fixed"
+            r.get("cat_character") == "Фиксированный"
             or r.get("cat_character") in EPISODIC_CHARS
         )
     )
