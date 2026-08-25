@@ -5973,7 +5973,7 @@ async function loadBudget() {
     // ── Разовые: ВСЕ одноразовые плановые операции месяца — не из правила, не из
     // графика кредита, не доход. Единый дом: расход, в/из резерва, разовое погашение
     // долга, перевод. Доход живёт в блоке «Доходы».
-    const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
+    const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve).map(a => a.name));
     const oneoffEvents = planRows
       .filter(p => !p.source_rule_id && p.source !== 'loan_schedule' && p.account_from !== 'Доход')
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
@@ -6825,14 +6825,14 @@ let _roType = 'expense';
 let _roEditId = null;
 
 function _roAssets()   { return (accounts_cache || []).filter(a => a.account_type === 'Актив' && a.is_active !== false && a.name !== 'Дебиторка'); }
-function _roOpAccs()   { return _roAssets().filter(a => !a.is_reserve && !a.is_cushion); }
-function _roRsvAccs()  { return (accounts_cache || []).filter(a => (a.is_reserve || a.is_cushion) && a.is_active !== false); }
+function _roOpAccs()   { return _roAssets().filter(a => !a.is_reserve); }
+function _roRsvAccs()  { return (accounts_cache || []).filter(a => (a.is_reserve) && a.is_active !== false); }
 function _roDebtAccs() { return (accounts_cache || []).filter(a => (a.account_type === 'Пассив' || a.name === 'Дебиторка') && a.is_active !== false); }
 
 function _roAccField(label, id, list, selName, reserveHint) {
   const opts = (list || []).map(a =>
     '<option value="' + esc(a.name) + '"' + (a.name === selName ? ' selected' : '') + '>'
-    + esc(a.name) + ((a.is_reserve || a.is_cushion) ? ' (резерв)' : '') + '</option>').join('');
+    + esc(a.name) + ((a.is_reserve) ? ' (резерв)' : '') + '</option>').join('');
   const hint = reserveHint ? '<div class="field-note">резервный счёт → «обеспечено резервом»</div>' : '';
   return '<div class="field"><div class="field-label">' + label + '</div>'
     + '<select class="field-select" id="' + id + '">' + opts + '</select>' + hint + '</div>';
@@ -6922,7 +6922,7 @@ function _roSetType(type) {
 
 function _roDetectType(p) {
   const to = p.account_to, from = p.account_from;
-  const isRsv = n => (accounts_cache || []).some(a => a.name === n && (a.is_reserve || a.is_cushion));
+  const isRsv = n => (accounts_cache || []).some(a => a.name === n && (a.is_reserve));
   const isDbt = n => (accounts_cache || []).some(a => a.name === n && a.account_type === 'Пассив') || n === 'Дебиторка';
   if (to === 'Расход') return 'expense';
   if (isRsv(to))   return 'reserve_in';
@@ -7528,10 +7528,6 @@ async function loadDashboardNew() {
           <span class="wf-pill-lbl">Резерв</span>
           <b class="wf-pill-val" style="color:#2F8FD4">−${f(wf.r_topup)} ₽</b>
         </span>` : ''}
-        ${wf.c_cushion >= 1 ? `<span class="wf-pill wf-pill--rsv" data-pill="cushion" onclick="wfPillClick('cushion')" role="button" tabindex="0">
-          <span class="wf-pill-lbl">Подушка</span>
-          <b class="wf-pill-val" style="color:#2F8FD4">−${f(wf.c_cushion)} ₽</b>
-        </span>` : ''}
       </div>
       <div class="wf-detail" id="wfDetail"><div><div class="wf-det-inner" id="wfDetInner"></div></div></div>
     `;
@@ -7995,10 +7991,6 @@ function wfPillClick(type) {
       ? `<div class="wf-det-hint">Плановые пополнения резервных счетов до конца месяца:</div>` +
         items.map(it => `<div class="wf-det-row"><span>${esc(it.name)}</span><span style="font-weight:600;color:#2F8FD4">−${fv(it.amount)} ₽</span></div>`).join('')
       : '<div class="wf-det-hint">Плановых пополнений резерва до конца месяца нет</div>';
-  } else if (type === 'cushion') {
-    const accs = det.cushion_accounts || [];
-    html = `<div class="wf-det-hint">Неснижаемая подушка безопасности — вычитается из «Свободно», чтобы эти деньги никогда не тратились в текущем потоке.</div>`;
-    if (accs.length) html += accs.map(a => `<div class="wf-det-row"><span>${esc(a.name)}</span><span style="font-weight:600;color:#2F8FD4">${fv(a.balance)} ₽</span></div>`).join('');
   } else if (type === 'variable') {
     const rate  = det.v_daily_rate || 0;
     const dLeft = det.d_left || 0;
@@ -8636,7 +8628,7 @@ function mobileBudgetSections(d) {
   const envHtml = d.budgets.length ? card(noFirstBorder(envInner)) : '';
 
   // Эпизодические: предстоящие разовые события (как в Бюджете), не резервы/цели
-  const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
+  const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve).map(a => a.name));
   const events = (d.plan || [])
     .filter(p => p.categories && p.categories.character === 'Эпизодический' && p.account_from !== 'Доход')
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
@@ -8747,7 +8739,6 @@ async function mobileHome() {
       <span class="wf-pill wf-pill--fix" data-pill="fixed" onclick="wfPillClick('fixed')" role="button" tabindex="0"><span class="wf-pill-lbl">Платежи</span><b class="wf-pill-val" style="color:#0F243C">−${f(+wf.f_remain || 0)} ₽</b></span>
       <span class="wf-pill wf-pill--var" data-pill="variable" onclick="wfPillClick('variable')" role="button" tabindex="0"><span class="wf-pill-lbl">Повседневные</span><b class="wf-pill-val" style="color:#0F243C">−${f(+wf.v_remain || 0)} ₽</b></span>
       ${(+wf.r_topup || 0) >= 1 ? `<span class="wf-pill wf-pill--rsv" data-pill="reserve" onclick="wfPillClick('reserve')" role="button" tabindex="0"><span class="wf-pill-lbl">Резерв</span><b class="wf-pill-val" style="color:#2F8FD4">−${f(+wf.r_topup)} ₽</b></span>` : ''}
-      ${(+wf.c_cushion || 0) >= 1 ? `<span class="wf-pill wf-pill--rsv" data-pill="cushion" onclick="wfPillClick('cushion')" role="button" tabindex="0"><span class="wf-pill-lbl">Подушка</span><b class="wf-pill-val" style="color:#2F8FD4">−${f(+wf.c_cushion)} ₽</b></span>` : ''}
     </div>
     <div class="wf-detail" id="wfDetail"><div><div class="wf-det-inner" id="wfDetInner"></div></div></div>`;
 
@@ -8924,7 +8915,7 @@ async function loadOperations() {
     // category lookup (transactions are fetched without join)
     const catById = {};
     (cats || []).forEach(c => { catById[c.id] = c; });
-    const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve || a.is_cushion).map(a => a.name));
+    const reserveNames = new Set((accounts_cache || []).filter(a => a.is_reserve).map(a => a.name));
 
     const isDebtAcc = a => isLiabilityAcc(a) || a === 'Дебиторка';
     const opFlow = t => {

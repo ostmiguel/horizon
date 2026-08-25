@@ -11,7 +11,6 @@ class AccountCreate(BaseModel):
     initial_balance: Optional[float] = 0
     include_in_balance: Optional[bool] = True
     is_reserve: Optional[bool] = False
-    is_cushion: Optional[bool] = False
     used_for_payment: Optional[bool] = True
 
 class AccountUpdate(BaseModel):
@@ -21,7 +20,6 @@ class AccountUpdate(BaseModel):
     include_in_balance: Optional[bool] = None
     sort_order: Optional[int] = None
     is_reserve: Optional[bool] = None
-    is_cushion: Optional[bool] = None
     used_for_payment: Optional[bool] = None
 
 @router.get("")
@@ -51,10 +49,10 @@ async def create_account(data: AccountCreate, request: Request):
     user_id = request.state.user_id
     db = request.state.db
     row = await db.fetchrow("""
-        INSERT INTO accounts (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve, is_cushion, used_for_payment)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+        INSERT INTO accounts (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve, used_for_payment)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
     """, user_id, data.name, data.account_type, data.color,
-        data.initial_balance, data.include_in_balance, data.is_reserve, data.is_cushion,
+        data.initial_balance, data.include_in_balance, data.is_reserve,
         data.used_for_payment if data.used_for_payment is not None else True)
     return dict(row)
 

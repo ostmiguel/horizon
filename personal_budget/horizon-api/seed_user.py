@@ -102,7 +102,7 @@ async def seed_user_accounts(db, user_id) -> int:
     await db.execute("""
         INSERT INTO accounts
           (user_id, name, account_type, color, initial_balance, include_in_balance,
-           is_reserve, is_cushion, used_for_payment)
-        VALUES ($1, 'Дебиторка', 'Актив', '#2AA7CC', 0, false, false, false, false)
+           is_reserve, used_for_payment)
+        VALUES ($1, 'Дебиторка', 'Актив', '#2AA7CC', 0, false, false, false)
     """, user_id)
     return 1

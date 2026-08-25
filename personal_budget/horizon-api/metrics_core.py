@@ -61,7 +61,6 @@ def _is_op(a: dict) -> bool:
     return (
         a["account_type"] == "Актив"
         and a.get("include_in_balance") is True
-        and not a.get("is_cushion")
     )
 
 
@@ -71,7 +70,6 @@ def _is_rsv(a: dict) -> bool:
     return (
         a["account_type"] == "Актив"
         and a.get("is_reserve") is True
-        and not a.get("is_cushion")
     )
 
 
@@ -80,7 +78,7 @@ async def account_balances(db, user_id: str) -> dict:
     rows = await db.fetch("""
         SELECT
             a.id, a.name, a.account_type,
-            a.is_reserve, a.is_cushion,
+            a.is_reserve,
             a.include_in_balance, a.initial_balance,
             a.initial_balance
             + COALESCE(SUM(CASE WHEN t.account_to   = a.name THEN t.amount ELSE 0 END), 0)
@@ -92,7 +90,7 @@ async def account_balances(db, user_id: str) -> dict:
             AND t.user_id = $1
         WHERE a.user_id = $1 AND a.is_active = true
         GROUP BY a.id, a.name, a.account_type,
-                 a.is_reserve, a.is_cushion,
+                 a.is_reserve,
                  a.include_in_balance, a.initial_balance
     """, user_id)
     return {r["name"]: dict(r) for r in rows}
@@ -321,7 +319,6 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
     ]
     B0 = sum(a["balance"] for a in b0_accounts)
     op_names = {a["name"] for a in b0_accounts}   # операционные счета (входят в B0)
-    C_cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
     reserve_balance = sum(float(a["balance"]) for a in accs.values() if _is_rsv(a))
     liabilities = sum(
         abs(float(a["balance"])) for a in accs.values() if a["account_type"] == "Пассив"
@@ -413,7 +410,7 @@ async def safe_to_spend(db, user_id: str, today: date = None) -> dict:
         "d_now": d_now, "d_left": d_left, "days_in_month": days_in_month,
         "month_start": month_start, "month_end": month_end,
         "accs": accs, "b0_accounts": b0_accounts,
-        "B0": B0, "C_cushion": C_cushion,
+        "B0": B0,
         "reserve_balance": reserve_balance, "liabilities": liabilities,
         "r_var": r_var, "sigma_day": sigma_day,
         "V_remain": V_remain, "sigma_remain": sigma_remain,

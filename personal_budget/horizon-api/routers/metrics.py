@@ -40,7 +40,7 @@ async def get_metrics(request: Request):
     today = m["today"]; year = m["year"]; month = m["month"]
     d_now = m["d_now"]; d_left = m["d_left"]; days_in_month = m["days_in_month"]
     accs = m["accs"]; b0_accounts = m["b0_accounts"]
-    B0 = m["B0"]; C_cushion = m["C_cushion"]
+    B0 = m["B0"]
     reserve_balance = m["reserve_balance"]; liabilities = m["liabilities"]
     r_var = m["r_var"]; sigma_day = m["sigma_day"]
     V_remain = m["V_remain"]; sigma_remain = m["sigma_remain"]
@@ -441,11 +441,6 @@ async def get_metrics(request: Request):
     reserve_topup_items = [{"name": k, "amount": round(v)}
                            for k, v in sorted(topup_by_name.items(), key=lambda x: -x[1])]
 
-    cushion_accounts_detail = [
-        {"name": a["name"], "balance": round(float(a["balance"]))}
-        for a in accs.values() if a.get("is_cushion")
-    ]
-
     # Decompose the pill value V_remain (forecasted remaining flow) by category.
     # Per-category remaining = cat_rate × d_left, normalized so the parts sum to
     # V_remain exactly (r_var is a global robust rate, not the sum of cat rates).
@@ -507,7 +502,6 @@ async def get_metrics(request: Request):
                 "f_remain":  round(F_remain),
                 "v_remain":  round(V_remain),
                 "r_topup":   round(R_topup),
-                "c_cushion": round(C_cushion),
             },
             "b0_accounts": b0_accounts,
             "waterfall_detail": {
@@ -515,7 +509,6 @@ async def get_metrics(request: Request):
                 "fixed_items":           fixed_items,
                 "variable_items":        variable_items,
                 "reserve_topup_items":   reserve_topup_items,
-                "cushion_accounts":      cushion_accounts_detail,
                 "v_daily_rate":          round(r_var),
                 "d_left":                d_left,
             },
@@ -711,11 +704,10 @@ async def get_forecast(request: Request, range: str = "30"):
     reserve_names = {name for name, a in accs.items() if a.get("is_reserve") is True}
     liability_names = {name for name, a in accs.items() if a["account_type"] == "Пассив"}
     B0_now  = sum(float(a["balance"]) for a in accs.values() if _is_op(a))
-    cushion = sum(float(a["balance"]) for a in accs.values() if a.get("is_cushion"))
 
     r_var, sigma_day = await flow_daily_rate(db, user_id, today)
-    # Безопасный минимум: хотя бы недельный запас трат, или подушка, если она крупнее.
-    safe_min = max(cushion, r_var * 7)
+    # Безопасный минимум: хотя бы недельный запас трат.
+    safe_min = r_var * 7
 
     # ── Горизонт «Год»: помесячный тренд по run-rate ───────────────────────────
     if range == "year":

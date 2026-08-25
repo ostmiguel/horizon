@@ -86,8 +86,8 @@ async def migrate_obligations_to_accounts(request: Request):
             if not acc:
                 await db.execute("""
                     INSERT INTO accounts
-                      (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve, is_cushion)
-                    VALUES ($1,$2,'Пассив',$3,$4,false,false,false)
+                      (user_id, name, account_type, color, initial_balance, include_in_balance, is_reserve)
+                    VALUES ($1,$2,'Пассив',$3,$4,false,false)
                 """, user_id, name, l["color"] or "#C0741A", -float(l["current_balance"] or 0))
                 created += 1
             await db.execute("UPDATE loans SET account_name=$2 WHERE id=$1", l["id"], name)

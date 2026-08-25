@@ -55,8 +55,8 @@ async def pending(request: Request):
                p.note, p.source_rule_id,
                pr.name AS rule_name,
                c.subcategory, c.category AS cat_cat,
-               (COALESCE(a.is_reserve, false)  OR COALESCE(a.is_cushion, false))  AS to_reserve,
-               (COALESCE(af.is_reserve, false) OR COALESCE(af.is_cushion, false)) AS from_reserve
+               COALESCE(a.is_reserve, false)  AS to_reserve,
+               COALESCE(af.is_reserve, false) AS from_reserve
         FROM plan p
         LEFT JOIN plan_rules pr ON p.source_rule_id = pr.id
         LEFT JOIN categories c  ON p.category_id = c.id
@@ -138,8 +138,8 @@ async def status(request: Request, year: int, month: int):
     plan_rows = await db.fetch("""
         SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.source_rule_id,
                p.note, pr.name AS rule_name, c.subcategory, c.category AS cat_cat,
-               (COALESCE(a.is_reserve, false)  OR COALESCE(a.is_cushion, false))  AS to_reserve,
-               (COALESCE(af.is_reserve, false) OR COALESCE(af.is_cushion, false)) AS from_reserve
+               COALESCE(a.is_reserve, false)  AS to_reserve,
+               COALESCE(af.is_reserve, false) AS from_reserve
         FROM plan p
         LEFT JOIN plan_rules pr ON p.source_rule_id = pr.id
         LEFT JOIN categories c  ON p.category_id = c.id
@@ -300,8 +300,8 @@ async def confirm(body: ResolveBody, request: Request):
         occ = await db.fetchrow("""
             SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.category_id,
                    p.note, NULL::text AS rule_name, c.subcategory, c.category AS cat_cat,
-                   (COALESCE(a.is_reserve, false)  OR COALESCE(a.is_cushion, false))  AS to_reserve,
-                   (COALESCE(af.is_reserve, false) OR COALESCE(af.is_cushion, false)) AS from_reserve
+                   COALESCE(a.is_reserve, false)  AS to_reserve,
+                   COALESCE(af.is_reserve, false) AS from_reserve
             FROM plan p
             LEFT JOIN categories c ON p.category_id = c.id
             LEFT JOIN accounts a  ON a.user_id=p.user_id AND a.name=p.account_to
