@@ -5554,6 +5554,56 @@ function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
 function anSetMode(m) { _anMode = m; loadSummary(); }
 function anSetScale(s) { _anScale = s; loadSummary(); }
 
+// Drill по сегменту графика расходов: показываем фактические операции сегмента
+// (период × характер). index — месяц (год-масштаб) или день (месяц-масштаб).
+function anExpDrill(char, index, sy, sm) {
+  const rows = window._anExpRows || [];
+  const MFULL = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  const MNOM  = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+  let items, title;
+  if (_anScale === 'year') {
+    const mm = index + 1;
+    const ym = sy + '-' + String(mm).padStart(2, '0');
+    items = rows.filter(r => r.ym === ym && r.char === char);
+    title = MNOM[mm - 1] + ' ' + sy;
+  } else {
+    const day = index + 1;
+    const ym = sy + '-' + String(sm).padStart(2, '0');
+    items = rows.filter(r => r.ym === ym && r.day === day && r.char === char);
+    title = day + ' ' + MFULL[sm - 1] + ' ' + sy;
+  }
+  items.sort((a, b) => b.amt - a.amt);
+  const total = items.reduce((s, r) => s + r.amt, 0);
+  const color = _AN_CHAR_COLOR[char] || '#5A6B82';
+  const fmtRub = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+
+  const rowsHtml = items.length ? items.map(r => {
+    const dd = _anScale === 'year'
+      ? `<span style="color:#93A1B5;font-size:11.5px">${String(r.day).padStart(2, '0')}.${r.ym.slice(5, 7)} · </span>` : '';
+    const name = esc(r.sub || r.cat || '—');
+    const note = r.note ? ` <span style="color:#93A1B5">· ${esc(r.note)}</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid rgba(15,36,60,.06)">
+      <div style="min-width:0;font-size:13px;color:#0F243C">${dd}${name}${note}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:13px;color:#0F243C;white-space:nowrap;font-variant-numeric:tabular-nums">${fmtRub(r.amt)}</div>
+    </div>`;
+  }).join('') : '<div style="padding:16px 0;color:#93A1B5;font-size:13px">Нет операций.</div>';
+
+  const mo = document.createElement('div');
+  mo.className = 'modal-overlay open';
+  mo.onclick = e => { if (e.target === mo) mo.remove(); };
+  mo.innerHTML = `<div class="modal" style="max-width:520px;width:100%;max-height:82vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:9px;height:9px;border-radius:2px;background:${color};flex:none"></span><span style="font-family:Sora,sans-serif;font-weight:600;font-size:16px;color:#0F243C">${_AN_CHAR_LBL[char] || char}</span></div>
+        <div style="font-size:12.5px;color:#93A1B5;margin-top:3px">${title} · ${items.length} оп. · <b style="color:#0F243C">${fmtRub(total)}</b></div>
+      </div>
+      <button onclick="this.closest('.modal-overlay').remove()" style="border:0;background:transparent;color:#93A1B5;font-size:22px;line-height:1;cursor:pointer;padding:0 4px">×</button>
+    </div>
+    <div style="overflow-y:auto;margin-top:10px">${rowsHtml}</div>
+  </div>`;
+  document.body.appendChild(mo);
+}
+
 // Столбчатый график расходов. Год: столбец=месяц. Месяц: столбец=категория/
 // подкатегория (по _anGran). Везде сегменты крашены по ХАРАКТЕРУ; фильтр _anChar
 // изолирует один характер. Данные — window._anExpRows (сырые расходы из loadSummary).
@@ -5641,6 +5691,18 @@ function renderAnExpChart(sy, sm) {
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      // Клик по КОНКРЕТНОМУ сегменту → список операций, из которых он состоит.
+      onClick: (evt, _els, chart) => {
+        const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+        if (!hit.length) return;
+        const el = hit[0];
+        const ch = activeChars[el.datasetIndex];
+        if (ch) anExpDrill(ch, el.index, sy, sm);
+      },
+      onHover: (evt, _els, chart) => {
+        const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
+        if (evt.native && evt.native.target) evt.native.target.style.cursor = hit.length ? 'pointer' : 'default';
+      },
       scales: {
         x: { stacked: true, grid: { display: false },
              ticks: { font: { size: 11 }, autoSkip: _anScale === 'month', autoSkipPadding: 8, maxRotation: 0, minRotation: 0 } },
