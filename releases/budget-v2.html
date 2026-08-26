@@ -5169,6 +5169,7 @@ let _summaryChar = 'all'; // 'all' | 'Повседневный' | 'Фиксир�
 let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (категории)
 
 let _anMonth = null, _anMode = 'visual', _anGran = 'cat', _anChar = 'all';
+let _anScale = 'year';   // масштаб графика расходов: 'month' (категории) / 'year' (месяцы)
 
 async function loadSummary() {
   const mc = document.getElementById('mainContent');
@@ -5219,6 +5220,13 @@ async function loadSummary() {
     else if (c.kind === 'savings') b.sav += c.amt;
     if (c.kind === 'expense' || c.kind === 'income') { (opsAll[c.ym] = opsAll[c.ym] || {})[key] = (opsAll[c.ym][key] || []); opsAll[c.ym][key].push({ date: r.date, sub: c.sub || c.cat, note: r.note, amt: c.amt, kind: c.kind }); }
   });
+  // Сырые расходные строки для столбчатого графика (характер сохраняем; фильтр
+  // характера/масштаб применяем на отрисовке, а не тут — чтобы график был гибким).
+  window._anExpRows = (txAll || []).reduce((a, r) => {
+    const c = classify(r);
+    if (c.kind === 'expense' && c.ym && c.amt > 0) a.push(c);
+    return a;
+  }, []);
   (plAll || []).forEach(r => {
     const c = classify(r); if (!c.ym) return;
     const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;
@@ -5358,6 +5366,7 @@ async function loadSummary() {
 
   const picker = months.slice(-12).map(ym => { const on = ym === sel; const [y, m] = ym.split('-'); return `<button onclick="anPickMonth('${ym}')" style="font:inherit;font-size:12px;font-weight:${on?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${on?'#fff':'transparent'};color:${on?'#0F243C':'#5A6B82'};box-shadow:${on?'0 1px 2px rgba(15,36,60,.12)':'none'}">${MNN[+m-1].slice(0,3)} ${y.slice(2)}</button>`; }).join('');
   const modeBtn = (m, l) => `<button onclick="anSetMode('${m}')" style="font:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:9px;border:0;cursor:pointer;background:${_anMode===m?'#fff':'transparent'};color:${_anMode===m?'#0F243C':'#5A6B82'};box-shadow:${_anMode===m?'0 1px 2px rgba(15,36,60,.12)':'none'}">${l}</button>`;
+  const scaleBtn = (s, l) => `<button onclick="anSetScale('${s}')" style="font:inherit;font-size:12.5px;font-weight:600;padding:7px 14px;border-radius:9px;border:0;cursor:pointer;background:${_anScale===s?'#fff':'transparent'};color:${_anScale===s?'#0F243C':'#5A6B82'};box-shadow:${_anScale===s?'0 1px 2px rgba(15,36,60,.12)':'none'}">${l}</button>`;
   const segG = (cur, opts, fn) => `<div style="display:inline-flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${opts.map(o => `<button onclick="${fn}('${o[0]}')" style="font:inherit;font-size:12px;font-weight:${cur===o[0]?600:500};padding:6px 11px;border-radius:8px;border:0;cursor:pointer;background:${cur===o[0]?'#fff':'transparent'};color:${cur===o[0]?'#0F243C':'#5A6B82'};box-shadow:${cur===o[0]?'0 1px 2px rgba(15,36,60,.12)':'none'}">${o[1]}</button>`).join('')}</div>`;
   const granCtl = segG(_anGran, [['cat','Категории'],['sub','Подкатегории']], 'anSetGran');
   const charCtl = segG(_anChar, [['all','Все'],['Повседневный','Повседн.'],['Фиксированный','Фикс.'],['Эпизодический','Эпизод.']], 'anSetChar');
@@ -5528,12 +5537,95 @@ async function loadSummary() {
     <span style="${CAP};margin-left:6px">Характер</span>${charCtl}
   </div>
   <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC"><span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span><div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div></div>
+  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по ' + (_anGran==='sub'?'подкатегориям':'категориям') + ' · ' + MNN[sm-1] + ' ' + sy}</div>
+      <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${scaleBtn('month','Месяц')}${scaleBtn('year','Год')}</div>
+    </div>
+    <div style="height:300px;position:relative"><canvas id="anExpCanvas"></canvas></div>
+  </section>
   ${_anMode === 'table' ? pnl() : visual}
 </div>`;
+
+  renderAnExpChart(sy, sm);
 }
 
 function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
 function anSetMode(m) { _anMode = m; loadSummary(); }
+function anSetScale(s) { _anScale = s; loadSummary(); }
+
+// Столбчатый график расходов. Год: столбец=месяц. Месяц: столбец=категория/
+// подкатегория (по _anGran). Везде сегменты крашены по ХАРАКТЕРУ; фильтр _anChar
+// изолирует один характер. Данные — window._anExpRows (сырые расходы из loadSummary).
+const _AN_CHARS = ['Фиксированный', 'Повседневный', 'Эпизодический'];
+const _AN_CHAR_COLOR = { 'Фиксированный': '#1D7E97', 'Повседневный': '#6FA31C', 'Эпизодический': '#93A1B5' };
+const _AN_CHAR_LBL = { 'Фиксированный': 'Фиксированные', 'Повседневный': 'Повседневные', 'Эпизодический': 'Эпизодические' };
+
+function renderAnExpChart(sy, sm) {
+  const canvas = document.getElementById('anExpCanvas');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (window._anExpChart) { try { window._anExpChart.destroy(); } catch(e){} window._anExpChart = null; }
+
+  const rows = window._anExpRows || [];
+  const activeChars = (_anChar === 'all') ? _AN_CHARS : _AN_CHARS.filter(c => c === _anChar);
+  const val = {};   // val[groupKey][char] = сумма
+  let labels = [], groupKeys = [];
+
+  if (_anScale === 'year') {
+    const MNS = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+    labels = MNS; groupKeys = MNS.map((_, i) => i);
+    const prefix = String(sy) + '-';
+    rows.forEach(r => {
+      if (!r.ym.startsWith(prefix)) return;
+      if (_anChar !== 'all' && r.char !== _anChar) return;
+      const mi = (+r.ym.slice(5, 7)) - 1;
+      (val[mi] = val[mi] || {})[r.char] = (val[mi][r.char] || 0) + r.amt;
+    });
+  } else {
+    const ym = String(sy) + '-' + String(sm).padStart(2, '0');
+    const totals = {};
+    rows.forEach(r => {
+      if (r.ym !== ym) return;
+      if (_anChar !== 'all' && r.char !== _anChar) return;
+      const key = _anGran === 'sub' ? (r.sub || r.cat) : r.cat;
+      (val[key] = val[key] || {})[r.char] = (val[key][r.char] || 0) + r.amt;
+      totals[key] = (totals[key] || 0) + r.amt;
+    });
+    groupKeys = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+    labels = groupKeys;
+  }
+
+  const datasets = activeChars.map(ch => ({
+    label: _AN_CHAR_LBL[ch],
+    data: groupKeys.map(k => Math.round((val[k] && val[k][ch]) || 0)),
+    backgroundColor: _AN_CHAR_COLOR[ch],
+    stack: 's', borderRadius: 3, maxBarThickness: 46,
+  }));
+
+  const fmtRub = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+  window._anExpChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false },
+             ticks: { font: { size: 11 }, autoSkip: _anScale !== 'year', maxRotation: _anScale === 'year' ? 0 : 52, minRotation: 0 } },
+        y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(15,36,60,.06)' },
+             ticks: { font: { size: 11 }, callback: v => v >= 1000 ? Math.round(v / 1000) + 'к' : v } },
+      },
+      plugins: {
+        legend: { display: _anChar === 'all', position: 'top', align: 'end',
+          labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11.5 } } },
+        tooltip: { callbacks: {
+          label: c => `${c.dataset.label}: ${fmtRub(c.parsed.y)}`,
+          footer: items => _anChar === 'all' ? 'Всего: ' + fmtRub(items.reduce((s, i) => s + i.parsed.y, 0)) : '',
+        } },
+      },
+    },
+  });
+}
 function anSetGran(g) { _anGran = g; loadSummary(); }
 function anSetChar(c) { _anChar = c; loadSummary(); }
 // ── Универсальный дрилл категории (работает с любой страницы) ────────────────
