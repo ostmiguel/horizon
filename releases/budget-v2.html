@@ -5539,7 +5539,7 @@ async function loadSummary() {
   <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC"><span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span><div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div></div>
   <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по ' + (_anGran==='sub'?'подкатегориям':'категориям') + ' · ' + MNN[sm-1] + ' ' + sy}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
       <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${scaleBtn('month','Месяц')}${scaleBtn('year','Год')}</div>
     </div>
     <div style="height:300px;position:relative"><canvas id="anExpCanvas"></canvas></div>
@@ -5582,17 +5582,17 @@ function renderAnExpChart(sy, sm) {
       (val[mi] = val[mi] || {})[r.char] = (val[mi][r.char] || 0) + r.amt;
     });
   } else {
+    // Месяц — по ДНЯМ: столбец = день месяца. Категорийную разбивку вынесем в
+    // отдельный график позже.
     const ym = String(sy) + '-' + String(sm).padStart(2, '0');
-    const totals = {};
+    const dim = new Date(sy, sm, 0).getDate();
+    labels = Array.from({ length: dim }, (_, i) => String(i + 1));
+    groupKeys = Array.from({ length: dim }, (_, i) => i + 1);   // дни 1..dim
     rows.forEach(r => {
-      if (r.ym !== ym) return;
+      if (r.ym !== ym || !r.day) return;
       if (_anChar !== 'all' && r.char !== _anChar) return;
-      const key = _anGran === 'sub' ? (r.sub || r.cat) : r.cat;
-      (val[key] = val[key] || {})[r.char] = (val[key][r.char] || 0) + r.amt;
-      totals[key] = (totals[key] || 0) + r.amt;
+      (val[r.day] = val[r.day] || {})[r.char] = (val[r.day][r.char] || 0) + r.amt;
     });
-    groupKeys = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
-    labels = groupKeys;
   }
 
   const datasets = activeChars.map(ch => ({
@@ -5611,7 +5611,7 @@ function renderAnExpChart(sy, sm) {
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { stacked: true, grid: { display: false },
-             ticks: { font: { size: 11 }, autoSkip: _anScale !== 'year', maxRotation: _anScale === 'year' ? 0 : 52, minRotation: 0 } },
+             ticks: { font: { size: 11 }, autoSkip: _anScale === 'month', autoSkipPadding: 8, maxRotation: 0, minRotation: 0 } },
         y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(15,36,60,.06)' },
              ticks: { font: { size: 11 }, callback: v => v >= 1000 ? Math.round(v / 1000) + 'к' : v } },
       },
