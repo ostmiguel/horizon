@@ -5603,8 +5603,40 @@ function renderAnExpChart(sy, sm) {
   }));
 
   const fmtRub = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+  // Короткий ярлык: 1 234 → «1,2к», 15 000 → «15к», < 1000 → число.
+  const fmtShort = n => n >= 1000
+    ? (n / 1000).toFixed(n < 10000 ? 1 : 0).replace('.', ',') + 'к'
+    : String(Math.round(n));
+
+  // Встроенный плагин: подпись суммы на сегменте, но ТОЛЬКО если влезает
+  // (сегмент высокий и столбец широкий) — иначе на дневном виде было бы месиво.
+  const segLabels = {
+    id: 'anSegLabels',
+    afterDatasetsDraw(chart) {
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 9px Inter, ui-sans-serif, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((bar, i) => {
+          const v = ds.data[i];
+          if (!v) return;
+          const h = Math.abs((bar.base ?? bar.y) - bar.y);
+          if (h < 13 || bar.width < 16) return;   // не влезает — пропускаем
+          ctx.fillText(fmtShort(v), bar.x, ((bar.base ?? bar.y) + bar.y) / 2);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
   window._anExpChart = new Chart(canvas.getContext('2d'), {
     type: 'bar',
+    plugins: [segLabels],
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
