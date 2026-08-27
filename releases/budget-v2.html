@@ -5734,7 +5734,9 @@ function renderAnCatChart(sy, sm) {
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
+      // axis:'y' — на горизонтальном графике строка определяется по вертикали
+      // (иначе тултип «липнет» и не меняется при переносе на другую категорию).
+      interaction: { mode: 'index', intersect: false, axis: 'y' },
       onClick: (evt, _e, chart) => {
         const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
         if (!hit.length) return;
@@ -5751,10 +5753,13 @@ function renderAnCatChart(sy, sm) {
       },
       plugins: {
         legend: { display: _anChar === 'all', position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11.5 } } },
-        tooltip: { callbacks: {
-          label: c => `${c.dataset.label}: ${fmtRub(c.parsed.x)}`,
-          footer: items => _anChar === 'all' ? 'Всего: ' + fmtRub(items.reduce((s, i) => s + i.parsed.x, 0)) : '',
-        } },
+        tooltip: {
+          filter: item => (item.parsed.x || 0) !== 0,   // не показывать нулевые сегменты
+          callbacks: {
+            label: c => `${c.dataset.label}: ${fmtRub(c.parsed.x)}`,
+            footer: items => _anChar === 'all' ? 'Всего: ' + fmtRub(items.reduce((s, i) => s + i.parsed.x, 0)) : '',
+          },
+        },
       },
     },
   });
@@ -5955,10 +5960,13 @@ function renderAnBarChart(kind, sy, sm) {
       plugins: {
         legend: { display: _anChar === 'all', position: 'top', align: 'end',
           labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11.5 } } },
-        tooltip: { callbacks: {
-          label: c => `${c.dataset.label}: ${fmtRub(c.parsed.y)}`,
-          footer: items => _anChar === 'all' ? 'Всего: ' + fmtRub(items.reduce((s, i) => s + i.parsed.y, 0)) : '',
-        } },
+        tooltip: {
+          filter: item => (item.parsed.y || 0) !== 0,   // не показывать нулевые сегменты
+          callbacks: {
+            label: c => `${c.dataset.label}: ${fmtRub(c.parsed.y)}`,
+            footer: items => _anChar === 'all' ? 'Всего: ' + fmtRub(items.reduce((s, i) => s + i.parsed.y, 0)) : '',
+          },
+        },
       },
     },
   });
