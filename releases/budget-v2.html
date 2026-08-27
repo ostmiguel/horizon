@@ -5170,18 +5170,28 @@ let _summaryGran = 'sub';  // 'sub' (подкатегории) | 'cat' (кате
 
 let _anMonth = null, _anMode = 'visual', _anGran = 'cat', _anChar = 'all';
 let _anScale = 'year';   // масштаб графика расходов: 'month' (категории) / 'year' (месяцы)
+let _anCache = null;     // кэш загруженных данных — тумблеры перерисовывают из него без сети
 
-async function loadSummary() {
+async function loadSummary(useCache) {
   const mc = document.getElementById('mainContent');
-  mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
-
-  const [{ data: txAll }, { data: plAll }, { data: accs }, cbAll, metrics] = await Promise.all([
-    sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
-    sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
-    sb.from('accounts').select('name,account_type,include_in_balance'),
-    fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
-    fetch(`${API_BASE}/api/metrics`, { credentials: 'include' }).then(r => r.json()).catch(() => null),  // умный прогноз категорий (MAD) — текущий месяц
-  ]);
+  // Тумблеры (масштаб/характер/детализация/месяц/режим) меняют только ВИД —
+  // данные те же. Тогда перерисовываем из кэша: без сети и без спиннера,
+  // мгновенно. Свежая загрузка — при первом заходе и возврате по навигации.
+  let txAll, plAll, accs, cbAll, metrics;
+  if (useCache && _anCache) {
+    ({ txAll, plAll, accs, cbAll, metrics } = _anCache);
+  } else {
+    mc.innerHTML = '<div style="padding:20px"><div class="spinner"></div></div>';
+    const [r1, r2, r3, cb, mt] = await Promise.all([
+      sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
+      sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
+      sb.from('accounts').select('name,account_type,include_in_balance'),
+      fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/metrics`, { credentials: 'include' }).then(r => r.json()).catch(() => null),  // умный прогноз категорий (MAD) — текущий месяц
+    ]);
+    txAll = r1.data; plAll = r2.data; accs = r3.data; cbAll = cb; metrics = mt;
+    _anCache = { txAll, plAll, accs, cbAll, metrics };
+  }
   // Прогноз категорий из бэкенда (MAD-фильтр, окно 30 дн). Применим только к ТЕКУЩЕМУ
   // месяцу (metrics считается по серверному «сегодня»); прошлые месяцы — факт.
   const mFcByCat = {}; const mVarCats = new Set(); let mSumForecast = 0; let mHasFc = false;
@@ -5590,9 +5600,9 @@ async function loadSummary() {
   renderAnBarChart('income', sy, sm);
 }
 
-function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
-function anSetMode(m) { _anMode = m; loadSummary(); }
-function anSetScale(s) { _anScale = s; loadSummary(); }
+function anPickMonth(ym) { _anMonth = ym; loadSummary(true); }
+function anSetMode(m) { _anMode = m; loadSummary(true); }
+function anSetScale(s) { _anScale = s; loadSummary(true); }
 
 // Drill по сегменту графика расходов: показываем фактические операции сегмента
 // (период × характер). index — месяц (год-масштаб) или день (месяц-масштаб).
@@ -5792,8 +5802,8 @@ function renderAnBarChart(kind, sy, sm) {
     },
   });
 }
-function anSetGran(g) { _anGran = g; loadSummary(); }
-function anSetChar(c) { _anChar = c; loadSummary(); }
+function anSetGran(g) { _anGran = g; loadSummary(true); }
+function anSetChar(c) { _anChar = c; loadSummary(true); }
 // ── Универсальный дрилл категории (работает с любой страницы) ────────────────
 // Открывается кликом по любому категорийному прогресс-бару. Сам грузит операции,
 // план и конверт по категории за месяц → шапка + KPI (Факт/План/Отклонение) +
