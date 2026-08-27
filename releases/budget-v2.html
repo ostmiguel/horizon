@@ -5774,9 +5774,47 @@ function renderAnBarChart(kind, sy, sm) {
     },
   };
 
+  // Линия-опора: среднее по столбцам С ДАННЫМИ (= «≈ X/мес» из KPI). Считается от
+  // ВИДИМЫХ датасетов, поэтому follows фильтр характера и скрытия из легенды.
+  const avgLine = {
+    id: 'anAvgLine',
+    afterDatasetsDraw(chart) {
+      const labs = chart.data.labels || [];
+      let sum = 0, active = 0;
+      for (let i = 0; i < labs.length; i++) {
+        let t = 0;
+        chart.data.datasets.forEach((d, di) => { if (!chart.getDatasetMeta(di).hidden) t += (+d.data[i] || 0); });
+        if (t > 0) { sum += t; active++; }
+      }
+      if (!active) return;
+      const avg = sum / active;
+      const y = chart.scales.y.getPixelForValue(avg);
+      const area = chart.chartArea;
+      if (y < area.top || y > area.bottom) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(15,36,60,.42)';
+      ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(area.left, y); ctx.lineTo(area.right, y); ctx.stroke();
+      ctx.setLineDash([]);
+      const txt = 'среднее ' + fmtShort(avg);
+      ctx.font = '600 10px Inter, ui-sans-serif, sans-serif';
+      const tw = ctx.measureText(txt).width, pad = 4, bh = 14;
+      const bx = area.right - tw - pad * 2;
+      let by = y - bh - 2;
+      if (by < area.top) by = y + 2;   // у верхнего края — уводим подпись под линию
+      ctx.fillStyle = 'rgba(255,255,255,.85)';
+      ctx.fillRect(bx, by, tw + pad * 2, bh);
+      ctx.fillStyle = 'rgba(15,36,60,.72)';
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      ctx.fillText(txt, bx + pad, by + bh / 2);
+      ctx.restore();
+    },
+  };
+
   window[chartKey] = new Chart(canvas.getContext('2d'), {
     type: 'bar',
-    plugins: [segLabels],
+    plugins: [segLabels, avgLine],
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
