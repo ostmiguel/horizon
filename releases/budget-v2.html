@@ -5220,13 +5220,18 @@ async function loadSummary() {
     else if (c.kind === 'savings') b.sav += c.amt;
     if (c.kind === 'expense' || c.kind === 'income') { (opsAll[c.ym] = opsAll[c.ym] || {})[key] = (opsAll[c.ym][key] || []); opsAll[c.ym][key].push({ date: r.date, sub: c.sub || c.cat, note: r.note, amt: c.amt, kind: c.kind }); }
   });
-  // Сырые расходные строки для столбчатого графика (характер сохраняем; фильтр
-  // характера/масштаб применяем на отрисовке, а не тут — чтобы график был гибким).
-  window._anExpRows = (txAll || []).reduce((a, r) => {
-    const c = classify(r);
-    if (c.kind === 'expense' && c.ym && c.amt > 0) a.push(c);
-    return a;
-  }, []);
+  // Сырые расходные/доходные строки для столбчатых графиков (характер сохраняем;
+  // фильтр характера/масштаб применяем на отрисовке). Плюс НЕфильтрованные итоги
+  // периода для KPI-строки (доход/расход/тело долга/сбережения помесячно).
+  window._anExpRows = []; window._anIncRows = []; window._anTotals = {};
+  (txAll || []).forEach(r => {
+    const c = classify(r); if (!c.ym) return;
+    const t = window._anTotals[c.ym] || (window._anTotals[c.ym] = { inc: 0, exp: 0, obl: 0, sav: 0 });
+    if (c.kind === 'income')        { t.inc += c.amt; if (c.amt > 0) window._anIncRows.push(c); }
+    else if (c.kind === 'expense')  { t.exp += c.amt; if (c.amt > 0) window._anExpRows.push(c); }
+    else if (c.kind === 'obligation') t.obl += c.amt;
+    else if (c.kind === 'savings')    t.sav += c.amt;
+  });
   (plAll || []).forEach(r => {
     const c = classify(r); if (!c.ym) return;
     const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;
@@ -5523,6 +5528,38 @@ async function loadSummary() {
     </div>
   </section>`;
 
+  // ── KPI за период (следует масштабу; ФАКТ, не прогноз) ──────────────────────
+  const _perTot = (() => {
+    const T = window._anTotals || {};
+    let inc = 0, exp = 0, obl = 0, sav = 0;
+    if (_anScale === 'year') {
+      const pre = sy + '-';
+      Object.keys(T).forEach(ym => { if (ym.startsWith(pre)) { const t = T[ym]; inc += t.inc; exp += t.exp; obl += t.obl; sav += t.sav; } });
+    } else {
+      const t = T[sel] || { inc: 0, exp: 0, obl: 0, sav: 0 }; inc = t.inc; exp = t.exp; obl = t.obl; sav = t.sav;
+    }
+    return { inc, exp, obl, sav, profit: inc - exp, savRate: inc > 0 ? sav / inc * 100 : null };
+  })();
+  const kpiCard = (label, valHtml, color, sub) => `<div style="${CARD};padding:14px 16px">
+      <div style="${CAP}">${label}</div>
+      <div style="font-family:Sora,sans-serif;font-weight:700;font-size:20px;color:${color};margin-top:6px;font-variant-numeric:tabular-nums">${valHtml}</div>
+      ${sub ? `<div style="font-size:11px;color:#93A1B5;margin-top:3px">${sub}</div>` : ''}
+    </div>`;
+  const periodLbl = _anScale === 'year' ? sy + ' год' : MNN[sm - 1] + ' ' + sy;
+  const sgn = n => (n >= 0 ? '+' : '−') + fmt(Math.abs(n));
+  const anKpiHtml = `
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="${CAP}">Итог · ${periodLbl}</div>
+    <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${scaleBtn('month','Месяц')}${scaleBtn('year','Год')}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:22px">
+    ${kpiCard('Доход', fmt(_perTot.inc), '#4E7D14')}
+    ${kpiCard('Расход', fmt(_perTot.exp), '#B0492A')}
+    ${kpiCard('Платежи по долгам', fmt(_perTot.obl), '#C0741A', 'тело долга · нейтрально')}
+    ${kpiCard('Профит', sgn(_perTot.profit), _perTot.profit >= 0 ? '#4E7D14' : '#B0492A', 'доход − расход')}
+    ${kpiCard('Норма сбережений', _perTot.savRate == null ? '—' : Math.round(_perTot.savRate) + '%', (_perTot.savRate == null || _perTot.savRate >= 0) ? '#1FA497' : '#B0492A', 'в резервы ÷ доход')}
+  </div>`;
+
   mc.innerHTML = `
 <div style="padding:22px clamp(16px,4vw,34px) 64px">
   <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
@@ -5537,17 +5574,20 @@ async function loadSummary() {
     <span style="${CAP};margin-left:6px">Характер</span>${charCtl}
   </div>
   <div style="${CARD};display:flex;gap:11px;align-items:flex-start;padding:12px 15px;margin-bottom:22px;background:#F7F9FC"><span style="width:7px;height:7px;border-radius:50%;background:#1E948A;flex:none;margin-top:5px"></span><div style="font-size:12.5px;color:#5A6B82;line-height:1.55">${note}</div></div>
-  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
-      <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${scaleBtn('month','Месяц')}${scaleBtn('year','Год')}</div>
-    </div>
+  ${anKpiHtml}
+  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:18px">
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:14px">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
     <div style="height:300px;position:relative"><canvas id="anExpCanvas"></canvas></div>
+  </section>
+  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:14px">Доходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
+    <div style="height:300px;position:relative"><canvas id="anIncCanvas"></canvas></div>
   </section>
   ${_anMode === 'table' ? pnl() : visual}
 </div>`;
 
-  renderAnExpChart(sy, sm);
+  renderAnBarChart('expense', sy, sm);
+  renderAnBarChart('income', sy, sm);
 }
 
 function anPickMonth(ym) { _anMonth = ym; loadSummary(); }
@@ -5556,8 +5596,8 @@ function anSetScale(s) { _anScale = s; loadSummary(); }
 
 // Drill по сегменту графика расходов: показываем фактические операции сегмента
 // (период × характер). index — месяц (год-масштаб) или день (месяц-масштаб).
-function anExpDrill(char, index, sy, sm) {
-  const rows = window._anExpRows || [];
+function anBarDrill(kind, char, index, sy, sm) {
+  const rows = (kind === 'income' ? window._anIncRows : window._anExpRows) || [];
   const MFULL = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   const MNOM  = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
   let items, title;
@@ -5611,12 +5651,15 @@ const _AN_CHARS = ['Фиксированный', 'Повседневный', 'Э
 const _AN_CHAR_COLOR = { 'Фиксированный': '#1D7E97', 'Повседневный': '#6FA31C', 'Эпизодический': '#93A1B5' };
 const _AN_CHAR_LBL = { 'Фиксированный': 'Фиксированные', 'Повседневный': 'Повседневные', 'Эпизодический': 'Эпизодические' };
 
-function renderAnExpChart(sy, sm) {
-  const canvas = document.getElementById('anExpCanvas');
+function renderAnBarChart(kind, sy, sm) {
+  const isInc = kind === 'income';
+  const canvasId = isInc ? 'anIncCanvas' : 'anExpCanvas';
+  const chartKey = isInc ? '_anIncChart' : '_anExpChart';
+  const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === 'undefined') return;
-  if (window._anExpChart) { try { window._anExpChart.destroy(); } catch(e){} window._anExpChart = null; }
+  if (window[chartKey]) { try { window[chartKey].destroy(); } catch(e){} window[chartKey] = null; }
 
-  const rows = window._anExpRows || [];
+  const rows = (isInc ? window._anIncRows : window._anExpRows) || [];
   const activeChars = (_anChar === 'all') ? _AN_CHARS : _AN_CHARS.filter(c => c === _anChar);
   const val = {};   // val[groupKey][char] = сумма
   let labels = [], groupKeys = [];
@@ -5645,12 +5688,15 @@ function renderAnExpChart(sy, sm) {
     });
   }
 
-  const datasets = activeChars.map(ch => ({
-    label: _AN_CHAR_LBL[ch],
-    data: groupKeys.map(k => Math.round((val[k] && val[k][ch]) || 0)),
-    backgroundColor: _AN_CHAR_COLOR[ch],
-    stack: 's', borderRadius: 3, maxBarThickness: 46,
-  }));
+  // Датасеты по характерам; пустой характер (напр. Повседневный у дохода) не рисуем.
+  // dsChars хранит характер каждого датасета — для точного drill по клику.
+  const datasets = [], dsChars = [];
+  activeChars.forEach(ch => {
+    const data = groupKeys.map(k => Math.round((val[k] && val[k][ch]) || 0));
+    if (!data.some(v => v > 0)) return;
+    datasets.push({ label: _AN_CHAR_LBL[ch], data, backgroundColor: _AN_CHAR_COLOR[ch], stack: 's', borderRadius: 3, maxBarThickness: 46 });
+    dsChars.push(ch);
+  });
 
   const fmtRub = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
   // Короткий ярлык: 1 234 → «1,2к», 15 000 → «15к», < 1000 → число.
@@ -5684,7 +5730,7 @@ function renderAnExpChart(sy, sm) {
     },
   };
 
-  window._anExpChart = new Chart(canvas.getContext('2d'), {
+  window[chartKey] = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     plugins: [segLabels],
     data: { labels, datasets },
@@ -5696,8 +5742,8 @@ function renderAnExpChart(sy, sm) {
         const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
         if (!hit.length) return;
         const el = hit[0];
-        const ch = activeChars[el.datasetIndex];
-        if (ch) anExpDrill(ch, el.index, sy, sm);
+        const ch = dsChars[el.datasetIndex];
+        if (ch) anBarDrill(kind, ch, el.index, sy, sm);
       },
       onHover: (evt, _els, chart) => {
         const hit = chart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, false);
