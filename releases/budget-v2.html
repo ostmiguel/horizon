@@ -5774,8 +5774,19 @@ function renderAnBarChart(kind, sy, sm) {
     },
   };
 
-  // Линия-опора: среднее по столбцам С ДАННЫМИ (= «≈ X/мес» из KPI). Считается от
-  // ВИДИМЫХ датасетов, поэтому follows фильтр характера и скрытия из легенды.
+  // Знаменатель среднего: день-масштаб → все КАЛЕНДАРНЫЕ дни месяца (в текущем,
+  // неполном месяце — прошедшие дни), чтобы нулевые дни учитывались в темпе.
+  // Год-масштаб → null: тогда делим на активные месяцы (как в KPI «≈ X/мес»).
+  let avgDenom = null;
+  if (_anScale === 'month') {
+    const dim = new Date(sy, sm, 0).getDate();
+    const now = new Date();
+    const isCur = (sy === now.getFullYear() && sm === (now.getMonth() + 1));
+    avgDenom = isCur ? Math.min(now.getDate(), dim) : dim;
+  }
+
+  // Линия-опора: среднее по видимым сегментам. День → сумма ÷ календарные/прошедшие
+  // дни; год → сумма ÷ активные месяцы. Follows фильтр характера и скрытие легенды.
   const avgLine = {
     id: 'anAvgLine',
     afterDatasetsDraw(chart) {
@@ -5784,10 +5795,12 @@ function renderAnBarChart(kind, sy, sm) {
       for (let i = 0; i < labs.length; i++) {
         let t = 0;
         chart.data.datasets.forEach((d, di) => { if (!chart.getDatasetMeta(di).hidden) t += (+d.data[i] || 0); });
-        if (t > 0) { sum += t; active++; }
+        if (t > 0) active++;
+        sum += t;
       }
-      if (!active) return;
-      const avg = sum / active;
+      const denom = avgDenom || active;
+      if (!denom || sum <= 0) return;
+      const avg = sum / denom;
       const y = chart.scales.y.getPixelForValue(avg);
       const area = chart.chartArea;
       if (y < area.top || y > area.bottom) return;
