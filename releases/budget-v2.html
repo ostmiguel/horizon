@@ -5620,15 +5620,8 @@ async function loadSummary(useCache) {
     </section>`;
   })();
 
-  mc.innerHTML = `
-<div style="padding:22px clamp(16px,4vw,34px) 64px">
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
-    <div><div class="page-title">Аналитика</div><div style="font-size:12.5px;color:#93A1B5;margin-top:2px">${MNN[sm-1]} ${sy}${isCurrent && elapsed<daysInMonth ? ` · прошло ${elapsed} из ${daysInMonth} дней` : ''}${_anMode==='table'?` · P&L за ${sy} год`:''}</div></div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${modeBtn('visual','Визуально')}${modeBtn('table','Таблица')}</div>
-      <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px;flex-wrap:wrap">${picker}</div>
-    </div>
-  </div>
+  // Тело режима «Визуально»: фильтр характера + KPI + графики + хитмап.
+  const visualBody = `
   <div style="display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
     <span style="${CAP}">Характер</span>${charCtl}
   </div>
@@ -5648,8 +5641,18 @@ async function loadSummary(useCache) {
     </div>
     <div style="position:relative;min-height:300px"><canvas id="anCatCanvas"></canvas></div>
   </section>
-  ${anHeatmapHtml}
-  ${_anMode === 'table' ? pnl() : visual}
+  ${anHeatmapHtml}`;
+
+  mc.innerHTML = `
+<div style="padding:22px clamp(16px,4vw,34px) 64px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+    <div><div class="page-title">Аналитика</div><div style="font-size:12.5px;color:#93A1B5;margin-top:2px">${MNN[sm-1]} ${sy}${isCurrent && elapsed<daysInMonth ? ` · прошло ${elapsed} из ${daysInMonth} дней` : ''}${_anMode==='table'?` · P&L за ${sy} год`:''}</div></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${modeBtn('visual','Визуально')}${modeBtn('table','Таблица')}</div>
+      <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px;flex-wrap:wrap">${picker}</div>
+    </div>
+  </div>
+  ${_anMode === 'table' ? pnl() : visualBody}
 </div>`;
 
   renderAnBarChart('expense', sy, sm);
