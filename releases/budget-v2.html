@@ -5652,7 +5652,9 @@ async function loadSummary(useCache) {
       <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px;flex-wrap:wrap">${picker}</div>
     </div>
   </div>
-  ${_anMode === 'table' ? pnl() : visualBody}
+  ${_anMode === 'table'
+    ? `<div style="display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;margin-bottom:14px"><span style="${CAP}">Детализация</span>${granCtl}<span style="${CAP};margin-left:6px">Характер</span>${charCtl}</div>${pnl()}`
+    : visualBody}
 </div>`;
 
   renderAnBarChart('expense', sy, sm);
