@@ -881,6 +881,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 .bar { height:7px; border-radius:99px; background:rgba(15,36,60,.08); overflow:hidden; }
 .bar i { display:block; height:100%; border-radius:99px; }
 .step { margin-top:14px; padding:16px; border-radius:14px; border:1px solid var(--border2,var(--border)); background:linear-gradient(135deg,rgba(42,167,204,.10),rgba(180,222,60,.10)); }
+.an-pnl tbody tr:hover td { background:#EFF4F9 !important; }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 </head>
@@ -5426,36 +5427,40 @@ async function loadSummary(useCache) {
   function pnl() {
     const yr = sy, yMonths = months.filter(m => +m.slice(0, 4) === yr);
     const mLab = yMonths.map(m => MNN[+m.slice(5) - 1].slice(0, 3));
+    const nMo = yMonths.length || 1;   // месяцев с данными в году — знаменатель «Среднее»
     const uni = maps => [...new Set([].concat(...maps))];
     const incCats = uni(yMonths.map(m => Object.keys(M[m].incCat)).concat(yMonths.map(m => Object.keys(PM[m]?.incCat || {}))));
     const expCats = uni(yMonths.map(m => Object.keys(M[m].expCat)).concat(yMonths.map(m => Object.keys({ ...(PM[m]?.expCat || {}), ...(ENV[m] || {}) }))));
-    const th = `<th style="padding:10px 12px;text-align:left;${CAP};position:sticky;left:0;background:#fff">Статья</th>${mLab.map(l => `<th style="padding:10px 10px;text-align:right;${CAP}">${l}</th>`).join('')}<th style="padding:10px 12px;text-align:right;${CAP}">Итого</th><th style="padding:10px 12px;text-align:right;${CAP}">План</th><th style="padding:10px 12px;text-align:right;${CAP}">%</th>`;
+    const thR = l => `<th style="padding:10px 12px;text-align:right;${CAP}">${l}</th>`;
+    const th = `<th style="padding:10px 12px;text-align:left;${CAP};position:sticky;left:0;background:#fff">Статья</th>${mLab.map(l => `<th style="padding:10px 10px;text-align:right;${CAP}">${l}</th>`).join('')}${thR('Итого')}${thR('Среднее')}${thR('План')}`;
     const rowFn = (name, isInc) => {
       const facts = yMonths.map(m => (isInc ? M[m].incCat[name] : M[m].expCat[name]) || 0);
       const tot = facts.reduce((s, v) => s + v, 0);
       const plan = yMonths.reduce((s, m) => s + (isInc ? pIncC(m, name) : pExpC(m, name)), 0);
-      const pct = plan ? Math.round(tot / plan * 100) : null, pc = pct == null ? '#93A1B5' : (pct > 105 ? '#B5564A' : (pct < 97 ? '#4E7D3A' : '#5A6B82'));
-      return `<tr onclick="anDrillM('${esc(name)}','${sel}')" style="cursor:pointer;border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;white-space:nowrap;position:sticky;left:0;background:#fff">${esc(name)}</td>${facts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(tot)}</td><td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${plan ? fmtN(plan) : '—'}</td><td style="padding:8px 12px;text-align:right;color:${pc};font-variant-numeric:tabular-nums">${pct == null ? '—' : pct + '%'}</td></tr>`;
+      return `<tr onclick="anDrillM('${esc(name)}','${sel}')" style="cursor:pointer;border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;white-space:nowrap;position:sticky;left:0;background:#fff">${esc(name)}</td>${facts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(tot)}</td><td style="padding:8px 12px;text-align:right;color:#5A6B82;font-variant-numeric:tabular-nums">${fmtN(tot / nMo)}</td><td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${plan ? fmtN(plan) : '—'}</td></tr>`;
     };
     const sumRow = (name, isInc) => {
       const facts = yMonths.map(m => (isInc ? M[m].inc : M[m].exp));
       const tot = facts.reduce((s, v) => s + v, 0), plan = yMonths.reduce((s, m) => s + (isInc ? pIncT(m) : pExpT(m)), 0);
-      return `<tr style="background:#F7F9FC;border-top:1px solid rgba(15,36,60,.1)"><td style="padding:9px 12px;font-weight:600;position:sticky;left:0;background:#F7F9FC">${name}</td>${facts.map(v => `<td style="padding:9px 10px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(v)}</td>`).join('')}<td style="padding:9px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${fmtN(tot)}</td><td style="padding:9px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${plan ? fmtN(plan) : '—'}</td><td></td></tr>`;
+      return `<tr style="background:#F7F9FC;border-top:1px solid rgba(15,36,60,.1)"><td style="padding:9px 12px;font-weight:600;position:sticky;left:0;background:#F7F9FC">${name}</td>${facts.map(v => `<td style="padding:9px 10px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(v)}</td>`).join('')}<td style="padding:9px 12px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${fmtN(tot)}</td><td style="padding:9px 12px;text-align:right;font-weight:600;color:#5A6B82;font-variant-numeric:tabular-nums">${fmtN(tot / nMo)}</td><td style="padding:9px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${plan ? fmtN(plan) : '—'}</td></tr>`;
     };
     const secHead = t => `<tr><td colspan="${mLab.length + 4}" style="padding:14px 12px 4px;font-weight:700;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#93A1B5;position:sticky;left:0;background:#fff">${t}</td></tr>`;
     const oblFacts = yMonths.map(m => M[m].obl);
+    const oblTot = oblFacts.reduce((s, v) => s + v, 0);
     const profFacts = yMonths.map(m => M[m].inc - M[m].exp);   // тело долга (obl) в профит не входит
     const profTot = profFacts.reduce((s, v) => s + v, 0);
-    const oblRow = oblFacts.some(v => v) ? `<tr style="border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;position:sticky;left:0;background:#fff">Платежи по долгам</td>${oblFacts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(oblFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
     const savFacts = yMonths.map(m => M[m].sav);
-    const savRow = savFacts.some(v => v) ? `<tr><td style="padding:8px 12px;color:#93A1B5;position:sticky;left:0;background:#fff">Сбережения → в резервы</td>${savFacts.map(v => `<td style="padding:8px 10px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savFacts.reduce((s, v) => s + v, 0))}</td><td></td><td></td></tr>` : '';
-    const profRow = `<tr style="border-top:2px solid rgba(15,36,60,.14)"><td style="padding:11px 12px;font-family:Sora,sans-serif;font-weight:700;position:sticky;left:0;background:#fff">Профит</td>${profFacts.map(v => `<td style="padding:11px 10px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${v>=0?'#4E7D3A':'#B5564A'}">${(v>=0?'':'−')+fmtN(Math.abs(v))}</td>`).join('')}<td style="padding:11px 12px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${profTot>=0?'#4E7D3A':'#B5564A'}">${(profTot>=0?'+':'−')+fmtN(Math.abs(profTot))}</td><td></td><td></td></tr>`;
-    return `<div style="${CARD};overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid rgba(15,36,60,.12)">${th}</tr></thead><tbody>
+    const savTot = savFacts.reduce((s, v) => s + v, 0);
+    const oblRow = oblFacts.some(v => v) ? `<tr style="border-top:1px solid rgba(15,36,60,.05)"><td style="padding:8px 12px;color:#5A6B82;position:sticky;left:0;background:#fff">Платежи по долгам</td>${oblFacts.map(v => `<td style="padding:8px 10px;text-align:right;font-variant-numeric:tabular-nums;color:${v?'#0F243C':'#CBD5E1'}">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(oblTot)}</td><td style="padding:8px 12px;text-align:right;color:#5A6B82;font-variant-numeric:tabular-nums">${fmtN(oblTot / nMo)}</td><td></td></tr>` : '';
+    const savRow = savFacts.some(v => v) ? `<tr><td style="padding:8px 12px;color:#93A1B5;position:sticky;left:0;background:#fff">Сбережения → в резервы</td>${savFacts.map(v => `<td style="padding:8px 10px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${v ? fmtN(v) : '·'}</td>`).join('')}<td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savTot)}</td><td style="padding:8px 12px;text-align:right;color:#93A1B5;font-variant-numeric:tabular-nums">${fmtN(savTot / nMo)}</td><td></td></tr>` : '';
+    const profAvg = profTot / nMo;
+    const profRow = `<tr style="border-top:2px solid rgba(15,36,60,.14)"><td style="padding:11px 12px;font-family:Sora,sans-serif;font-weight:700;position:sticky;left:0;background:#fff">Профит</td>${profFacts.map(v => `<td style="padding:11px 10px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${v>=0?'#4E7D3A':'#B5564A'}">${(v>=0?'':'−')+fmtN(Math.abs(v))}</td>`).join('')}<td style="padding:11px 12px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${profTot>=0?'#4E7D3A':'#B5564A'}">${(profTot>=0?'+':'−')+fmtN(Math.abs(profTot))}</td><td style="padding:11px 12px;text-align:right;font-family:Sora,sans-serif;font-weight:700;font-variant-numeric:tabular-nums;color:${profAvg>=0?'#4E7D3A':'#B5564A'}">${(profAvg>=0?'+':'−')+fmtN(Math.abs(profAvg))}</td><td></td></tr>`;
+    return `<div style="${CARD};overflow-x:auto"><table class="an-pnl" style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="border-bottom:1px solid rgba(15,36,60,.12)">${th}</tr></thead><tbody>
       ${secHead('Доходы')}${incCats.map(n => rowFn(n, true)).join('')}${sumRow('Итого доходы', true)}
       ${secHead('Расходы')}${expCats.map(n => rowFn(n, false)).join('')}${sumRow('Итого расходы', false)}
       ${oblRow}${profRow}${savRow}
     </tbody></table></div>
-    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы (проценты входят). Тело долга и сбережения в профит НЕ входят (это не расходы — погашение и распределение), показаны отдельными строками. Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
+    <div style="font-size:11px;color:#93A1B5;margin-top:10px">P&L за ${yr} год. Среднее = итог ÷ ${nMo} мес. с данными. План = правила + конверты + события из Бюджета. Профит = Доходы − Расходы (проценты входят). Тело долга и сбережения в профит НЕ входят, показаны отдельными строками. Клик по строке — операции месяца ${MNN[sm-1]}.</div>`;
   }
 
   const note = depth < 3
