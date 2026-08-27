@@ -5578,6 +5578,48 @@ async function loadSummary(useCache) {
     ${kpiCard('Норма сбережений', _perTot.savRate == null ? '—' : Math.round(_perTot.savRate) + '%', (_perTot.savRate == null || _perTot.savRate >= 0) ? '#1FA497' : '#B0492A', subSav, `anKpiDrill('savings',${sy},${sm})`)}
   </div>`;
 
+  // ── Хитмап «категория × месяц»: динамика каждой статьи во времени ───────────
+  // Строки — категории/подкатегории (по _anGran), столбцы — месяцы (последние 18),
+  // насыщенность ячейки — сумма (нормировка ПО СТРОКЕ: видно тренд самой статьи
+  // независимо от её размера). Клик по ячейке — операции статьи за месяц.
+  const anHeatmapHtml = (() => {
+    const rowsH = window._anExpRows || [];
+    const MSH = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+    const monthsSet = new Set(); const agg = {}; const keyTot = {};
+    rowsH.forEach(r => {
+      if (_anChar !== 'all' && r.char !== _anChar) return;
+      const key = _anGran === 'sub' ? (r.sub || r.cat) : r.cat;
+      monthsSet.add(r.ym);
+      (agg[key] = agg[key] || {})[r.ym] = (agg[key][r.ym] || 0) + r.amt;
+      keyTot[key] = (keyTot[key] || 0) + r.amt;
+    });
+    const monthsShown = [...monthsSet].sort().slice(-18);
+    const keys = Object.keys(keyTot).sort((a, b) => keyTot[b] - keyTot[a]);
+    if (!monthsShown.length || !keys.length) return '';
+    window._anHeatCells = [];
+    const mLbl = ym => { const p = ym.split('-'); return MSH[+p[1] - 1] + ' ' + p[0].slice(2); };
+    const head = monthsShown.map(ym => `<th style="font-weight:600;font-size:10px;color:#93A1B5;padding:0 4px 6px;text-align:center;white-space:nowrap">${mLbl(ym)}</th>`).join('');
+    const body = keys.map(key => {
+      const rowMax = Math.max(1, ...monthsShown.map(ym => agg[key][ym] || 0));
+      const cells = monthsShown.map(ym => {
+        const v = agg[key][ym] || 0;
+        let idx = -1;
+        if (v > 0) { idx = window._anHeatCells.length; window._anHeatCells.push({ key, ym }); }
+        const op = v > 0 ? (0.12 + 0.88 * (v / rowMax)) : 0;
+        const bg = v > 0 ? `rgba(191,116,25,${op.toFixed(3)})` : '#F5F8FB';
+        const tc = op > 0.55 ? '#fff' : '#8A6A3A';
+        const lbl = v >= 1000 ? Math.round(v / 1000) + 'к' : (v > 0 ? Math.round(v) : '');
+        return `<td ${v > 0 ? `onclick="anHeatDrill(${idx})" ` : ''}style="background:${bg};color:${tc};text-align:center;font-size:10.5px;font-variant-numeric:tabular-nums;padding:7px 4px;border-radius:4px;${v > 0 ? 'cursor:pointer' : ''}">${lbl}</td>`;
+      }).join('');
+      return `<tr><td style="font-size:12px;color:#0F243C;white-space:nowrap;padding:0 12px 0 0;position:sticky;left:0;background:#fff">${esc(key)}</td>${cells}</tr>`;
+    }).join('');
+    return `<section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
+      <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:4px">Динамика по ${_anGran === 'sub' ? 'подкатегориям' : 'категориям'}</div>
+      <div style="${CAP};color:#93A1B5;font-weight:500;text-transform:none;letter-spacing:0;margin-bottom:14px">Насыщенность — по строке (тренд статьи). Клик по ячейке — операции месяца.</div>
+      <div style="overflow-x:auto"><table style="border-collapse:separate;border-spacing:3px"><thead><tr><th style="position:sticky;left:0;background:#fff"></th>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    </section>`;
+  })();
+
   mc.innerHTML = `
 <div style="padding:22px clamp(16px,4vw,34px) 64px">
   <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px">
@@ -5596,16 +5638,17 @@ async function loadSummary(useCache) {
     <div style="height:300px;position:relative"><canvas id="anExpCanvas"></canvas></div>
   </section>
   <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:14px">Доходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
+    <div style="height:300px;position:relative"><canvas id="anIncCanvas"></canvas></div>
+  </section>
+  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
       <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Расходы по ${_anGran==='sub'?'подкатегориям':'категориям'} · ${_anScale==='year' ? sy + ' год' : MNN[sm-1] + ' ' + sy}</div>
       ${granCtl}
     </div>
     <div style="position:relative;min-height:300px"><canvas id="anCatCanvas"></canvas></div>
   </section>
-  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
-    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:14px">Доходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
-    <div style="height:300px;position:relative"><canvas id="anIncCanvas"></canvas></div>
-  </section>
+  ${anHeatmapHtml}
   ${_anMode === 'table' ? pnl() : visual}
 </div>`;
 
@@ -5774,6 +5817,19 @@ function anCatDrill(char, key, sy, sm) {
   const items = rows.filter(r => inPeriod(r) && r.char === char && (isSub ? (r.sub || r.cat) : r.cat) === key);
   const periodLbl = _anScale === 'year' ? sy + ' год' : _AN_MNOM[sm - 1] + ' ' + sy;
   _anDrillModal(key, (_AN_CHAR_LBL[char] || char) + ' · ' + periodLbl, _AN_CHAR_COLOR[char] || '#5A6B82', items, false);
+}
+
+// Drill по ячейке хитмапа: операции статьи (категория/подкатегория) за месяц.
+function anHeatDrill(i) {
+  const cell = (window._anHeatCells || [])[i];
+  if (!cell) return;
+  const rows = window._anExpRows || [];
+  const isSub = _anGran === 'sub';
+  const items = rows.filter(r => r.ym === cell.ym
+    && (isSub ? (r.sub || r.cat) : r.cat) === cell.key
+    && (_anChar === 'all' || r.char === _anChar));
+  const p = cell.ym.split('-');
+  _anDrillModal(cell.key, _AN_MNOM[+p[1] - 1] + ' ' + p[0], '#bf7419', items, false);
 }
 
 // Drill по KPI (весь период, все характеры).
