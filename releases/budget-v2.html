@@ -5541,14 +5541,14 @@ async function loadSummary(useCache) {
   // ── KPI за период (следует масштабу; ФАКТ, не прогноз) ──────────────────────
   const _perTot = (() => {
     const T = window._anTotals || {};
-    let inc = 0, exp = 0, obl = 0, sav = 0;
+    let inc = 0, exp = 0, obl = 0, sav = 0, months = 0;
     if (_anScale === 'year') {
       const pre = sy + '-';
-      Object.keys(T).forEach(ym => { if (ym.startsWith(pre)) { const t = T[ym]; inc += t.inc; exp += t.exp; obl += t.obl; sav += t.sav; } });
+      Object.keys(T).forEach(ym => { if (ym.startsWith(pre)) { months++; const t = T[ym]; inc += t.inc; exp += t.exp; obl += t.obl; sav += t.sav; } });
     } else {
-      const t = T[sel] || { inc: 0, exp: 0, obl: 0, sav: 0 }; inc = t.inc; exp = t.exp; obl = t.obl; sav = t.sav;
+      const t = T[sel] || { inc: 0, exp: 0, obl: 0, sav: 0 }; inc = t.inc; exp = t.exp; obl = t.obl; sav = t.sav; months = 1;
     }
-    return { inc, exp, obl, sav, profit: inc - exp, savRate: inc > 0 ? sav / inc * 100 : null };
+    return { inc, exp, obl, sav, months, profit: inc - exp, savRate: inc > 0 ? sav / inc * 100 : null };
   })();
   const kpiCard = (label, valHtml, color, sub, click) => `<div ${click ? `onclick="${click}" ` : ''}style="${CARD};padding:14px 16px${click ? ';cursor:pointer' : ''}">
       <div style="${CAP}">${label}${click ? ' <span style="color:#C6D0DC">›</span>' : ''}</div>
@@ -5557,17 +5557,25 @@ async function loadSummary(useCache) {
     </div>`;
   const periodLbl = _anScale === 'year' ? sy + ' год' : MNN[sm - 1] + ' ' + sy;
   const sgn = n => (n >= 0 ? '+' : '−') + fmt(Math.abs(n));
+  // В годовом виде под суммой показываем среднее за активный месяц.
+  const _yr = _anScale === 'year';
+  const perMo = v => _perTot.months > 0 ? '≈ ' + fmt(v / _perTot.months) + '/мес' : '—';
+  const subInc  = _yr ? perMo(_perTot.inc)    : null;
+  const subExp  = _yr ? perMo(_perTot.exp)    : null;
+  const subObl  = _yr ? perMo(_perTot.obl)    : 'тело долга · нейтрально';
+  const subProf = _yr ? perMo(_perTot.profit) : 'доход − расход';
+  const subSav  = _yr ? perMo(_perTot.sav)    : 'в резервы ÷ доход';
   const anKpiHtml = `
   <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
     <div style="${CAP}">Итог · ${periodLbl}</div>
     <div style="display:flex;gap:2px;background:#F5F8FB;border:1px solid rgba(15,36,60,.08);border-radius:10px;padding:3px">${scaleBtn('month','Месяц')}${scaleBtn('year','Год')}</div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:22px">
-    ${kpiCard('Доход', fmt(_perTot.inc), '#4E7D14', null, `anKpiDrill('income',${sy},${sm})`)}
-    ${kpiCard('Расход', fmt(_perTot.exp), '#B0492A', null, `anKpiDrill('expense',${sy},${sm})`)}
-    ${kpiCard('Платежи по долгам', fmt(_perTot.obl), '#C0741A', 'тело долга · нейтрально', `anKpiDrill('obligation',${sy},${sm})`)}
-    ${kpiCard('Профит', sgn(_perTot.profit), _perTot.profit >= 0 ? '#4E7D14' : '#B0492A', 'доход − расход')}
-    ${kpiCard('Норма сбережений', _perTot.savRate == null ? '—' : Math.round(_perTot.savRate) + '%', (_perTot.savRate == null || _perTot.savRate >= 0) ? '#1FA497' : '#B0492A', 'в резервы ÷ доход', `anKpiDrill('savings',${sy},${sm})`)}
+    ${kpiCard('Доход', fmt(_perTot.inc), '#4E7D14', subInc, `anKpiDrill('income',${sy},${sm})`)}
+    ${kpiCard('Расход', fmt(_perTot.exp), '#B0492A', subExp, `anKpiDrill('expense',${sy},${sm})`)}
+    ${kpiCard('Платежи по долгам', fmt(_perTot.obl), '#C0741A', subObl, `anKpiDrill('obligation',${sy},${sm})`)}
+    ${kpiCard('Профит', sgn(_perTot.profit), _perTot.profit >= 0 ? '#4E7D14' : '#B0492A', subProf)}
+    ${kpiCard('Норма сбережений', _perTot.savRate == null ? '—' : Math.round(_perTot.savRate) + '%', (_perTot.savRate == null || _perTot.savRate >= 0) ? '#1FA497' : '#B0492A', subSav, `anKpiDrill('savings',${sy},${sm})`)}
   </div>`;
 
   mc.innerHTML = `
