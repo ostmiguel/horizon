@@ -5835,7 +5835,11 @@ function renderAnNetWorth() {
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: true, maxRotation: 0 } },
-        y: { stacked: true, grid: { color: 'rgba(15,36,60,.06)' }, ticks: { font: { size: 11 }, callback: v => Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'к' : v } },
+        y: { stacked: true, ticks: { font: { size: 11 }, callback: v => Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'к' : v },
+             grid: {
+               color: ctx => ctx.tick.value === 0 ? 'rgba(15,36,60,.32)' : 'rgba(15,36,60,.06)',
+               lineWidth: ctx => ctx.tick.value === 0 ? 1.5 : 1,
+             } },
       },
       plugins: {
         legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11.5 } } },
