@@ -5186,7 +5186,7 @@ async function loadSummary(useCache) {
     const [r1, r2, r3, cb, mt] = await Promise.all([
       sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
       sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
-      sb.from('accounts').select('name,account_type,include_in_balance,is_reserve,initial_balance'),
+      sb.from('accounts').select('name,account_type,include_in_balance,is_reserve,initial_balance,is_active'),
       fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
       fetch(`${API_BASE}/api/metrics`, { credentials: 'include' }).then(r => r.json()).catch(() => null),  // умный прогноз категорий (MAD) — текущий месяц
     ]);
@@ -5739,6 +5739,10 @@ function anBarDrill(kind, char, index, sy, sm) {
 // Активы бьём на 3 корзины (операционные/резервы/инвестиции), Пассивы — долги (<0).
 function computeNetWorth(txAll, accs) {
   if (!accs || !accs.length || !txAll || !txAll.length) return null;
+  // Только активные счета: ретайренный пул «Обязательства» (is_active=false) иначе
+  // дублирует долг (его баланс уже перенесён в индивидуальные счета-Пассивы).
+  accs = accs.filter(a => a.is_active !== false);
+  if (!accs.length) return null;
   const tMonths = txAll.map(t => (t.date || '').slice(0, 7)).filter(Boolean);
   if (!tMonths.length) return null;
   const first = tMonths.reduce((a, b) => a < b ? a : b);
