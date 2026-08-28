@@ -63,13 +63,37 @@ async def update_account(account_id: int, data: AccountUpdate, request: Request)
     updates = data.dict(exclude_none=True)
     if not updates:
         raise HTTPException(400, "No fields to update")
+
+    # Счета в операциях/плане/правилах/кредитах хранятся ПО ИМЕНИ (строкой), а
+    # баланс матчится по текущему имени. Значит переименование обязано каскадить
+    # на все ссылки — иначе они осиротеют под старым именем и выпадут из баланса
+    # переименованного счёта (напр. подтверждение плана предложит старое имя).
+    new_name = updates.get("name")
+    old_name = None
+    if new_name is not None:
+        old_name = await db.fetchval(
+            "SELECT name FROM accounts WHERE id=$1 AND user_id=$2", account_id, user_id)
+        if old_name is None:
+            raise HTTPException(404, "Account not found")
+
     sets = ", ".join(f"{k} = ${i+3}" for i, k in enumerate(updates))
-    row = await db.fetchrow(
-        f"UPDATE accounts SET {sets} WHERE id = $1 AND user_id = $2 RETURNING *",
-        account_id, user_id, *updates.values()
-    )
-    if not row:
-        raise HTTPException(404, "Account not found")
+    async with db.transaction():
+        row = await db.fetchrow(
+            f"UPDATE accounts SET {sets} WHERE id = $1 AND user_id = $2 RETURNING *",
+            account_id, user_id, *updates.values()
+        )
+        if not row:
+            raise HTTPException(404, "Account not found")
+        if new_name is not None and new_name != old_name:
+            for tbl, col in (
+                ("plan_rules", "account_from"), ("plan_rules", "account_to"),
+                ("plan", "account_from"), ("plan", "account_to"),
+                ("transactions", "account_from"), ("transactions", "account_to"),
+                ("loans", "account_name"),
+            ):
+                await db.execute(
+                    f"UPDATE {tbl} SET {col}=$1 WHERE user_id=$2 AND {col}=$3",
+                    new_name, user_id, old_name)
     return dict(row)
 
 @router.delete("/{account_id}")
