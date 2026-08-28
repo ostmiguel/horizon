@@ -5808,19 +5808,20 @@ function renderAnNetWorth() {
     const yS = chart.scales.y, area = chart.chartArea, ctx = chart.ctx;
     ctx.save();
     ctx.beginPath(); ctx.rect(area.left, area.top, area.right - area.left, area.bottom - area.top); ctx.clip();
-    ctx.strokeStyle = '#0F243C'; ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(15,36,60,.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
     ctx.beginPath();
     c.net.forEach((v, i) => { const el = meta0.data[i]; if (!el) return; const x = el.x, y = yS.getPixelForValue(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
     ctx.stroke();
+    ctx.setLineDash([]);
     const li = c.net.length - 1, lel = meta0.data[li];
     if (lel) {
-      const ly = yS.getPixelForValue(c.net[li]), txt = 'чистый ' + fmtShort(c.net[li]);
-      ctx.font = '700 10px Inter, ui-sans-serif, sans-serif';
-      const tw = ctx.measureText(txt).width, pad = 4, bh = 15;
+      const ly = yS.getPixelForValue(c.net[li]), txt = 'Капитал ' + fmtShort(c.net[li]);
+      ctx.font = '600 10px Inter, ui-sans-serif, sans-serif';
+      const tw = ctx.measureText(txt).width, pad = 4, bh = 14;
       let bx = lel.x - tw - pad * 2 - 4; if (bx < area.left) bx = lel.x + 4;
       let by = ly - bh - 3; if (by < area.top) by = ly + 3;
-      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(bx, by, tw + pad * 2, bh);
-      ctx.fillStyle = '#0F243C'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, bx + pad, by + bh / 2);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(bx, by, tw + pad * 2, bh);
+      ctx.fillStyle = 'rgba(15,36,60,.72)'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, bx + pad, by + bh / 2);
     }
     ctx.restore();
   } };
