@@ -5632,11 +5632,6 @@ async function loadSummary(useCache) {
     <span style="${CAP}">Характер</span>${charCtl}
   </div>
   ${anKpiHtml}
-  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
-    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:4px">Чистый капитал во времени</div>
-    <div style="${CAP};color:#93A1B5;font-weight:500;text-transform:none;letter-spacing:0;margin-bottom:14px">Активы по типам минус долги, помесячно. Жирная линия — чистый капитал.</div>
-    <div style="height:320px;position:relative"><canvas id="anNetCanvas"></canvas></div>
-  </section>
   <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:18px">
     <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:14px">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
     <div style="height:300px;position:relative"><canvas id="anExpCanvas"></canvas></div>
@@ -5652,7 +5647,12 @@ async function loadSummary(useCache) {
     </div>
     <div style="position:relative;min-height:300px"><canvas id="anCatCanvas"></canvas></div>
   </section>
-  ${anHeatmapHtml}`;
+  ${anHeatmapHtml}
+  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:4px">Чистый капитал во времени</div>
+    <div style="${CAP};color:#93A1B5;font-weight:500;text-transform:none;letter-spacing:0;margin-bottom:14px">Активы по типам минус долги, помесячно. Жирная линия — чистый капитал.</div>
+    <div style="height:320px;position:relative"><canvas id="anNetCanvas"></canvas></div>
+  </section>`;
 
   mc.innerHTML = `
 <div style="padding:22px clamp(16px,4vw,34px) 64px">
