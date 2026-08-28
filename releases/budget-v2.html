@@ -5186,7 +5186,7 @@ async function loadSummary(useCache) {
     const [r1, r2, r3, cb, mt] = await Promise.all([
       sb.from('transactions').select('date,amount,account_from,account_to,note,categories(category,subcategory,character)').limit(100000),
       sb.from('plan').select('date,amount,account_from,account_to,categories(category,subcategory,character)').limit(100000),
-      sb.from('accounts').select('name,account_type,include_in_balance'),
+      sb.from('accounts').select('name,account_type,include_in_balance,is_reserve,initial_balance'),
       fetch(`${API_BASE}/api/category-budgets`, { credentials: 'include' }).then(r => r.json()).catch(() => []),
       fetch(`${API_BASE}/api/metrics`, { credentials: 'include' }).then(r => r.json()).catch(() => null),  // умный прогноз категорий (MAD) — текущий месяц
     ]);
@@ -5243,6 +5243,7 @@ async function loadSummary(useCache) {
     else if (c.kind === 'obligation') { t.obl += c.amt; window._anOblRows.push(c); }
     else if (c.kind === 'savings')    { t.sav += c.amt; window._anSavRows.push(c); }
   });
+  window._anNet = computeNetWorth(txAll, accs);   // чистый капитал по месяцам
   (plAll || []).forEach(r => {
     const c = classify(r); if (!c.ym) return;
     const key = _anGran === 'sub' ? (c.sub || c.cat) : c.cat;
@@ -5631,6 +5632,11 @@ async function loadSummary(useCache) {
     <span style="${CAP}">Характер</span>${charCtl}
   </div>
   ${anKpiHtml}
+  <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:22px">
+    <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:4px">Чистый капитал во времени</div>
+    <div style="${CAP};color:#93A1B5;font-weight:500;text-transform:none;letter-spacing:0;margin-bottom:14px">Активы по типам минус долги, помесячно. Жирная линия — чистый капитал.</div>
+    <div style="height:320px;position:relative"><canvas id="anNetCanvas"></canvas></div>
+  </section>
   <section style="${CARD};padding:18px clamp(14px,3vw,20px);margin-bottom:18px">
     <div style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C;margin-bottom:14px">Расходы · ${_anScale==='year' ? 'по месяцам ' + sy : 'по дням · ' + MNN[sm-1] + ' ' + sy}</div>
     <div style="height:300px;position:relative"><canvas id="anExpCanvas"></canvas></div>
@@ -5662,6 +5668,7 @@ async function loadSummary(useCache) {
     : visualBody}
 </div>`;
 
+  renderAnNetWorth();
   renderAnBarChart('expense', sy, sm);
   renderAnBarChart('income', sy, sm);
   renderAnCatChart(sy, sm);
@@ -5726,6 +5733,114 @@ function anBarDrill(kind, char, index, sy, sm) {
     title = (index + 1) + ' ' + _AN_MFULL[sm - 1] + ' ' + sy;
   }
   _anDrillModal(_AN_CHAR_LBL[char] || char, title, _AN_CHAR_COLOR[char] || '#5A6B82', items, false);
+}
+
+// Чистый капитал по месяцам: реконструкция из леджера (initial_balance + Σпо дате).
+// Активы бьём на 3 корзины (операционные/резервы/инвестиции), Пассивы — долги (<0).
+function computeNetWorth(txAll, accs) {
+  if (!accs || !accs.length || !txAll || !txAll.length) return null;
+  const tMonths = txAll.map(t => (t.date || '').slice(0, 7)).filter(Boolean);
+  if (!tMonths.length) return null;
+  const first = tMonths.reduce((a, b) => a < b ? a : b);
+  const nowYM = new Date().toISOString().slice(0, 7);
+  const months = [];
+  let [yy, mm] = first.split('-').map(Number);
+  const [ny, nm] = nowYM.split('-').map(Number);
+  while (yy < ny || (yy === ny && mm <= nm)) {
+    months.push(yy + '-' + String(mm).padStart(2, '0'));
+    mm++; if (mm > 12) { mm = 1; yy++; }
+    if (months.length > 120) break;
+  }
+  const names = new Set(accs.map(a => a.name));
+  const delta = {};   // delta[name][ym] = Σприход − Σрасход за месяц
+  txAll.forEach(t => {
+    const ym = (t.date || '').slice(0, 7); if (!ym) return;
+    const amt = +t.amount || 0;
+    if (names.has(t.account_to))   { (delta[t.account_to]   = delta[t.account_to]   || {})[ym] = (delta[t.account_to][ym]   || 0) + amt; }
+    if (names.has(t.account_from)) { (delta[t.account_from] = delta[t.account_from] || {})[ym] = (delta[t.account_from][ym] || 0) - amt; }
+  });
+  const bucketOf = a => a.account_type === 'Пассив' ? 'debt'
+    : a.is_reserve ? 'reserve'
+    : a.include_in_balance === false ? 'invest' : 'cash';
+  const running = {}; accs.forEach(a => running[a.name] = +a.initial_balance || 0);
+  const comps = { cash: [], reserve: [], invest: [], debt: [], net: [] };
+  months.forEach(ym => {
+    let cash = 0, reserve = 0, invest = 0, debt = 0;
+    accs.forEach(a => {
+      running[a.name] += (delta[a.name] && delta[a.name][ym]) || 0;
+      const b = running[a.name], bk = bucketOf(a);
+      if (bk === 'debt') debt += b; else if (bk === 'reserve') reserve += b;
+      else if (bk === 'invest') invest += b; else cash += b;
+    });
+    comps.cash.push(Math.round(cash)); comps.reserve.push(Math.round(reserve));
+    comps.invest.push(Math.round(invest)); comps.debt.push(Math.round(debt));
+    comps.net.push(Math.round(cash + reserve + invest + debt));
+  });
+  return { months, comps };
+}
+
+function renderAnNetWorth() {
+  const canvas = document.getElementById('anNetCanvas');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (window._anNetChart) { try { window._anNetChart.destroy(); } catch(e){} window._anNetChart = null; }
+  const nd = window._anNet;
+  if (!nd || !nd.months.length) return;
+  const MSH = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  const labels = nd.months.map(ym => { const p = ym.split('-'); return MSH[+p[1] - 1] + ' ' + p[0].slice(2); });
+  const c = nd.comps;
+  const mkDs = (label, data, color) => ({ label, data, backgroundColor: color, stack: 'nw', borderRadius: 2, maxBarThickness: 34 });
+  const datasets = [];
+  if (c.cash.some(v => v))    datasets.push(mkDs('Операционные', c.cash, '#2AA7CC'));
+  if (c.reserve.some(v => v)) datasets.push(mkDs('Резервы', c.reserve, '#1FA497'));
+  if (c.invest.some(v => v))  datasets.push(mkDs('Инвестиции', c.invest, '#6B7FD7'));
+  if (c.debt.some(v => v))    datasets.push(mkDs('Долги', c.debt, '#C24D3E'));
+
+  const fmtRub = n => Math.round(n).toLocaleString('ru-RU') + ' ₽';
+  const fmtShort = n => Math.abs(n) >= 1000 ? (n / 1000).toFixed(Math.abs(n) < 10000 ? 1 : 0).replace('.', ',') + 'к' : String(Math.round(n));
+
+  // Линия чистого капитала поверх стопки (сумма всех корзин, долги со знаком −).
+  const netLine = { id: 'anNetLine', afterDatasetsDraw(chart) {
+    const meta0 = chart.getDatasetMeta(0); if (!meta0 || !meta0.data.length) return;
+    const yS = chart.scales.y, area = chart.chartArea, ctx = chart.ctx;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(area.left, area.top, area.right - area.left, area.bottom - area.top); ctx.clip();
+    ctx.strokeStyle = '#0F243C'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    c.net.forEach((v, i) => { const el = meta0.data[i]; if (!el) return; const x = el.x, y = yS.getPixelForValue(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+    const li = c.net.length - 1, lel = meta0.data[li];
+    if (lel) {
+      const ly = yS.getPixelForValue(c.net[li]), txt = 'чистый ' + fmtShort(c.net[li]);
+      ctx.font = '700 10px Inter, ui-sans-serif, sans-serif';
+      const tw = ctx.measureText(txt).width, pad = 4, bh = 15;
+      let bx = lel.x - tw - pad * 2 - 4; if (bx < area.left) bx = lel.x + 4;
+      let by = ly - bh - 3; if (by < area.top) by = ly + 3;
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(bx, by, tw + pad * 2, bh);
+      ctx.fillStyle = '#0F243C'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(txt, bx + pad, by + bh / 2);
+    }
+    ctx.restore();
+  } };
+
+  window._anNetChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    plugins: [netLine],
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 }, autoSkip: true, maxRotation: 0 } },
+        y: { stacked: true, grid: { color: 'rgba(15,36,60,.06)' }, ticks: { font: { size: 11 }, callback: v => Math.abs(v) >= 1000 ? Math.round(v / 1000) + 'к' : v } },
+      },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'rectRounded', font: { size: 11.5 } } },
+        tooltip: { filter: item => (item.parsed.y || 0) !== 0, callbacks: {
+          label: it => `${it.dataset.label}: ${fmtRub(it.parsed.y)}`,
+          footer: items => 'Чистый капитал: ' + fmtRub(c.net[items[0].dataIndex]),
+        } },
+      },
+    },
+  });
 }
 
 // Категорийный график расходов: горизонтальные столбцы = категории/подкатегории
