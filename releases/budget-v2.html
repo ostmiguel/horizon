@@ -6791,7 +6791,7 @@ async function loadBudget() {
 
     const incomeRowsHtml  = (incomeRules.length || incomeEvents.length)
       ? (incomeRules.map(r => ruleRow(r, '+')).join('') + incomeEvents.map(incomeEventRow).join(''))
-      : emptyMsg('Нет дохода — «+ Доход».');
+      : emptyMsg('Нет дохода — «+ Добавить».');
     const loanRowsHtml    = loanPlan.length ? '<div class="bgt-subhead">Кредиты · из графика</div>' + loanPlan.map(loanRow).join('') : '';
     const fixedBodyHtml   = (fixedRules.length ? fixedRules.map(r => ruleRow(r, '-')).join('') : (loanPlan.length ? '' : emptyMsg('Нет фиксированных — «+ Добавить».'))) + loanRowsHtml;
     const suggBlock = suggestions.length
@@ -6846,7 +6846,7 @@ async function loadBudget() {
             '<span style="color:' + (plannedProfit >= 0 ? '#5E9B1E' : '#bf7419') + '">' + (plannedProfit < 0 ? '−' : '') + f(plannedProfit) + ' ₽</span>',
             'доходы − расходы − проценты · тело нейтрально')
       + '</div>'
-      + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Доход', "openAddRule('income')", incomeRowsHtml)
+      + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Добавить', "openAddRule('income')", incomeRowsHtml)
       + bgtBlock('#2AA7CC', 'Расходы · Регулярные', 'повторяющиеся платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml)
       + bgtBlock('#1FA497', 'Расходы · Повседневные', 'месячный бюджет против трат', '+ Добавить', 'openAddEnvelope()', envRowsHtml)
       + bgtBlock('#8FBE1E', 'Расходы · Разовые', 'разовые операции месяца', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml);
