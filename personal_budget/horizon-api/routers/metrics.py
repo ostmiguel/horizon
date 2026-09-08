@@ -580,6 +580,33 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
     def add(d, amt):
         events[d] = events.get(d, 0.0) + amt
 
+    # 0) Помесячные ручные правки правил (pinned plan-строки) переопределяют базовую
+    # ставку правила за конкретный месяц. Годовой прогноз обязан их учитывать —
+    # иначе покажет базовую сумму вместо отредактированной (30-дневный читает
+    # материализованный план и потому верен). Кладём pinned как события и запоминаем
+    # (rule_id, год, месяц), чтобы НЕ разворачивать базовое правило в этот месяц.
+    pinned_set = set()
+    pinned_rows = await db.fetch(f"""
+        SELECT p.source_rule_id AS rid, p.date, p.amount, p.account_from AS af, p.account_to AS at,
+               c.character AS ch
+        FROM plan p LEFT JOIN categories c ON c.id = p.category_id
+        WHERE p.user_id=$1 AND p.source_rule_id IS NOT NULL AND p.pinned = true
+          AND p.date > $2 AND p.date <= $3
+          {NOT_CONFIRMED}
+    """, user_id, today, horizon_end)
+    for r in pinned_rows:
+        pinned_set.add((r["rid"], r["date"].year, r["date"].month))
+        amt = float(r["amount"]); af = r["af"]; at = r["at"]
+        if af == "Доход" and at in op_set:
+            add(r["date"], amt)
+        elif af in op_set and (at == "Расход" or at in liability_names):
+            if not (at == "Расход" and r["ch"] == "Повседневный"):
+                add(r["date"], -amt)
+        elif af in op_set and at in reserve_names:
+            add(r["date"], -amt)
+        elif af in reserve_names and at in op_set:
+            add(r["date"], amt)
+
     # 1) Регулярные правила → раскладываем по месяцам
     rules = await db.fetch("""
         SELECT pr.id AS rule_id, pr.amount, pr.account_from, pr.account_to, pr.day_of_month,
@@ -594,6 +621,8 @@ async def _forecast_year(db, user_id, today, B0_now, r_var, reserve_names, liabi
         for r in rules:
             if (r["rule_id"], cur.year, cur.month) in skips:
                 continue   # правило пропущено в этом месяце
+            if (r["rule_id"], cur.year, cur.month) in pinned_set:
+                continue   # за этот месяц есть ручная правка (pinned) — она уже учтена
             dom = int(r["day_of_month"]) if r["day_of_month"] else 1
             d = date(cur.year, cur.month, max(1, min(dom, dim)))
             if d <= today or d > horizon_end:
