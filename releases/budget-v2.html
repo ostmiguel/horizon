@@ -3838,6 +3838,7 @@ function renderLoanCard(loan, idx) {
   const paidPct   = totalRows > 0 ? Math.round(paidCount / totalPay * 100) : 0;
   const color     = loan.color || '#e24b4a';
   const nextRow   = loan._nextRow;
+  const nextExtra = +(nextRow && nextRow.extra_payment) || 0;   // доп. платёж этого месяца
   const lastRow   = loan._lastRow;
   const cd        = _loanCloseDate(loan);   // фактическое закрытие (учёт доп. платежей в графике)
   const loanIntPaid      = (loan._schedule||[]).filter(r => r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
@@ -3882,10 +3883,11 @@ function renderLoanCard(loan, idx) {
       <div style="${TILE}">
         <div style="${CAP}">Следующий платёж</div>
         ${schedFilled && nextRow ? `
-        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;letter-spacing:-.01em;margin-top:8px;color:#0F243C">${fmt(+nextRow.payment)}</div>
+        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;letter-spacing:-.01em;margin-top:8px;color:#0F243C">${fmt(+nextRow.payment + nextExtra)}</div>
         <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
           <span style="font-size:11px;font-weight:600;color:#4C7A1B;background:rgba(94,155,30,.12);padding:3px 8px;border-radius:7px">тело ${fmt(+nextRow.principal)}</span>
           <span style="font-size:11px;font-weight:600;color:#C05F3B;background:rgba(192,95,59,.12);padding:3px 8px;border-radius:7px">% ${fmt(+nextRow.interest)}</span>
+          ${nextExtra > 0 ? `<span style="font-size:11px;font-weight:600;color:#2563EB;background:rgba(37,99,235,.10);padding:3px 8px;border-radius:7px">доп ${fmt(nextExtra)}</span>` : ''}
         </div>` : `
         <div style="font-family:Sora,sans-serif;font-weight:700;font-size:18px;margin-top:8px;color:#0F243C">${fmt(+loan.monthly_payment)}</div>
         <div style="font-size:11px;color:#2AA7CC;margin-top:6px">Заполни график для точных данных</div>`}
