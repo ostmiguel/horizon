@@ -7493,7 +7493,14 @@ let _roEditId = null;
 function _roAssets()   { return (accounts_cache || []).filter(a => a.account_type === 'Актив' && a.is_active !== false && a.name !== 'Дебиторка'); }
 function _roOpAccs()   { return _roAssets().filter(a => !a.is_reserve); }
 function _roRsvAccs()  { return (accounts_cache || []).filter(a => (a.is_reserve) && a.is_active !== false); }
-function _roDebtAccs() { return (accounts_cache || []).filter(a => (a.account_type === 'Пассив' || a.name === 'Дебиторка') && a.is_active !== false); }
+function _roDebtAccs() {
+  // Дебиторка (пул «мне должны») — всегда; Пассив — только пока по нему есть долг
+  // (баланс < −1). Закрытые обязательства (баланс ≈ 0) в список возврата не нужны.
+  return (accounts_cache || []).filter(a => a.is_active !== false && (
+    a.name === 'Дебиторка' ||
+    (a.account_type === 'Пассив' && (+a.current_balance || 0) < -1)
+  ));
+}
 
 function _roAccField(label, id, list, selName, reserveHint) {
   const opts = (list || []).map(a =>
