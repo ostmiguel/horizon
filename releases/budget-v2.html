@@ -3505,10 +3505,22 @@ async function loadLoans() {
   renderLoansPage();
 }
 
+// Фактическая дата закрытия кредита (строка YYYY-MM-DD) — первая строка графика
+// с балансом ≤ 0.5 (учитывает доп. платежи, внесённые прямо в график). Иначе —
+// последняя строка графика. Единый источник для кривой, KPI и переплаты.
+function _loanCloseDate(l) {
+  let cd = null;
+  for (const r of (l._schedule || [])) {
+    if (r.date && r.balance != null && +r.balance <= 0.5 && (!cd || r.date < cd)) cd = r.date;
+  }
+  return cd || (l._lastRow && l._lastRow.date) || null;
+}
+
 function calcInterestRemaining(loans) {
   return loans.reduce((s, l) => {
+    const cd = _loanCloseDate(l);   // проценты хвостовых строк после закрытия не платятся
     return s + (l._schedule||[])
-      .filter(r => !r.is_paid && r.interest)
+      .filter(r => !r.is_paid && r.interest && (!cd || (r.date && r.date <= cd)))
       .reduce((a, r) => a + +r.interest, 0);
   }, 0);
 }
@@ -3709,8 +3721,9 @@ function renderLoansPage() {
   // Latest close date from schedules
   let latestClose = null;
   loans.forEach(l => {
-    if (l._lastRow?.date) {
-      const d = new Date(l._lastRow.date);
+    const cd = _loanCloseDate(l);
+    if (cd) {
+      const d = new Date(cd);
       if (!latestClose || d > latestClose) latestClose = d;
     }
   });
@@ -3787,7 +3800,7 @@ function renderLoansPage() {
       <div style="font-size:12px;color:#93A1B5;margin-top:11px">по текущему графику</div>
     </div>
     <div style="${PCARD}">
-      <div style="${CAP}">Переплата ${intMode==='left'?'осталась':'выплачена'}</div>
+      <div style="${CAP}">Переплата</div>
       <div style="font-family:Sora,sans-serif;font-weight:700;font-size:29px;letter-spacing:-.02em;color:${intMode==='left'?'#C05F3B':'#5E9B1E'};margin-top:10px;line-height:1">${fmt(intMode==='left'?interestRemaining:interestPaid)||'—'}</div>
       <div style="display:inline-flex;gap:3px;background:#EEF2F7;border-radius:999px;padding:3px;margin-top:12px">
         <button onclick="setLoanIntMode('left')" style="border:0;cursor:pointer;font:600 11px Inter,sans-serif;padding:5px 12px;border-radius:999px;${intMode==='left'?segOn:segOff}">осталась</button>
@@ -3917,13 +3930,7 @@ function renderLoansChart(loans, sorted) {
   // доп. платежи, внесённые прямо в график: кредит гаснет раньше исходного срока.
   // Хвостовые строки после неё могут иметь старые (непересчитанные) остатки —
   // поэтому за этой датой остаток считаем нулём (иначе линия «всплывает» обратно).
-  credits.forEach(l => {
-    let cd = null;
-    for (const r of (l._schedule || [])) {
-      if (r.date && r.balance != null && +r.balance <= 0.5 && (!cd || r.date < cd)) cd = r.date;
-    }
-    l._closeDate = cd || (l._lastRow && l._lastRow.date) || null;
-  });
+  credits.forEach(l => { l._closeDate = _loanCloseDate(l); });
 
   // Остаток кредита на дату d: 0 с даты закрытия; иначе строка с макс. датой ≤ d.
   const balAt = (loan, d) => {
