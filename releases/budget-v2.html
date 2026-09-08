@@ -3913,13 +3913,25 @@ function renderLoansChart(loans, sorted) {
   const monthYr = d => new Date(d + 'T00:00:00').toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' });
   const monthYrLong = d => new Date(d).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 
-  // Остаток кредита на дату d: строка графика с макс. датой ≤ d; после закрытия — 0.
+  // Фактическая дата закрытия — первая строка графика с балансом ≤ 0. Учитывает
+  // доп. платежи, внесённые прямо в график: кредит гаснет раньше исходного срока.
+  // Хвостовые строки после неё могут иметь старые (непересчитанные) остатки —
+  // поэтому за этой датой остаток считаем нулём (иначе линия «всплывает» обратно).
+  credits.forEach(l => {
+    let cd = null;
+    for (const r of (l._schedule || [])) {
+      if (r.date && r.balance != null && +r.balance <= 0.5 && (!cd || r.date < cd)) cd = r.date;
+    }
+    l._closeDate = cd || (l._lastRow && l._lastRow.date) || null;
+  });
+
+  // Остаток кредита на дату d: 0 с даты закрытия; иначе строка с макс. датой ≤ d.
   const balAt = (loan, d) => {
+    if (loan._closeDate && d >= loan._closeDate) return 0;
     let best = null;
     for (const r of loan._schedule) {
       if (r.date && r.date <= d && r.balance != null && (!best || r.date > best.date)) best = r;
     }
-    if (loan._lastRow?.date && d > loan._lastRow.date) return 0;
     return best ? +best.balance : (+loan.initial_amount || 0);
   };
 
@@ -3957,7 +3969,7 @@ function renderLoansChart(loans, sorted) {
   }
 
   // Дата «свободен от кредитов».
-  const freeBase = credits.reduce((mx, l) => (l._lastRow?.date && (!mx || l._lastRow.date > mx) ? l._lastRow.date : mx), null);
+  const freeBase = credits.reduce((mx, l) => (l._closeDate && (!mx || l._closeDate > mx) ? l._closeDate : mx), null);
   if (cap) {
     let t = freeBase ? `Свободен от кредитов: <b style="color:#0F243C;font-weight:600">${monthYrLong(freeBase)}</b>` : '';
     if (wi && wi.withDate) t += ` → <b style="color:#4C7A1B;font-weight:600">${wi.withDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}</b>`;
