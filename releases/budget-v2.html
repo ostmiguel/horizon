@@ -1484,6 +1484,11 @@ function isLiabilityAcc(name) {
   if (name === 'Обязательства') return true;
   return !!(accounts_cache || []).find(a => a.name === name && a.account_type === 'Пассив');
 }
+// Пассив-счёт доступен для выбора в долговой операции, только пока по нему есть
+// непогашенный долг (баланс < −1). Закрытые (≈0) не предлагаем ни в одной модалке.
+function _isOwedLiability(a) {
+  return a.account_type === 'Пассив' && a.is_active !== false && (+a.current_balance || 0) < -1;
+}
 function getFlowType(from, to) {
   if (from === 'Доход') return 'income';
   if (to === 'Расход')  return 'expense';
@@ -3285,7 +3290,7 @@ function setQmType(type) {
   } else if (type === 'obligation') {
     // «Долг» — 4 действия (обязательства + дебиторка); направление задаёт КАТЕГОРИЯ,
     // счета выбираешь сам → Откуда/Куда открыты (пассивы + активы + Расход).
-    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
+    const liabs = accounts_cache.filter(_isOwedLiability);
     fromSel.innerHTML = makeOpts([...liabs, ...realAccs]);
     toSel.innerHTML   = makeOpts(liabs) + '<option value="Расход">Расход</option>' + makeOpts(realAccs);
   } else {
@@ -7496,10 +7501,8 @@ function _roRsvAccs()  { return (accounts_cache || []).filter(a => (a.is_reserve
 function _roDebtAccs() {
   // Дебиторка (пул «мне должны») — всегда; Пассив — только пока по нему есть долг
   // (баланс < −1). Закрытые обязательства (баланс ≈ 0) в список возврата не нужны.
-  return (accounts_cache || []).filter(a => a.is_active !== false && (
-    a.name === 'Дебиторка' ||
-    (a.account_type === 'Пассив' && (+a.current_balance || 0) < -1)
-  ));
+  return (accounts_cache || []).filter(a =>
+    (a.name === 'Дебиторка' && a.is_active !== false) || _isOwedLiability(a));
 }
 
 function _roAccField(label, id, list, selName, reserveHint) {
@@ -9989,7 +9992,7 @@ function _buildOpsForm(type) {
     // «Долг» покрывает 4 действия (обязательства + дебиторка): взял/вернул/дал/
     // мне вернули. Направление задаёт КАТЕГОРИЯ, счета выбираешь сам — поэтому
     // Откуда/Куда открыты (пассивы + активы + Расход), без жёсткой привязки.
-    const liabs = accounts_cache.filter(a => a.account_type === 'Пассив' && a.is_active !== false);
+    const liabs = accounts_cache.filter(_isOwedLiability);
     const liabOpts = liabs.map(a => `<option>${esc(a.name)}</option>`).join('');
     const assetOpts = realAccs.map(a => `<option>${esc(a.name)}</option>`).join('');
     fromOpts = liabOpts + assetOpts;
