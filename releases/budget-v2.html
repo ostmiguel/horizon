@@ -3839,13 +3839,14 @@ function renderLoanCard(loan, idx) {
   const color     = loan.color || '#e24b4a';
   const nextRow   = loan._nextRow;
   const lastRow   = loan._lastRow;
+  const cd        = _loanCloseDate(loan);   // фактическое закрытие (учёт доп. платежей в графике)
   const loanIntPaid      = (loan._schedule||[]).filter(r => r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
-  const loanIntRemaining = (loan._schedule||[]).filter(r => !r.is_paid && r.interest).reduce((s,r) => s + +r.interest, 0);
+  const loanIntRemaining = (loan._schedule||[]).filter(r => !r.is_paid && r.interest && (!cd || (r.date && r.date <= cd))).reduce((s,r) => s + +r.interest, 0);
   // Balance from last paid row, fallback to current_balance if no paid rows
   const lastPaidRow = (loan._schedule||[]).filter(r => r.is_paid && r.balance).slice(-1)[0];
   // Единый источник остатка (для кредита — позиция на графике на сегодня).
   const displayBalance = oblRemaining(loan);
-  const closeDate = lastRow?.date ? new Date(lastRow.date).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : '—';
+  const closeDate = cd ? new Date(cd).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : '—';
   const nextDate  = nextRow?.date  ? new Date(nextRow.date).toLocaleDateString('ru-RU')  : (loan.next_payment_date ? new Date(loan.next_payment_date).toLocaleDateString('ru-RU') : '—');
   const schedFilled = totalRows > 0;
   const stratLabel = _loanStrategy !== 'none' ? `${idx+1}-й по стратегии` : '';
