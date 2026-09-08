@@ -3550,7 +3550,7 @@ function calcWhatIf(loans, sorted, extraMonthly) {
 
   // Один движок симуляции — прогоняем и с extra=0 (база), и с допом. «Экономия»
   // = ЧЕСТНАЯ разница месяцев/процентов одного метода (а не сравнение разных).
-  const simPayoff = (extra0) => {
+  const simPayoff = (extra0, redirect) => {
     const simLoans = sorted.map(l => ({
       id: l.id, bal: oblRemaining(l), rate: _effMonthlyRate(l),
       pmt: +(l._nextRow?.payment || l.monthly_payment),
@@ -3573,7 +3573,7 @@ function calcWhatIf(loans, sorted, extraMonthly) {
         if (l.bal < 1) {
           l.done = true; l.monthsDone = month;
           if (i === targetIdx) {
-            extraPool += l.pmt;
+            if (redirect) extraPool += l.pmt;   // переброска освободившегося платежа
             targetIdx = simLoans.findIndex(sl => !sl.done);
           }
         }
@@ -3586,8 +3586,8 @@ function calcWhatIf(loans, sorted, extraMonthly) {
     return { lastMonths, totalInterest, series, monthsById };
   };
 
-  const base = simPayoff(0);
-  const wx   = simPayoff(extraMonthly);
+  const base = simPayoff(0, false);            // база: каждый кредит сам по себе, без переброски
+  const wx   = simPayoff(extraMonthly, true);  // со стратегией: доп + переброска освободившихся платежей
 
   // simPayoff теперь на ЭФФЕКТИВНОЙ ставке из графика → база воспроизводит график,
   // и разница месяцев/процентов реальна. Жёсткие clamp'ы страхуют от абсурда:
