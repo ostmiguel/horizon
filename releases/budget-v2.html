@@ -2541,8 +2541,7 @@ async function loadReferences() {
         <div><div class="page-title">Справочники</div></div>
       </div>
 
-      <div class="g2">
-        <div class="card">
+      <div class="card">
           <div class="card-head"><span class="card-title">Счета</span><span class="card-hint">${(accs||[]).length} счетов</span></div>
           <div class="ref-filters">
             <input class="ref-search" id="accSearch" placeholder="🔍 Поиск по названию..." oninput="filterAccounts()">
@@ -2567,27 +2566,6 @@ async function loadReferences() {
             <tbody id="accBody">${renderAccRows((accs||[]).filter(a => a.is_active !== false))}</tbody>
           </table></div>
           <div class="add-row-btn" onclick="openAddAccount()">＋ Добавить счёт</div>
-        </div>
-
-        <div class="card">
-          <div class="card-head"><span class="card-title">Участники</span></div>
-          <table class="ref-tbl">
-            <thead><tr><th>Имя</th><th style="text-align:center">По умолч.</th><th></th></tr></thead>
-            <tbody>
-              ${(parts||[]).map(p=>`<tr>
-                <td><span class="color-dot" style="background:${p.color||'#888'}"></span>${esc(p.name)}</td>
-                <td style="text-align:center">
-                  <label class="toggle">
-                    <input type="checkbox" ${p.is_default?'checked':''} onchange="toggleParticipantDefault(${p.id},this.checked)">
-                    <span class="toggle-slider"></span>
-                  </label>
-                </td>
-                <td style="text-align:right"><button class="bgt-dots" title="Действия" onclick="event.stopPropagation();partMenu(this,${p.id})">⋮</button></td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-          <div class="add-row-btn" onclick="openAddParticipant()">＋ Добавить участника</div>
-        </div>
       </div>
 
       <div class="card">
