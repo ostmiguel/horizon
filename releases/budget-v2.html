@@ -6109,6 +6109,27 @@ function renderAnBarChart(kind, sy, sm) {
     avgDenom = isCur ? Math.min(now.getDate(), dim) : dim;
   }
 
+  // Ряд накопительного среднего по индексам (тот же расчёт, что у линии) — чтобы
+  // показать «Среднее» в тултипе на наведённую дату, а не только итог у последней точки.
+  const runAvgByIndex = (() => {
+    const tot = labels.map((_, i) => datasets.reduce((s, d) => s + (+d.data[i] || 0), 0));
+    const out = [];
+    if (_anScale === 'month') {
+      let cum = 0;
+      for (let i = 0; i < labels.length; i++) {
+        if (avgDenom && (i + 1) > avgDenom) { out.push(null); continue; }
+        cum += tot[i]; out.push(cum / (i + 1));
+      }
+    } else {
+      let cum = 0, cnt = 0;
+      for (let i = 0; i < labels.length; i++) {
+        if (tot[i] > 0) { cum += tot[i]; cnt++; }
+        out.push(cnt > 0 ? cum / cnt : null);
+      }
+    }
+    return out;
+  })();
+
   // Линия-опора: среднее по видимым сегментам. День → сумма ÷ календарные/прошедшие
   // дни; год → сумма ÷ активные месяцы. Follows фильтр характера и скрытие легенды.
   const avgLine = {
@@ -6204,7 +6225,12 @@ function renderAnBarChart(kind, sy, sm) {
           filter: item => (item.parsed.y || 0) !== 0,   // не показывать нулевые сегменты
           callbacks: {
             label: c => `${c.dataset.label}: ${fmtRub(c.parsed.y)}`,
-            footer: items => _anChar === 'all' ? 'Всего: ' + fmtRub(items.reduce((s, i) => s + i.parsed.y, 0)) : '',
+            footer: items => {
+              const idx = items[0].dataIndex, lines = [];
+              if (_anChar === 'all') lines.push('Всего: ' + fmtRub(items.reduce((s, it) => s + it.parsed.y, 0)));
+              if (runAvgByIndex[idx] != null) lines.push('Среднее: ' + fmtRub(runAvgByIndex[idx]));
+              return lines;
+            },
           },
         },
       },
