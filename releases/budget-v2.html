@@ -6820,13 +6820,16 @@ async function loadBudget() {
         + '<div style="font-size:22px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums">' + big + '</div>'
         + '<div style="font-size:11px;color:var(--text3);margin-top:4px">' + sub + '</div></div>';
     }
-    function bgtBlock(color, title, sub, btnTxt, btnFn, rows) {
+    function bgtBlock(color, title, sub, btnTxt, btnFn, rows, subtotalHtml) {
       return '<div class="card" style="padding:0;margin-bottom:16px">'
         + '<div style="padding:14px 18px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
           + '<span style="width:8px;height:8px;border-radius:2px;background:' + color + ';display:inline-block;flex-shrink:0"></span>'
           + '<span style="font-size:14px;font-weight:600;color:var(--text)">' + title + '</span>'
           + '<span style="font-size:11px;color:var(--text3)">' + sub + '</span>'
-          + '<button class="qbtn qbtn-income" style="margin-left:auto" onclick="' + btnFn + '">' + btnTxt + '</button>'
+          + '<div style="margin-left:auto;display:flex;align-items:center;gap:12px">'
+            + (subtotalHtml || '')
+            + '<button class="qbtn qbtn-income" onclick="' + btnFn + '">' + btnTxt + '</button>'
+          + '</div>'
         + '</div>' + rows + '</div>';
     }
 
@@ -6844,6 +6847,17 @@ async function loadBudget() {
       ? envelopes.map((e, i) => envelopeRow(e, i)).join('') + suggBlock
       : emptyMsg('Нет повседневных — «+ Добавить».');
     const eventRowsHtml   = oneoffEvents.length ? oneoffEvents.map(eventRow).join('')          : emptyMsg('Нет разовых операций.');
+
+    // Подытоги блоков — слева от кнопки «+ Добавить» в шапке.
+    const _st = (c, txt) => '<span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;color:' + c + '">' + txt + '</span>';
+    const incSubTot = incomeTotal + incomeEventsTotal;               // регулярные + разовые доходы
+    const regSubTot = fixedTotal + loanTotal;                        // фикс-правила + график кредита
+    // «Разовые» смешивают знаки (расход/в резерв − ; из резерва/возврат долга +) → нетто по знакам строк.
+    const ooNetTot  = oneoffEvents.reduce((s, p) => { const fl = _ooFlow(p); const a = +p.amount || 0; return s + (fl.sign === '+' ? a : fl.sign === '−' ? -a : 0); }, 0);
+    const incSubHtml = incSubTot > 0 ? _st('#5E9B1E', '+' + f(incSubTot) + ' ₽') : '';
+    const regSubHtml = regSubTot > 0 ? _st('#bf7419', '−' + f(regSubTot) + ' ₽') : '';
+    const povSubHtml = (envBudgetTotal || envFactTotal) ? _st('var(--text2)', f(envFactTotal) + ' / ' + f(envBudgetTotal) + ' ₽') : '';
+    const ooSubHtml  = oneoffEvents.length ? _st(ooNetTot >= 0 ? '#5E9B1E' : '#bf7419', (ooNetTot < 0 ? '−' : '+') + f(Math.abs(ooNetTot)) + ' ₽') : '';
 
     main.innerHTML = '<style>'
       + '.bgt-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}'
@@ -6887,10 +6901,10 @@ async function loadBudget() {
             '<span style="color:' + (plannedProfit >= 0 ? '#5E9B1E' : '#bf7419') + '">' + (plannedProfit < 0 ? '−' : '') + f(plannedProfit) + ' ₽</span>',
             'доходы − расходы − проценты · тело нейтрально')
       + '</div>'
-      + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Добавить', "openAddRule('income')", incomeRowsHtml)
-      + bgtBlock('#2AA7CC', 'Расходы · Регулярные', 'повторяющиеся платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml)
-      + bgtBlock('#1FA497', 'Расходы · Повседневные', 'месячный бюджет против трат', '+ Добавить', 'openAddEnvelope()', envRowsHtml)
-      + bgtBlock('#8FBE1E', 'Расходы · Разовые', 'разовые операции месяца', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml);
+      + bgtBlock('#5E9B1E', 'Доходы', 'регулярные и разовые поступления', '+ Добавить', "openAddRule('income')", incomeRowsHtml, incSubHtml)
+      + bgtBlock('#2AA7CC', 'Расходы · Регулярные', 'повторяющиеся платежи и кредиты', '+ Добавить', "openAddRule('fixed')", fixedBodyHtml, regSubHtml)
+      + bgtBlock('#1FA497', 'Расходы · Повседневные', 'месячный бюджет против трат', '+ Добавить', 'openAddEnvelope()', envRowsHtml, povSubHtml)
+      + bgtBlock('#8FBE1E', 'Расходы · Разовые', 'разовые операции месяца', '+ Добавить', 'openEpisodicEvent()', eventRowsHtml, ooSubHtml);
 
   } catch(e) {
     main.innerHTML = '<div class="error-box">Ошибка: ' + esc(e.message) + '</div>';
