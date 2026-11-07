@@ -4994,7 +4994,7 @@ async function loadHelp() {
     ['budget',     '06', 'Бюджет'],
     ['forecast',   '07', 'Прогноз и кассовый разрыв'],
     ['loans',      '08', 'Кредиты и долги'],
-    ['ask',        '09', 'Платежи к подтверждению'],
+    ['ask',        '09', 'Операции к подтверждению'],
     ['metrics',    '10', 'Метрики и формулы'],
     ['funds',      '11', 'Фонды и резервы'],
     ['scenarios',  '12', 'Сценарии'],
@@ -5059,7 +5059,7 @@ async function loadHelp() {
     ['Отложил в резерв', 'Карта', 'Резерв', '#1D7E97', '#167F73', ['Факт: тип «Перевод» в Операциях.', 'План месяца: Бюджет → «Разовые» → «+ Добавить» → «В резерв». Это сбережение, не расход.']],
     ['Взял из резерва до зарплаты', 'Резерв', 'Карта', '#167F73', '#1D7E97', ['Бюджет → «Разовые» → «+ Добавить» → «Из резерва».', 'Поднимет прогноз и «Свободно» на эту дату. Резерв при этом уменьшится.']],
     ['Вернул часть долга', 'Карта', 'Обязательство', '#1D7E97', '#C0741A', ['Факт: тип «Долг», категория «Вернул долг». План: «Разовые» → «Долг».', 'Тело в профит не входит — уменьшается только долг.']],
-    ['Погасил кредит', 'Карта', 'Кредит', '#1D7E97', '#C24D3E', ['На Обзоре подтверди платёж в «Платежи к подтверждению» — операции создадутся сами.', 'Или вручную: тип «Долг» → «Погасил», карта → счёт кредита.']],
+    ['Погасил кредит', 'Карта', 'Кредит', '#1D7E97', '#C24D3E', ['На Обзоре подтверди платёж в «Операции к подтверждению» — операции создадутся сами.', 'Или вручную: тип «Долг» → «Погасил», карта → счёт кредита.']],
   ].map(s => `<div style="${CARD};padding:18px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-family:Sora,sans-serif;font-size:14px;color:#0F243C">${s[0]}</b></div>
     <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span style="font-size:11px;font-weight:600;color:${s[3]};background:${s[3]}18;padding:3px 9px;border-radius:6px">${s[1]}</span><span style="color:#93A1B5">→</span><span style="font-size:11px;font-weight:600;color:${s[4]};background:${s[4]}18;padding:3px 9px;border-radius:6px">${s[2]}</span></div>
@@ -5162,14 +5162,14 @@ async function loadHelp() {
         <p style="${P};margin-bottom:14px">Каждое обязательство — отдельный счёт. ${b('Кредит')} — с процентами и графиком: заполни график из банка (тело и проценты по строкам), тогда учёт точный. ${b('Долг')} — без процентов (займ у физлица, беспроцентная рассрочка). Заводишь в разделе <span onclick="loadPage('loans')" style="${chip}">Кредиты → + Обязательство ›</span></p>
         <div style="${CARD}">
           <div style="${CAP}">Как отметить платёж по кредиту</div>
-          <div style="${P};font-size:13px;margin-top:10px">Проще всего — на Обзоре в ${b('«Платежи к подтверждению»')} подтвердить факт: создадутся операции (тело → счёт кредита, проценты → расход), отметится строка графика и обновится долг. Либо вручную: тип операции ${b('«Долг» → «Погасил»')}. А галочка ${b('«Оплачено»')} прямо в графике отмечает платёж на странице Кредиты.</div>
+          <div style="${P};font-size:13px;margin-top:10px">Проще всего — на Обзоре в ${b('«Операции к подтверждению»')} подтвердить факт: создадутся операции (тело → счёт кредита, проценты → расход), отметится строка графика и обновится долг. Либо вручную: тип операции ${b('«Долг» → «Погасил»')}. А галочка ${b('«Оплачено»')} прямо в графике отмечает платёж на странице Кредиты.</div>
           <div style="${P};font-size:13px;margin-top:10px">Каждый платёж делится на ${b('тело')} и ${b('проценты')}. Досрочное закрытие уменьшает тело — а значит, и все будущие проценты. Блок ${b('«Досрочное закрытие»')} и стратегии («снежный ком» / «лавина») покажут, как быстрее закрыть долги и сколько сэкономить.</div>
         </div>
       </section>
 
       <section id="h-ask" style="scroll-margin-top:20px">
-        ${hd('09', 'Платежи к подтверждению')}
-        <p style="${P};margin-bottom:14px">На Обзоре карточка ${b('«Платежи к подтверждению»')} собирает плановые платежи текущего месяца, чей срок наступил. Подтверждаешь факт — создаётся реальная операция, и «Свободно» корректируется.</p>
+        ${hd('09', 'Операции к подтверждению')}
+        <p style="${P};margin-bottom:14px">На Обзоре карточка ${b('«Операции к подтверждению»')} собирает плановые платежи текущего месяца, чей срок наступил. Подтверждаешь факт — создаётся реальная операция, и «Свободно» корректируется.</p>
         <div style="${CARD};display:flex;flex-direction:column;gap:10px">
           <div style="${P};font-size:13px"><b style="color:#0F243C">Оплачено</b> — создаёт операцию: для кредита это тело + проценты, отметка в графике и обновление долга; для аренды, подписки или другого фиксированного платежа — обычная операция расхода.</div>
           <div style="${P};font-size:13px"><b style="color:#0F243C">Уже внесено вручную</b> — если операцию ты уже записал сам: отмечает без создания дубля.</div>
@@ -8607,7 +8607,7 @@ async function renderPendingPayments() {
   box.innerHTML = `<div style="background:#fff;border-radius:18px;padding:16px 20px;box-shadow:0 1px 2px rgba(15,36,60,.05),0 10px 26px -14px rgba(15,36,60,.16);margin-bottom:16px">
     <button onclick="togglePayCard()" style="width:100%;display:flex;align-items:center;gap:9px;background:none;border:0;cursor:pointer;padding:0;text-align:left">
       <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#2AA7CC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="к подтверждению"><path d="M9.6 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6"/><path d="M14 19l2 2 4-4"/><path d="M9 8h5M9 12h3"/></svg>
-      <span style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Платежи к подтверждению</span>
+      <span style="font-family:Sora,sans-serif;font-weight:600;font-size:15px;color:#0F243C">Операции к подтверждению</span>
       <span style="font-family:Sora,sans-serif;font-weight:600;font-size:12px;color:#fff;background:#C05F3B;border-radius:99px;padding:1px 8px">${items.length}</span>
       <span id="payCardChev" style="margin-left:auto;color:#93A1B5;font-size:13px;transition:transform .15s">▾</span>
     </button>
