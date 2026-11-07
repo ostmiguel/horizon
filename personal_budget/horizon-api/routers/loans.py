@@ -211,18 +211,12 @@ async def update_schedule_row(loan_id: int, month_num: int, request: Request):
     return {"ok": True}
 
 
-@router.post("/generate-plan")
-async def generate_plan_from_loans(
-    request: Request,
-    year:  int = Query(...),
-    month: int = Query(...),
-):
-    """Генерирует записи в plan из loan_schedule для заданного месяца.
-    Тело → Обязательства, процент → Расход. Upsert по (user_id, date, account_from, account_to, category_id).
-    Вызывается вручную или кроном в начале месяца."""
-    user_id = request.state.user_id
-    db = request.state.db
-
+async def _generate_plan_month(db, user_id, year, month):
+    """Пересобирает плановые строки loan_schedule за (year, month): удаляет старые
+    авто-записи этого месяца и создаёт заново из АКТИВНЫХ кредитов (тело → счёт-Пассив,
+    процент → Расход). Закрытый кредит (is_active=false) и обнулённые строки (principal
+    IS NULL / 0) строк не дают → фантомные платежи исчезают. Вызывающий оборачивает в
+    транзакцию при необходимости. Возвращает число созданных строк."""
     cat_principal, cat_interest = await _loan_cat_ids(db, user_id)
     fallback_acc = await _first_asset(db, user_id)
 
@@ -238,32 +232,45 @@ async def generate_plan_from_loans(
           AND ls.principal IS NOT NULL
     """, user_id, year, month)
 
+    # Удаляем старые авто-записи за этот месяц перед повторной генерацией
+    await db.execute("""
+        DELETE FROM plan
+        WHERE user_id=$1 AND source='loan_schedule'
+          AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
+    """, user_id, year, month)
+
+    created = 0
+    for r in rows:
+        pay_date = r["date"]
+        acc = r["account_from"] or fallback_acc
+        liab_acc = r["account_name"] or "Обязательства"   # тело → счёт кредита (fallback: старый пул)
+        if cat_principal and r["principal"] and float(r["principal"]) > 0:
+            await db.execute("""
+                INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
+                VALUES ($1,$2,$3,$4,$5,$6,'loan_schedule')
+            """, user_id, pay_date, float(r["principal"]), acc, liab_acc, cat_principal)
+            created += 1
+        if cat_interest and r["interest"] and float(r["interest"]) > 0:
+            await db.execute("""
+                INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
+                VALUES ($1,$2,$3,$4,'Расход',$5,'loan_schedule')
+            """, user_id, pay_date, float(r["interest"]), acc, cat_interest)
+            created += 1
+    return created
+
+
+@router.post("/generate-plan")
+async def generate_plan_from_loans(
+    request: Request,
+    year:  int = Query(...),
+    month: int = Query(...),
+):
+    """Генерирует записи в plan из loan_schedule для заданного месяца.
+    Вызывается с фронта (Бюджет) или кроном в начале месяца."""
+    user_id = request.state.user_id
+    db = request.state.db
     async with db.transaction():
-        # Удаляем старые авто-записи за этот месяц перед повторной генерацией
-        await db.execute("""
-            DELETE FROM plan
-            WHERE user_id=$1 AND source='loan_schedule'
-              AND EXTRACT(YEAR FROM date)=$2 AND EXTRACT(MONTH FROM date)=$3
-        """, user_id, year, month)
-
-        created = 0
-        for r in rows:
-            pay_date = r["date"]
-            acc = r["account_from"] or fallback_acc
-            liab_acc = r["account_name"] or "Обязательства"   # тело → счёт кредита (fallback: старый пул)
-            if cat_principal and r["principal"] and float(r["principal"]) > 0:
-                await db.execute("""
-                    INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                    VALUES ($1,$2,$3,$4,$5,$6,'loan_schedule')
-                """, user_id, pay_date, float(r["principal"]), acc, liab_acc, cat_principal)
-                created += 1
-            if cat_interest and r["interest"] and float(r["interest"]) > 0:
-                await db.execute("""
-                    INSERT INTO plan (user_id, date, amount, account_from, account_to, category_id, source)
-                    VALUES ($1,$2,$3,$4,'Расход',$5,'loan_schedule')
-                """, user_id, pay_date, float(r["interest"]), acc, cat_interest)
-                created += 1
-
+        created = await _generate_plan_month(db, user_id, year, month)
     return {"ok": True, "created": created, "year": year, "month": month}
 
 
@@ -340,3 +347,121 @@ async def recalculate_loan(
         )
 
     return {"ok": True, "updated": updated, "final_balance": balance}
+
+
+class ExtraPayment(BaseModel):
+    month_num: int
+    amount: float
+
+
+@router.post("/{loan_id}/extra-payment")
+async def apply_extra_payment(loan_id: int, data: ExtraPayment, request: Request):
+    """Досрочный платёж за ТЕКУЩИЙ (или прошедший) месяц — свершившийся факт.
+    Единая сцепка:
+      1) создаёт реальную операцию (счёт списания → счёт-Пассив) на сумму доп. платежа
+         (тело долга → нейтрально для профита; уменьшает долг и кэш, капитал-нетто не трогает);
+      2) уменьшает остаток строки графика на доп. платёж (регулярные principal/interest строки
+         НЕ трогаем — они проводятся обычным платежом, иначе двойной счёт);
+      3) пересчитывает остаток графика вперёд, обнуляет хвост после закрытия;
+      4) при полном погашении закрывает кредит (is_active=false);
+      5) перегенерирует будущие плановые платежи в Бюджете (фантомные строки исчезают).
+    Будущие месяцы — проекция, фронт этот эндпоинт для них НЕ зовёт."""
+    user_id = request.state.user_id
+    db = request.state.db
+
+    loan = await db.fetchrow("SELECT * FROM loans WHERE id=$1 AND user_id=$2", loan_id, user_id)
+    if not loan:
+        raise HTTPException(404, "Loan not found")
+    amount = round(float(data.amount or 0), 2)
+    if amount <= 0:
+        raise HTTPException(400, "amount must be > 0")
+
+    row = await db.fetchrow(
+        "SELECT * FROM loan_schedule WHERE loan_id=$1 AND month_num=$2",
+        loan_id, data.month_num)
+    if not row or not row["date"]:
+        raise HTTPException(400, "schedule row/date not found")
+    pay_date = row["date"]
+
+    # Фактом считаем только текущий/прошедший месяц (защита; фронт уже ветвит по дате).
+    today = date.today()
+    if (pay_date.year, pay_date.month) > (today.year, today.month):
+        raise HTTPException(400, "future month is projection-only")
+
+    liab_acc = loan["account_name"]
+    if not liab_acc:
+        raise HTTPException(400, "У кредита нет связанного счёта-Пассива")
+    acc_from = loan["account_from"] or await _first_asset(db, user_id)
+    cat_principal, _ = await _loan_cat_ids(db, user_id)
+
+    monthly_rate = float(loan["rate"] or 0) / 12
+    payment = float(loan["monthly_payment"] or 0)
+
+    # Остаток ДО этой строки — из предыдущей строки графика (иначе — current_balance).
+    prev = await db.fetchrow(
+        "SELECT balance FROM loan_schedule WHERE loan_id=$1 AND month_num=$2",
+        loan_id, data.month_num - 1)
+    start_bal = (float(prev["balance"]) if prev and prev["balance"] is not None
+                 else float(loan["current_balance"] or 0))
+
+    base_principal = float(row["principal"] or 0)   # регулярное тело строки (из банка) — не трогаем
+
+    async with db.transaction():
+        # 1) Реальная операция доп. платежа: счёт списания → счёт-Пассив (тело долга).
+        await db.execute("""
+            INSERT INTO transactions
+              (user_id, date, amount, account_from, account_to, category_id, note, source)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,'loan_extra')
+        """, user_id, pay_date, amount, acc_from, liab_acc, cat_principal,
+            "Досрочный платёж по кредиту")
+
+        # 2) Текущая строка: доп. платёж дополнительно уменьшает остаток.
+        bal_after = round(max(start_bal - base_principal - amount, 0), 2)
+        await db.execute("""
+            UPDATE loan_schedule SET balance=$3, extra_payment=$4
+            WHERE loan_id=$1 AND month_num=$2
+        """, loan_id, data.month_num, bal_after, amount)
+
+        # 3) Пересчёт последующих строк вперёд (аннуитет по rate/payment); хвост обнуляем.
+        balance = bal_after
+        future = await db.fetch("""
+            SELECT month_num, extra_payment FROM loan_schedule
+            WHERE loan_id=$1 AND month_num > $2 ORDER BY month_num
+        """, loan_id, data.month_num)
+        for frow in future:
+            if balance <= 0.5:
+                await db.execute("""
+                    UPDATE loan_schedule SET principal=0, interest=0, payment=0, balance=0
+                    WHERE loan_id=$1 AND month_num=$2
+                """, loan_id, frow["month_num"])
+                continue
+            extra_f = float(frow["extra_payment"] or 0)
+            interest  = round(balance * monthly_rate, 2)
+            principal = round(min(payment - interest + extra_f, balance), 2)
+            new_bal   = round(max(balance - principal, 0), 2)
+            await db.execute("""
+                UPDATE loan_schedule SET interest=$3, principal=$4, payment=$5, balance=$6
+                WHERE loan_id=$1 AND month_num=$2
+            """, loan_id, frow["month_num"], interest, principal,
+                round(interest + principal, 2), new_bal)
+            balance = new_bal
+
+        # 4) Остаток долга + закрытие при полном погашении.
+        closed = balance <= 0.5
+        await db.execute(
+            "UPDATE loans SET current_balance=$2, is_active=$3, updated_at=now() WHERE id=$1",
+            loan_id, balance, (not closed))
+
+        # 5) Перегенерация плановых платежей за все затронутые месяцы (от этого месяца
+        #    до конца графика). Закрытый/обнулённый кредит строк не даёт, прочие — целы.
+        last = await db.fetchval("SELECT max(date) FROM loan_schedule WHERE loan_id=$1", loan_id)
+        y, m = pay_date.year, pay_date.month
+        end_y, end_m = (last.year, last.month) if last else (y, m)
+        while (y, m) <= (end_y, end_m):
+            await _generate_plan_month(db, user_id, y, m)
+            m += 1
+            if m > 12:
+                m = 1; y += 1
+
+    return {"ok": True, "closed": closed, "final_balance": balance,
+            "booked": amount, "account_to": liab_acc}

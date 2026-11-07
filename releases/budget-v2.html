@@ -914,7 +914,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
       <span id="schedRecalcMsg"></span>
       <div style="display:flex;gap:8px;margin-top:8px">
         <button class="loan-btn" onclick="schedRecalcCancel()">Не менять</button>
-        <button class="loan-btn loan-btn-primary" onclick="schedRecalcConfirm()">Пересчитать</button>
+        <button class="loan-btn loan-btn-primary" id="schedRecalcConfirmBtn" onclick="schedRecalcConfirm()">Записать платёж</button>
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px">⚠ Суммы тела и процентов рассчитаны приблизительно. Уточни данные в банке и скорректируй при необходимости.</div>
     </div>
@@ -4139,7 +4139,7 @@ async function openScheduleModal(loanId) {
       <td><input class="sched-input" type="number" value="${ex?.payment||''}" data-field="payment" oninput="schedMarkDirty()" placeholder="—"></td>
       <td><input class="sched-input" type="number" value="${ex?.principal||''}" data-field="principal" oninput="schedOnPrincipal(this,${m})" placeholder="—"></td>
       <td><input class="sched-input" type="number" value="${ex?.interest||''}" data-field="interest" oninput="schedMarkDirty()" placeholder="—"></td>
-      <td><input class="sched-input" type="number" value="${ex?.extra_payment||''}" data-field="extra_payment" oninput="schedOnExtra(this,${m})" placeholder="—" style="border-color:rgba(37,99,235,0.4)"></td>
+      <td><input class="sched-input" type="number" value="${ex?.extra_payment||''}" data-field="extra_payment" oninput="schedOnExtra(this,${m})" onchange="schedExtraCommit(this,${m},${loanId})" placeholder="—" style="border-color:rgba(37,99,235,0.4)"></td>
       <td><input class="sched-input" type="number" value="${ex?.balance||''}" data-field="balance" oninput="schedMarkDirty()" placeholder="—"></td>
       <td style="text-align:center">
         <label class="toggle" style="transform:scale(0.8)">
@@ -4344,60 +4344,45 @@ async function refreshLoanBalance(loanId) {
 }
 
 
-// ── Extra payment recalc ──
+// ── Доп. платёж ──
+// Текущий/прошедший месяц = ФАКТ: доп. платёж — свершившаяся операция. Показываем
+// подтверждение и бьём серверный эндпоинт (операция + пересчёт графика + закрытие +
+// очистка будущих платежей в Бюджете). Будущий месяц = ПЛАН: правка только графика на
+// листе Кредиты (сохраняется обычной кнопкой «Сохранить»), в Бюджет не идёт.
 let _schedRecalcData = null;
 
-async function schedExtraChanged(loanId, monthNum, input) {
+function schedExtraCommit(input, monthNum, loanId) {
   const extraVal = parseFloat(input.value);
-  if (isNaN(extraVal) || extraVal <= 0) return;
-
-  const loan = _loansData.find(l => l.id === loanId);
-  if (!loan) return;
-
-  // Load full schedule to simulate recalc
-  const { data: sched } = await sb.from('loan_schedule')
-    .select('*').eq('loan_id', loanId).order('month_num');
-  if (!sched?.length) return;
-
-  // Find current row and simulate forward
-  const rowIdx = sched.findIndex(r => r.month_num === monthNum);
-  if (rowIdx < 0) return;
-
-  const rate = +loan.rate / 12;
-  const currentBal = +sched[rowIdx].balance || 0;
-  const newBal = Math.max(0, currentBal - extraVal);
-  const affectedRows = sched.length - rowIdx - 1;
-
-  // Build recalc preview
-  const recalcRows = [];
-  let bal = newBal;
-  for (let i = rowIdx + 1; i < sched.length && bal > 0.01; i++) {
-    const intP = bal * rate;
-    const pmt = +loan.monthly_payment;
-    const princ = Math.min(pmt - intP, bal);
-    bal = Math.max(0, bal - princ);
-    recalcRows.push({
-      month_num: sched[i].month_num,
-      date: sched[i].date,
-      payment: +(pmt).toFixed(2),
-      principal: +princ.toFixed(2),
-      interest: +intP.toFixed(2),
-      balance: +bal.toFixed(2),
-      is_paid: sched[i].is_paid,
-      extra_payment: sched[i].extra_payment,
-      id: sched[i].id
-    });
-  }
-
-  const savedMonths = affectedRows - recalcRows.length;
-  _schedRecalcData = { loanId, monthNum, extraVal, newBal, recalcRows, currentRow: sched[rowIdx] };
-
-  // Show recalc bar
   const bar = document.getElementById('schedRecalcBar');
   const msg = document.getElementById('schedRecalcMsg');
+  if (isNaN(extraVal) || extraVal <= 0) { _schedRecalcData = null; if (bar) bar.style.display = 'none'; return; }
+
+  // Дата строки → факт (текущий/прошлый месяц) или проекция (будущее).
+  const row = document.getElementById('sched-row-' + monthNum);
+  const dateVal = row?.querySelector('[data-field=date]')?.value || '';
+  const now = new Date();
+  const curYM = now.getFullYear() * 12 + now.getMonth();
+  const rowYM = dateVal ? (parseInt(dateVal.slice(0, 4)) * 12 + (parseInt(dateVal.slice(5, 7)) - 1)) : null;
+  const isFact = rowYM != null && rowYM <= curYM;
+
+  if (!isFact) {
+    // Будущий месяц — только проекция: сохранится обычной кнопкой «Сохранить»,
+    // в Бюджет не попадает. Подтверждение не показываем.
+    _schedRecalcData = null;
+    if (bar) bar.style.display = 'none';
+    return;
+  }
+
+  const loan = _loansData.find(l => l.id === loanId) || {};
+  const accFrom = loan.account_from || 'первый счёт';
+  const liab = loan.account_name || 'счёт долга';
+  _schedRecalcData = { loanId, monthNum, extraVal, isFact: true };
   if (bar && msg) {
-    msg.innerHTML = `Остаток на строке ${monthNum} изменится с <b>${fmt(currentBal)}</b> до <b>${fmt(newBal)}</b>.<br>
-      Затронет следующие ${recalcRows.length} строк${savedMonths > 0 ? ' · ускорит закрытие на ~' + savedMonths + ' мес.' : ''}.`;
+    msg.innerHTML = `Досрочный платёж <b>${fmt(extraVal)}</b> за текущий месяц будет записан операцией: «${esc(accFrom)}» → «${esc(liab)}».<br>`
+      + `Долг и остаток на счёте уменьшатся, график пересчитается; при полном погашении кредит закроется, а будущие платежи уйдут из Бюджета.`;
+    const btn = document.getElementById('schedRecalcConfirmBtn');
+    if (btn) btn.textContent = 'Записать платёж';
+    bar.style.display = 'block';
     bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
@@ -4408,35 +4393,32 @@ function schedRecalcCancel() {
 }
 
 async function schedRecalcConfirm() {
-  if (!_schedRecalcData) return;
-  const { loanId, monthNum, extraVal, newBal, recalcRows, currentRow } = _schedRecalcData;
+  if (!_schedRecalcData || !_schedRecalcData.isFact) { schedRecalcCancel(); return; }
+  const { loanId, monthNum, extraVal } = _schedRecalcData;
   setSaveStatus('saving');
-
-  // Save extra_payment and updated balance on current row
-  await sb.from('loan_schedule').update({
-    extra_payment: extraVal,
-    balance: newBal
-  }).eq('id', currentRow.id);
-
-  // Update all subsequent rows
-  for (const row of recalcRows) {
-    if (row.id) {
-      await sb.from('loan_schedule').update({
-        payment: row.payment,
-        principal: row.principal,
-        interest: row.interest,
-        balance: row.balance
-      }).eq('id', row.id);
+  try {
+    const res = await fetch(`${API_BASE}/api/loans/${loanId}/extra-payment`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month_num: monthNum, amount: extraVal })
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail || ('HTTP ' + res.status));
     }
+    const out = await res.json();
+    _schedRecalcData = null;
+    const bar = document.getElementById('schedRecalcBar'); if (bar) bar.style.display = 'none';
+    setSaveStatus('saved');
+    _anCache = null;          // Аналитика пересчитается с новой операцией
+    _schedDirty = false;      // изменения уже на сервере — не предупреждать при закрытии
+    toast(out.closed ? '✓ Кредит закрыт досрочно' : '✓ Досрочный платёж записан');
+    closeScheduleModal();
+    await loadLoans();        // обновит KPI, карточки, остатки счетов (и чистый капитал на Обзоре)
+  } catch (err) {
+    setSaveStatus('saved');
+    toast('Не удалось записать платёж: ' + (err.message || 'ошибка сервера'), false);
   }
-
-  setSaveStatus('saved');
-  _schedRecalcData = null;
-  document.getElementById('schedRecalcBar').style.display = 'none';
-
-  // Reload schedule modal
-  await openScheduleModal(loanId);
-  toast('✓ График пересчитан. Уточни суммы в банке.');
 }
 
 // ── Add/Edit Loan ──
