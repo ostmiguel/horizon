@@ -1932,14 +1932,14 @@ async function loadDashboard() {
     let planAll2;
     if (month > 0) {
       const { data: _pmd } = await sb.from('plan')
-        .select('date, amount, account_from, account_to')
+        .select('date, amount, account_from, account_to, id, source_rule_id')
         .eq('year', year).eq('month', month);
       planAll2 = _pmd || [];
       if (periodStart > todayStr) {
         const prevMonth = month === 1 ? 12 : month - 1;
         const prevYear  = month === 1 ? year - 1 : year;
         const { data: _prev } = await sb.from('plan')
-          .select('date, amount, account_from, account_to')
+          .select('date, amount, account_from, account_to, id, source_rule_id')
           .eq('year', prevYear).eq('month', prevMonth);
         if (_prev) planAll2 = [...planAll2, ..._prev];
       }
@@ -1947,12 +1947,31 @@ async function loadDashboard() {
       const monthlyPlanData = [];
       for (let m = 1; m <= 12; m++) {
         const { data: _pm } = await sb.from('plan')
-          .select('date, amount, account_from, account_to')
+          .select('date, amount, account_from, account_to, id, source_rule_id')
           .eq('year', year).eq('month', m);
         if (_pm) monthlyPlanData.push(..._pm);
       }
       planAll2 = monthlyPlanData;
     }
+
+    // Прогноз не должен докидывать плановые строки, уже подтверждённые (получено/
+    // внесено/пропущено) — иначе задвоение с фактом. Так же делают движок прогноза
+    // и Бюджет. Строим наборы подтверждённых: разовые (по id) и правила (по месяцу).
+    const { data: _confRows } = await sb.from('plan_confirmations').select('kind, ref_id, year, month');
+    const _confPlan = new Set();
+    const _confRule = new Set();
+    (_confRows||[]).forEach(r => {
+      if (r.kind === 'plan') _confPlan.add(r.ref_id);
+      else if (r.kind === 'rule') _confRule.add(r.ref_id + '|' + r.year + '|' + r.month);
+    });
+    const _isPlanConfirmed = p => {
+      if (p.id != null && _confPlan.has(p.id)) return true;
+      if (p.source_rule_id != null) {
+        const py = +p.date.slice(0,4), pm = +p.date.slice(5,7);
+        if (_confRule.has(p.source_rule_id + '|' + py + '|' + pm)) return true;
+      }
+      return false;
+    };
 
     // Дельта транзакции относительно операционного баланса
     function txDelta(t, opNames) {
@@ -1972,6 +1991,7 @@ async function loadDashboard() {
     // Если период в будущем — добавляем плановые дельты от сегодня до начала периода
     if (periodStart > todayStr) {
       (planAll2||[]).forEach(p => {
+        if (_isPlanConfirmed(p)) return;   // подтверждённое → в прогноз не добавляем
         const d = p.date.substring(0,10);
         if (d >= todayStr && d < periodStart) initBal += txDelta(p, operAccNames2);
       });
@@ -2008,6 +2028,7 @@ async function loadDashboard() {
     planSorted.forEach(p => {
       const d = p.date.substring(0,10);
       if (d < periodStart) return;
+      if (_isPlanConfirmed(p)) return;   // уже подтверждено (факт учтён) → не добавляем в прогноз
       const pd = new Date(p.date); pd.setHours(0,0,0,0);
       if (pd >= today) {
         if (!planByDate[d]) planByDate[d] = 0;
