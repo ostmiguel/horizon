@@ -408,12 +408,21 @@ async def apply_extra_payment(loan_id: int, data: ExtraPayment, request: Request
 
     async with db.transaction():
         # 1) Реальная операция доп. платежа: счёт списания → счёт-Пассив (тело долга).
-        await db.execute("""
-            INSERT INTO transactions
-              (user_id, date, amount, account_from, account_to, category_id, note, source)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,'loan_extra')
-        """, user_id, pay_date, amount, acc_from, liab_acc, cat_principal,
-            "Досрочный платёж по кредиту")
+        #    Идемпотентно: если такой доп. платёж уже записан (тот же счёт-Пассив, дата
+        #    и сумма) — повторно не создаём, но пересчёт/закрытие/регенерацию прогоняем.
+        already = await db.fetchval("""
+            SELECT 1 FROM transactions
+            WHERE user_id=$1 AND source='loan_extra' AND account_to=$2
+              AND date=$3 AND round(amount::numeric, 2) = round($4::numeric, 2)
+            LIMIT 1
+        """, user_id, liab_acc, pay_date, amount)
+        if not already:
+            await db.execute("""
+                INSERT INTO transactions
+                  (user_id, date, amount, account_from, account_to, category_id, note, source)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,'loan_extra')
+            """, user_id, pay_date, amount, acc_from, liab_acc, cat_principal,
+                "Досрочный платёж по кредиту")
 
         # 2) Текущая строка: доп. платёж дополнительно уменьшает остаток.
         bal_after = round(max(start_bal - base_principal - amount, 0), 2)

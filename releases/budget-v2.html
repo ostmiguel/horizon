@@ -4090,6 +4090,15 @@ async function openScheduleModal(loanId) {
   const existingMap = {};
   (existing||[]).forEach(r => existingMap[r.month_num] = r);
 
+  // Уже записанные досрочные платежи (операции loan_extra по счёту-Пассиву) — чтобы
+  // «Сохранить» не предлагал записать их повторно. Ключ: «YYYY-MM|сумма».
+  window._schedBooked = new Set();
+  if (loan.account_name) {
+    const { data: bookedTx } = await sb.from('transactions')
+      .select('date,amount').eq('source', 'loan_extra').eq('account_to', loan.account_name);
+    (bookedTx||[]).forEach(t => window._schedBooked.add((t.date||'').slice(0,7) + '|' + (Math.round((+t.amount||0)*100)/100).toFixed(2)));
+  }
+
   const tbody = document.getElementById('schedBody');
   const rows = [];
   for (let m = 1; m <= +loan.total_payments; m++) {
@@ -4254,6 +4263,10 @@ async function saveSchedule() {
 
   const rows = tbody.querySelectorAll('tr[data-month]');
   const toUpsert = [];
+  // Доп. платежи за ТЕКУЩИЙ/прошлый месяц, ещё не записанные операцией, — это ФАКТ:
+  // запишем их через серверный эндпоинт (операция + пересчёт + закрытие + Бюджет).
+  const factExtras = [];
+  const now = new Date(); const curYM = now.getFullYear() * 12 + now.getMonth();
 
   rows.forEach(row => {
     const m = parseInt(row.dataset.month);
@@ -4274,12 +4287,52 @@ async function saveSchedule() {
     if (hasAnyData) {
       toUpsert.push({ loan_id: loanId, month_num: m, date: dateVal, payment, principal, interest, balance, extra_payment: extra, is_paid: isPaid });
     }
+    // Факт доп. платежа: сумма > 0, строка текущего/прошлого месяца, операции ещё нет.
+    if (extra && extra > 0 && dateVal) {
+      const rowYM = parseInt(dateVal.slice(0, 4)) * 12 + (parseInt(dateVal.slice(5, 7)) - 1);
+      const key = dateVal.slice(0, 7) + '|' + (Math.round(extra * 100) / 100).toFixed(2);
+      if (rowYM <= curYM && !(window._schedBooked && window._schedBooked.has(key))) {
+        factExtras.push({ month_num: m, amount: Math.round(extra * 100) / 100 });
+      }
+    }
   });
+
+  // Подтверждение записи досрочных платежей (создаём реальные операции).
+  if (factExtras.length) {
+    const sum = factExtras.reduce((s, f) => s + f.amount, 0);
+    if (!confirm(`Будет записан досрочный платёж на ${fmt(sum)} ₽ как реальная операция (со счёта на счёт-долг). График и Бюджет обновятся; при полном погашении кредит закроется.\n\nПродолжить?`)) {
+      setSaveStatus('saved');
+      return;
+    }
+  }
 
   // Upsert in batches of 50
   for (let i = 0; i < toUpsert.length; i += 50) {
     const batch = toUpsert.slice(i, i + 50);
     await sb.from('loan_schedule').upsert(batch, { onConflict: 'loan_id,month_num' });
+  }
+
+  // Если есть досрочные платежи-факты — проводим их эндпоинтом (он авторитетно
+  // пересчитывает график, закрывает кредит и чистит Бюджет).
+  if (factExtras.length) {
+    let anyErr = false;
+    for (const fe of factExtras) {
+      try {
+        const res = await fetch(`${API_BASE}/api/loans/${_schedLoanId}/extra-payment`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fe)
+        });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || ('HTTP ' + res.status)); }
+      } catch (err) { anyErr = true; toast('Доп. платёж не записан: ' + (err.message || 'ошибка'), false); }
+    }
+    _anCache = null;          // Аналитика пересчитается
+    _schedDirty = false;
+    setSaveStatus('saved');
+    if (!anyErr) toast('✓ Досрочный платёж записан');
+    closeScheduleModal();
+    await loadLoans();        // обновит KPI, карточки, остатки счетов (и капитал на Обзоре)
+    return;
   }
 
   setSaveStatus('saved');
