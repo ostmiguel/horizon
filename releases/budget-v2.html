@@ -8564,22 +8564,28 @@ async function renderPendingPayments() {
 
   const rows = items.map((it, i) => {
     const rsv = it.is_reserve;
-    const amtColor = rsv ? '#2F8FD4' : '#C05F3B';
+    const isIncome = it.account_from === 'Доход';
+    const amtColor = isIncome ? '#5E9B1E' : (rsv ? '#2F8FD4' : '#C05F3B');
+    const amtSign  = isIncome ? '+' : (rsv ? '' : '−');
     const sub = it.kind === 'loan'
       ? `тело ${fmtP(it.principal)} · % ${fmtP(it.interest)}`
-      : (rsv ? 'пополнение резерва' : (it.account_from || ''));
-    // счёт по умолчанию: кредит — первая платёжная карта, иначе — счёт из правила/события
-    const defAcc = it.kind === 'loan' ? ((payAccs[0] && payAccs[0].name) || '') : (it.account_from || '');
+      : (isIncome ? 'доход' : (rsv ? 'пополнение резерва' : (it.account_from || '')));
+    // счёт по умолчанию: доход — счёт зачисления (account_to); кредит — первая платёжная
+    // карта; иначе — счёт списания из правила/события.
+    const defAcc = isIncome ? (it.account_to || '')
+                 : (it.kind === 'loan' ? ((payAccs[0] && payAccs[0].name) || '') : (it.account_from || ''));
     let optsSel = payAccs.map(a => `<option${a.name === defAcc ? ' selected' : ''} value="${esc(a.name)}">${esc(a.name)}</option>`).join('');
     if (defAcc && !payAccs.some(a => a.name === defAcc)) optsSel = `<option selected value="${esc(defAcc)}">${esc(defAcc)}</option>` + optsSel;
+    const quickLabel = isIncome ? 'Получено' : (rsv ? 'Отложено' : 'Оплачено');
+    const accLabel = isIncome ? 'На счёт' : (it.kind === 'loan' ? 'С какого счёта' : 'Счёт');
     return `<div style="padding:14px 0;${i > 0 ? 'border-top:1px solid rgba(15,36,60,.07)' : ''}">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="flex:1;min-width:0">
           <div style="font-family:Sora,sans-serif;font-weight:600;font-size:14px;color:#0F243C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(it.title)}</div>
           <div style="font-size:11.5px;color:#93A1B5;margin-top:1px">${ruD(it.date)} · ${esc(sub)}</div>
         </div>
-        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;color:${amtColor};font-variant-numeric:tabular-nums;white-space:nowrap">${rsv ? '' : '−'}${fmtP(it.amount)} ₽</div>
-        <button onclick="payConfirm(${i})" style="flex:none;font:600 12px Inter,sans-serif;padding:7px 14px;background:#EAF4F8;border:1px solid rgba(42,167,204,.30);border-radius:9px;color:#1D7E97;cursor:pointer">${rsv ? 'Отложено' : 'Оплачено'}</button>
+        <div style="font-family:Sora,sans-serif;font-weight:700;font-size:15px;color:${amtColor};font-variant-numeric:tabular-nums;white-space:nowrap">${amtSign}${fmtP(it.amount)} ₽</div>
+        <button onclick="payConfirm(${i})" style="flex:none;font:600 12px Inter,sans-serif;padding:7px 14px;background:#EAF4F8;border:1px solid rgba(42,167,204,.30);border-radius:9px;color:#1D7E97;cursor:pointer">${quickLabel}</button>
         <button onclick="payMore(${i})" style="flex:none;font:500 12px Inter,sans-serif;padding:7px 11px;background:#fff;border:1px solid rgba(15,36,60,.14);border-radius:9px;color:#5A6B82;cursor:pointer">Ещё <span id="payChev-${i}" style="font-size:9px;display:inline-block;transition:transform .15s">▾</span></button>
       </div>
       <div id="payMore-${i}" style="display:none;margin-top:10px;padding:12px;background:#F5F8FB;border-radius:11px">
@@ -8587,7 +8593,7 @@ async function renderPendingPayments() {
           <label style="font-size:11px;color:#5A6B82">Сумма<input id="payAmt-${i}" type="number" value="${Math.round(it.amount)}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit"></label>
           <label style="font-size:11px;color:#5A6B82">Дата<input id="payDate-${i}" type="date" value="${it.date}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit"></label>
         </div>
-        <label style="font-size:11px;color:#5A6B82;display:block;margin-bottom:8px">${it.kind === 'loan' ? 'С какого счёта' : 'Счёт'}<select id="payAcc-${i}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit">${optsSel}</select></label>
+        <label style="font-size:11px;color:#5A6B82;display:block;margin-bottom:8px">${accLabel}<select id="payAcc-${i}" style="width:100%;margin-top:3px;padding:6px 8px;border:1px solid rgba(15,36,60,.12);border-radius:8px;font:inherit">${optsSel}</select></label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="payConfirm(${i},true)" style="font:600 12px Inter,sans-serif;padding:7px 12px;background:#0F243C;border:0;border-radius:8px;color:#fff;cursor:pointer">Подтвердить с правками</button>
           ${it.kind !== 'loan' ? `<button onclick="payReschedule(${i})" style="font:500 12px Inter,sans-serif;padding:7px 12px;background:#fff;border:1px solid rgba(15,36,60,.14);border-radius:8px;color:#0F243C;cursor:pointer">Перенести дату</button>` : ''}
@@ -8640,9 +8646,12 @@ function _payBody(i, withEdits) {
     const a = document.getElementById('payAmt-' + i);  if (a && a.value) body.amount = parseFloat(a.value);
     const d = document.getElementById('payDate-' + i); if (d && d.value) body.date = d.value;
   }
-  // счёт оплаты — из селекта (для всех типов; переопределяет счёт правила, если платил с другой карты)
+  // счёт из селекта: для дохода — счёт зачисления (account_to); иначе — счёт списания.
   const s = document.getElementById('payAcc-' + i);
-  if (s && s.value) body.account_from = s.value;
+  if (s && s.value) {
+    if (it.account_from === 'Доход') body.account_to = s.value;
+    else body.account_from = s.value;
+  }
   if (it.kind === 'loan' && !body.account_from) {
     // умолчание: сначала обычный счёт (гасить кредит с кредитки молча не стоит),
     // но если платёжным помечен только пассивный — берём его, чем падать с ошибкой

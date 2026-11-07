@@ -67,7 +67,6 @@ async def pending(request: Request):
           AND EXTRACT(YEAR  FROM p.date)::int = $3
           AND EXTRACT(MONTH FROM p.date)::int = $4
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
-          AND p.account_from <> 'Доход'
           AND NOT EXISTS (
             SELECT 1 FROM plan_confirmations pc
             WHERE pc.user_id = p.user_id
@@ -134,7 +133,7 @@ async def status(request: Request, year: int, month: int):
 
     out = []
 
-    # Неразрешённые плановые строки месяца (правила/события/резерв, не кредиты, не доход)
+    # Неразрешённые плановые строки месяца (правила/события/резерв/доход, не кредиты)
     plan_rows = await db.fetch("""
         SELECT p.id, p.date, p.amount, p.account_from, p.account_to, p.source_rule_id,
                p.note, pr.name AS rule_name, c.subcategory, c.category AS cat_cat,
@@ -149,7 +148,6 @@ async def status(request: Request, year: int, month: int):
           AND EXTRACT(YEAR  FROM p.date)::int = $2
           AND EXTRACT(MONTH FROM p.date)::int = $3
           AND (p.source IS NULL OR p.source <> 'loan_schedule')
-          AND p.account_from <> 'Доход'
           AND NOT EXISTS (
             SELECT 1 FROM plan_confirmations pc
             WHERE pc.user_id = p.user_id
